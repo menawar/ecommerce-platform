@@ -1,0 +1,17 @@
+# Compiled binaries / build output
+/bin/
+*.exe
+*.test
+*.out
+
+# Go workspace sum (regenerated; safe to ignore early, revisit if it matters)
+go.work.sum
+
+# Local env / secrets — never commit these
+.env
+*.local
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/

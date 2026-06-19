@@ -1,0 +1,14 @@
+// go.work — the Go workspace file. It is the "root" of local development.
+//
+// A workspace lets multiple modules on disk resolve each other directly,
+// without `replace` directives or publishing to a remote. Every module we
+// build gets added here with `go work use ./services/<name>`. For now there
+// is only the shared module.
+//
+// go.work is intentionally NOT committed in some teams (it's a local-dev
+// convenience). We commit it here because the repo IS the workspace: the
+// monorepo and the workspace are the same thing for this project.
+
+go 1.23
+
+use ./pkg
