@@ -1,0 +1,99 @@
+# Infrastructure ONLY — the stateful/backing services every app service leans on.
+# Kept separate from docker-compose.yml (the app services) because infra and app
+# code have different lifecycles: you rebuild services dozens of times a day, but
+# you want Postgres/Redis data to survive those rebuilds. `make up` runs both
+# files together; `make infra-up` runs just this one.
+
+name: ecommerce-infra
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ecommerce
+      POSTGRES_PASSWORD: ecommerce
+      POSTGRES_DB: ecommerce            # bootstrap db; per-service dbs created by initdb.sql
+    ports:
+      # host:container. Mapped to 5433 on the host to avoid clashing with a
+      # native Postgres often already running on 5432. App services talk to
+      # "postgres:5432" over the compose network and are unaffected by this.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Files in this dir run ONCE, on first init of an empty data volume.
+      - ./deploy/postgres/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:ro
+    healthcheck:
+      # pg_isready is Postgres' own readiness probe. -U/-d must match so we test
+      # the actual role, not just "is the port open".
+      test: ["CMD-SHELL", "pg_isready -U ecommerce -d ecommerce"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [ecommerce]
+
+  redis:
+    image: redis:7-alpine
+    # appendonly yes -> AOF persistence, so the cart survives a restart (Phase 3
+    # acceptance criterion). Without it Redis is purely in-memory.
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]   # expects "PONG"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [ecommerce]
+
+  nats:
+    image: nats:2.10-alpine
+    # -js enables JetStream (durable streams). -m 8222 opens the HTTP monitoring
+    # port we healthcheck against. -sd sets the JetStream storage dir (persisted).
+    command: ["-js", "-m", "8222", "-sd", "/data"]
+    ports:
+      - "4222:4222"   # client connections
+      - "8222:8222"   # monitoring / healthz
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      # busybox wget ships in the alpine image; /healthz returns 200 when ready.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [ecommerce]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"     # accept OTLP on 4317/4318 (we'll send here in Phase 6)
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    networks: [ecommerce]
+    # No healthcheck: nothing in Phase 0 gates on Jaeger being ready, and its
+    # image is too minimal to run a shell-based probe reliably. Revisit in Phase 6.
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [ecommerce]
+
+# Named volumes: data lives here independent of container lifecycle. `make down`
+# keeps them; `make down-v` wipes them (and re-triggers postgres initdb on next up).
+volumes:
+  pgdata:
+  redisdata:
+  natsdata:
+
+# One user-defined bridge network so app services can reach infra by service name
+# (e.g. "postgres:5432") via Docker's built-in DNS.
+networks:
+  ecommerce:
+    driver: bridge

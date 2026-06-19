@@ -1,0 +1,18 @@
+# Prometheus scrape config. For now it only scrapes itself — there are no app
+# services yet. As each service exposes /metrics (Phase 6), we add a job here
+# pointing at "<service>:<port>". Inside the compose network, targets are
+# reachable by service name.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Placeholder for later — uncomment/extend as services come online:
+  # - job_name: gateway
+  #   static_configs:
+  #     - targets: ["gateway:9100"]
