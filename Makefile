@@ -12,13 +12,14 @@ MODULE_DIRS := $(shell find . -name go.mod -not -path '*/.*' -exec dirname {} \;
 # Use the go-installed golang-migrate by absolute path: the system has a DIFFERENT
 # `migrate` (python sqlalchemy-migrate) earlier on PATH that would otherwise shadow it.
 MIGRATE := $(shell go env GOPATH)/bin/migrate
+SQLC    := $(shell go env GOPATH)/bin/sqlc
 
 # Per-service DB URLs. Host port 5433 maps to the postgres container's 5432.
 PRODUCT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/productdb?sslmode=disable
 PRODUCT_MIGRATIONS := services/product/migrations
 
 .PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy \
-	product-migrate-up product-migrate-down product-migrate-create
+	product-migrate-up product-migrate-down product-migrate-create product-sqlc
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -67,3 +68,7 @@ product-migrate-down: ## Roll back the last productdb migration
 
 product-migrate-create: ## Create a new productdb migration: make product-migrate-create NAME=add_x
 	$(MIGRATE) create -ext sql -dir $(PRODUCT_MIGRATIONS) -seq $(NAME)
+
+## ---- Code generation ----
+product-sqlc: ## Regenerate product sqlc code from queries.sql
+	cd services/product && $(SQLC) generate

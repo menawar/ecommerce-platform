@@ -1,0 +1,23 @@
+# sqlc config (v2). `sqlc generate` reads the SCHEMA (our migrations) to learn the
+# table shapes, type-checks each QUERY against that schema, and emits type-safe Go.
+# Paths are relative to this file's directory (services/product).
+#
+# The big idea: SQL is the source of truth. We write real queries; sqlc generates
+# the Go structs and functions. No ORM, no reflection, no runtime query building —
+# a typo or a column-type mismatch is a BUILD error, caught by `sqlc generate`,
+# not a runtime surprise.
+version: "2"
+sql:
+  - engine: "postgresql"
+    # Point at the migrations dir: sqlc parses the up migrations to build the
+    # schema and ignores the *.down.sql files.
+    schema: "migrations"
+    queries: "internal/db/queries.sql"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        # Generate code that talks to the pgx/v5 driver (matches our pool), so the
+        # DBTX interface accepts both *pgxpool.Pool and pgx.Tx.
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
