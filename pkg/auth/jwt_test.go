@@ -2,6 +2,7 @@ package auth_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,8 +39,20 @@ func TestJWT_Tampered(t *testing.T) {
 	m := auth.NewJWTManager(testSecret, 15*time.Minute)
 	token, _, _ := m.Issue("user-123", "customer")
 
-	// Mutate the last char of the signature segment.
-	tampered := token[:len(token)-1] + flip(token[len(token)-1])
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("expected 3 JWT segments, got %d", len(parts))
+	}
+	// Tamper the FIRST byte of the signature segment. We must NOT flip the last
+	// base64url char: a 32-byte HMAC encodes to 43 base64url chars whose final
+	// char has 2 unused low bits, so some flips decode to the SAME signature and
+	// the token still validates (the flaky bug this test originally had). The
+	// first char always carries meaningful bits, so changing it always changes
+	// the decoded signature.
+	sig := []byte(parts[2])
+	sig[0] = flipB64(sig[0])
+	parts[2] = string(sig)
+	tampered := strings.Join(parts, ".")
 
 	if _, err := m.Validate(tampered); !errors.Is(err, auth.ErrInvalidToken) {
 		t.Errorf("want ErrInvalidToken for tampered token, got %v", err)
@@ -90,10 +103,11 @@ func TestJWT_AlgNone(t *testing.T) {
 	}
 }
 
-// flip returns a different ASCII char so the mutated token is guaranteed changed.
-func flip(b byte) string {
-	if b == 'A' {
-		return "B"
+// flipB64 returns a different base64url character, so the byte it encodes is
+// guaranteed to change.
+func flipB64(c byte) byte {
+	if c == 'A' {
+		return 'B'
 	}
-	return "A"
+	return 'A'
 }
