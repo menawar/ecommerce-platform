@@ -17,6 +17,7 @@ go 1.25.0
 use (
 	./pkg
 	./proto
+	./services/gateway
 	./services/hello
 	./services/user
 )
