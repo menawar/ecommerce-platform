@@ -80,9 +80,17 @@ services:
   prometheus:
     image: prom/prometheus:v2.53.0
     ports:
-      - "9090:9090"
+      # Host 9091 -> container 9090. Mapped off 9090 to avoid clashing with a
+      # process already bound to 9090 on this host (same reason Postgres uses
+      # 5433). Inside the compose network Prometheus is still :9090.
+      - "9091:9090"
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # Lets the container resolve host.docker.internal -> the Docker host, so
+    # Prometheus can scrape services still running on the host (the Phase 0 hello
+    # service). On Linux this needs the explicit host-gateway mapping.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [ecommerce]
 
 # Named volumes: data lives here independent of container lifecycle. `make down`
