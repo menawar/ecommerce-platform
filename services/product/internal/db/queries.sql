@@ -76,3 +76,30 @@ WHERE product_id = sqlc.arg('product_id')
 -- name: InsertReservationItem :exec
 INSERT INTO reservation_items (reservation_id, product_id, quantity)
 VALUES ($1, $2, $3);
+
+-- name: GetReservationStatusForUpdate :one
+-- SELECT ... FOR UPDATE locks the reservation row for the rest of the transaction,
+-- serializing concurrent Release/Commit of the same reservation so they can't both
+-- act on it (idempotency under contention).
+SELECT status FROM stock_reservations WHERE id = $1 FOR UPDATE;
+
+-- name: SetReservationStatus :exec
+UPDATE stock_reservations SET status = $2 WHERE id = $1;
+
+-- name: ListReservationItems :many
+SELECT product_id, quantity FROM reservation_items WHERE reservation_id = $1;
+
+-- name: ReleaseInventory :exec
+-- Compensation: give the held units back to "available" (drop reserved).
+UPDATE inventory
+SET reserved = reserved - sqlc.arg('quantity'),
+    version  = version + 1
+WHERE product_id = sqlc.arg('product_id');
+
+-- name: CommitInventory :exec
+-- Finalize: the goods actually leave — drop BOTH quantity and reserved.
+UPDATE inventory
+SET quantity = quantity - sqlc.arg('quantity'),
+    reserved = reserved - sqlc.arg('quantity'),
+    version  = version + 1
+WHERE product_id = sqlc.arg('product_id');

@@ -9,8 +9,36 @@ service ProductService {
   rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
   rpc GetProduct(GetProductRequest) returns (GetProductResponse);
   rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
-  // ReserveStock / ReleaseStock / CommitStock arrive with the saga (later steps).
+
+  // Saga surface. All keyed on reservation_id and idempotent.
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+  rpc ReleaseStock(ReleaseStockRequest) returns (ReleaseStockResponse); // compensate
+  rpc CommitStock(CommitStockRequest) returns (CommitStockResponse);    // finalize
 }
+
+message ReserveItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+message ReserveStockRequest {
+  string reservation_id = 1; // idempotency key, supplied by the saga
+  repeated ReserveItem items = 2;
+}
+message ReserveStockResponse {
+  // false = insufficient stock. This is a normal business outcome the saga acts
+  // on, NOT an RPC error.
+  bool success = 1;
+}
+
+message ReleaseStockRequest {
+  string reservation_id = 1;
+}
+message ReleaseStockResponse {}
+
+message CommitStockRequest {
+  string reservation_id = 1;
+}
+message CommitStockResponse {}
 
 // Product is the catalog view. price_cents is integer minor units; available is
 // the live sellable quantity (quantity - reserved).
