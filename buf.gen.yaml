@@ -1,0 +1,29 @@
+# buf.gen.yaml (v2) — how buf turns .proto files into Go code.
+#
+# `buf generate` reads this, runs each plugin over the module declared in
+# buf.yaml, and writes the output. We use the LOCAL plugins we installed with
+# `go install` (protoc-gen-go, protoc-gen-go-grpc) rather than buf's remote
+# plugin registry, so codegen is hermetic and works offline.
+version: v2
+
+# Managed mode lets buf set Go-specific file options (notably `go_package`) for
+# us, so we never hand-write `option go_package = "..."` in every .proto. It
+# derives the import path from this prefix + the file's path within the module.
+# One place to change the module path instead of N proto files.
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/menawar/ecommerce-platform/proto
+
+plugins:
+  # Messages: structs, getters, marshalling. Always needed.
+  - local: protoc-gen-go
+    out: proto
+    opt: paths=source_relative   # mirror the .proto dir tree into the out dir,
+                                  # instead of nesting by full import path.
+
+  # Services: the client/server Go interfaces for each `service { rpc ... }`.
+  - local: protoc-gen-go-grpc
+    out: proto
+    opt: paths=source_relative

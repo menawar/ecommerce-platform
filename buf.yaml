@@ -1,0 +1,26 @@
+# buf.yaml (v2) — the buf "workspace" config for our .proto sources.
+#
+# buf treats `proto/` as a self-contained module of protobuf files: it is the
+# import root, so an import path inside a .proto is relative to `proto/`, not to
+# the repo root. This is the protobuf analogue of our Go module boundary.
+#
+#   lint     — style rules buf enforces on the .proto files themselves.
+#   breaking — rules for `buf breaking`, which diffs your protos against a
+#              baseline (e.g. git main) and fails if you make a wire-incompatible
+#              change. We don't wire it into CI yet (Phase 7), but the config is
+#              here so the guardrail exists the moment we want it.
+version: v2
+
+modules:
+  - path: proto
+
+lint:
+  use:
+    - STANDARD          # buf's recommended baseline ruleset
+  # STANDARD insists on a package-version suffix (hello.v1) and consistent
+  # file/dir layout — exactly the conventions we're already following.
+
+breaking:
+  use:
+    - FILE              # the safe default: flag any change that breaks the wire
+                        # contract at file granularity.

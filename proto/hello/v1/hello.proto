@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+// Package name carries a version suffix (hello.v1). Versioning the package, not
+// just the directory, means a future breaking redesign can ship as hello.v2
+// ALONGSIDE v1, and old clients keep working. This is the convention buf's
+// STANDARD lint enforces.
+package hello.v1;
+
+// Greeter is a THROWAWAY service. Its only job is to prove the toolchain works
+// end to end: .proto -> generated Go -> a running gRPC server we can call, and
+// Prometheus scraping its /metrics. It gets deleted once a real service (User)
+// exists in Phase 1.
+//
+// Named GreeterService (not just Greeter) because buf's STANDARD lint enforces
+// a "Service" suffix — it keeps generated type names unambiguous when a service
+// and a message would otherwise collide.
+service GreeterService {
+  // Unary RPC: one request, one response. The simplest of gRPC's four call
+  // shapes (the others stream in one or both directions).
+  rpc SayHello(SayHelloRequest) returns (SayHelloResponse);
+}
+
+message SayHelloRequest {
+  // Field numbers (the `= 1`) are the wire identity of a field — they are what
+  // actually travels on the wire, NOT the field name. Never reuse or renumber
+  // them once shipped; that's the #1 protobuf footgun.
+  string name = 1;
+}
+
+message SayHelloResponse {
+  string message = 1;
+}

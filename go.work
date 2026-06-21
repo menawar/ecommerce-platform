@@ -9,6 +9,12 @@
 // convenience). We commit it here because the repo IS the workspace: the
 // monorepo and the workspace are the same thing for this project.
 
-go 1.23
+// Bumped from 1.23 -> 1.25 because google.golang.org/grpc (v1.81+) now requires
+// Go >= 1.25, and a workspace's go directive must be >= every module it uses.
+// We have Go 1.26 installed, so this costs us nothing.
+go 1.25.0
 
-use ./pkg
+use (
+	./pkg
+	./proto
+)
