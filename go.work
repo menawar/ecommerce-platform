@@ -19,5 +19,6 @@ use (
 	./proto
 	./services/gateway
 	./services/hello
+	./services/product
 	./services/user
 )
