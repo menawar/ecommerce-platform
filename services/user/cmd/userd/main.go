@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/menawar/ecommerce-platform/pkg/auth"
+	"github.com/menawar/ecommerce-platform/pkg/grpcmw"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/user/internal/server"
@@ -77,7 +78,15 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL)
 	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, log)
 
-	grpcServer := grpc.NewServer()
+	// Interceptors run in chain order: logging (outer) wraps recovery (inner) wraps
+	// the handler — so logging records the final status even when recovery has
+	// turned a panic into an Internal error.
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			grpcmw.UnaryLogging(log),
+			grpcmw.UnaryRecovery(log),
+		),
+	)
 	userv1.RegisterUserServiceServer(grpcServer, userSrv)
 	reflection.Register(grpcServer)
 
