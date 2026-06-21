@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package product.v1;
+
+// ProductService owns the catalog and inventory. It is the only service that
+// touches productdb. Other services (Order) ask it for prices and stock — they
+// never read its tables directly.
+service ProductService {
+  rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+  // ReserveStock / ReleaseStock / CommitStock arrive with the saga (later steps).
+}
+
+// Product is the catalog view. price_cents is integer minor units; available is
+// the live sellable quantity (quantity - reserved).
+message Product {
+  string id = 1;
+  string sku = 2;
+  string name = 3;
+  string description = 4;
+  int64 price_cents = 5;
+  string currency = 6;
+  string category_id = 7; // empty when uncategorized
+  int32 available = 8;
+  int64 created_at = 9; // unix seconds
+}
+
+message CreateProductRequest {
+  string sku = 1;
+  string name = 2;
+  string description = 3;
+  int64 price_cents = 4;
+  string currency = 5;          // defaults to NGN if empty
+  string category_id = 6;       // optional
+  int32 initial_quantity = 7;   // seeds the inventory row
+}
+message CreateProductResponse {
+  Product product = 1;
+}
+
+message GetProductRequest {
+  string product_id = 1;
+}
+message GetProductResponse {
+  Product product = 1;
+}
+
+message ListProductsRequest {
+  int32 page = 1;        // 1-based; defaults to 1
+  int32 page_size = 2;   // defaults to 20, capped at 100
+  string category_id = 3; // empty = all categories
+}
+message ListProductsResponse {
+  repeated Product products = 1;
+  int64 total = 2; // total matching the filter, for pagination
+}
