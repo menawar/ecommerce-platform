@@ -31,3 +31,15 @@ type Product struct {
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
 }
+
+type ReservationItem struct {
+	ReservationID pgtype.UUID
+	ProductID     pgtype.UUID
+	Quantity      int32
+}
+
+type StockReservation struct {
+	ID        pgtype.UUID
+	Status    string
+	CreatedAt pgtype.Timestamptz
+}

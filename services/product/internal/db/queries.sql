@@ -57,3 +57,22 @@ WHERE sqlc.narg('category_id')::uuid IS NULL
    OR p.category_id = sqlc.narg('category_id')
 ORDER BY p.created_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: InsertReservation :exec
+-- The idempotency gate: the PK on id rejects a duplicate reservation_id.
+INSERT INTO stock_reservations (id) VALUES ($1);
+
+-- name: ReserveInventory :execrows
+-- The oversell guard, as ONE atomic statement. Returns rows-affected: 1 if the
+-- row had enough available stock (quantity - reserved >= qty), 0 otherwise. The
+-- row is locked for the duration, so concurrent reservers serialize and can never
+-- both pass the check on the same stock. version is bumped as a change marker.
+UPDATE inventory
+SET reserved = reserved + sqlc.arg('quantity'),
+    version  = version + 1
+WHERE product_id = sqlc.arg('product_id')
+  AND quantity - reserved >= sqlc.arg('quantity');
+
+-- name: InsertReservationItem :exec
+INSERT INTO reservation_items (reservation_id, product_id, quantity)
+VALUES ($1, $2, $3);
