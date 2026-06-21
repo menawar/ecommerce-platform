@@ -9,7 +9,16 @@ INFRA := docker-compose.infra.yml
 # editing this file every time we add a service.
 MODULE_DIRS := $(shell find . -name go.mod -not -path '*/.*' -exec dirname {} \;)
 
-.PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy
+# Use the go-installed golang-migrate by absolute path: the system has a DIFFERENT
+# `migrate` (python sqlalchemy-migrate) earlier on PATH that would otherwise shadow it.
+MIGRATE := $(shell go env GOPATH)/bin/migrate
+
+# Per-service DB URLs. Host port 5433 maps to the postgres container's 5432.
+PRODUCT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/productdb?sslmode=disable
+PRODUCT_MIGRATIONS := services/product/migrations
+
+.PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy \
+	product-migrate-up product-migrate-down product-migrate-create
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -48,3 +57,13 @@ test: ## go test every module
 
 tidy: ## go mod tidy every module
 	@for d in $(MODULE_DIRS); do echo "tidy $$d"; (cd $$d && go mod tidy) || exit 1; done
+
+## ---- Database migrations ----
+product-migrate-up: ## Apply all productdb migrations
+	$(MIGRATE) -path $(PRODUCT_MIGRATIONS) -database "$(PRODUCT_DB_URL)" up
+
+product-migrate-down: ## Roll back the last productdb migration
+	$(MIGRATE) -path $(PRODUCT_MIGRATIONS) -database "$(PRODUCT_DB_URL)" down 1
+
+product-migrate-create: ## Create a new productdb migration: make product-migrate-create NAME=add_x
+	$(MIGRATE) create -ext sql -dir $(PRODUCT_MIGRATIONS) -seq $(NAME)
