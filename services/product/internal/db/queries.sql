@@ -41,3 +41,19 @@ RETURNING *;
 -- name: GetInventory :one
 SELECT * FROM inventory
 WHERE product_id = $1;
+
+-- name: GetProductWithInventory :one
+-- Product detail joined with live stock; available = quantity - reserved.
+SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+FROM products p
+JOIN inventory i ON i.product_id = p.id
+WHERE p.id = $1;
+
+-- name: ListProductsWithInventory :many
+SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+FROM products p
+JOIN inventory i ON i.product_id = p.id
+WHERE sqlc.narg('category_id')::uuid IS NULL
+   OR p.category_id = sqlc.narg('category_id')
+ORDER BY p.created_at DESC
+LIMIT $1 OFFSET $2;

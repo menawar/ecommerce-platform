@@ -150,6 +150,47 @@ func (q *Queries) GetProduct(ctx context.Context, id pgtype.UUID) (Product, erro
 	return i, err
 }
 
+const getProductWithInventory = `-- name: GetProductWithInventory :one
+SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+FROM products p
+JOIN inventory i ON i.product_id = p.id
+WHERE p.id = $1
+`
+
+type GetProductWithInventoryRow struct {
+	ID          pgtype.UUID
+	Sku         string
+	Name        string
+	Description string
+	PriceCents  int64
+	Currency    string
+	CategoryID  pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+	Quantity    int32
+	Reserved    int32
+	Available   int32
+}
+
+// Product detail joined with live stock; available = quantity - reserved.
+func (q *Queries) GetProductWithInventory(ctx context.Context, id pgtype.UUID) (GetProductWithInventoryRow, error) {
+	row := q.db.QueryRow(ctx, getProductWithInventory, id)
+	var i GetProductWithInventoryRow
+	err := row.Scan(
+		&i.ID,
+		&i.Sku,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Currency,
+		&i.CategoryID,
+		&i.CreatedAt,
+		&i.Quantity,
+		&i.Reserved,
+		&i.Available,
+	)
+	return i, err
+}
+
 const listProducts = `-- name: ListProducts :many
 SELECT id, sku, name, description, price_cents, currency, category_id, created_at FROM products
 WHERE $3::uuid IS NULL
@@ -184,6 +225,68 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.Currency,
 			&i.CategoryID,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProductsWithInventory = `-- name: ListProductsWithInventory :many
+SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+FROM products p
+JOIN inventory i ON i.product_id = p.id
+WHERE $3::uuid IS NULL
+   OR p.category_id = $3
+ORDER BY p.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListProductsWithInventoryParams struct {
+	Limit      int32
+	Offset     int32
+	CategoryID pgtype.UUID
+}
+
+type ListProductsWithInventoryRow struct {
+	ID          pgtype.UUID
+	Sku         string
+	Name        string
+	Description string
+	PriceCents  int64
+	Currency    string
+	CategoryID  pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+	Quantity    int32
+	Reserved    int32
+	Available   int32
+}
+
+func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProductsWithInventoryParams) ([]ListProductsWithInventoryRow, error) {
+	rows, err := q.db.Query(ctx, listProductsWithInventory, arg.Limit, arg.Offset, arg.CategoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProductsWithInventoryRow
+	for rows.Next() {
+		var i ListProductsWithInventoryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sku,
+			&i.Name,
+			&i.Description,
+			&i.PriceCents,
+			&i.Currency,
+			&i.CategoryID,
+			&i.CreatedAt,
+			&i.Quantity,
+			&i.Reserved,
+			&i.Available,
 		); err != nil {
 			return nil, err
 		}
