@@ -18,4 +18,5 @@ use (
 	./pkg
 	./proto
 	./services/hello
+	./services/user
 )

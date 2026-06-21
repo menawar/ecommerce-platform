@@ -9,17 +9,20 @@ package user.v1;
 service UserService {
   // Register creates an account and returns its server-generated id.
   rpc Register(RegisterRequest) returns (RegisterResponse);
-  // Login verifies credentials and returns a signed JWT the caller presents to
-  // protected endpoints.
+  // Login verifies credentials and issues tokens.
   rpc Login(LoginRequest) returns (LoginResponse);
+  // ValidateToken is called by the Gateway on every protected request to check
+  // an access token and extract the caller's identity. Keeping validation here
+  // (not in the Gateway) means only the User service needs the signing secret.
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
 }
 
 message RegisterRequest {
   string email = 1;
   // Plaintext on the wire only — TLS protects it in transit, the server hashes
-  // it immediately, and it is NEVER stored. (Phase 1 runs without TLS locally;
-  // the gateway terminates TLS in a real deployment.)
+  // it immediately, and it is NEVER stored.
   string password = 2;
+  string full_name = 3;
 }
 
 message RegisterResponse {
@@ -32,6 +35,17 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  string access_token = 1; // signed JWT
-  int64 expires_at = 2;    // token expiry, unix seconds
+  string access_token = 1;  // short-lived JWT (TTL 15m)
+  string refresh_token = 2; // long-lived token to mint new access tokens (TTL 7d)
+  int64 expires_at = 3;     // access_token expiry, unix seconds
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;      // false rather than an error for an ordinary expired/bad token
+  string user_id = 2;  // the JWT "sub" claim
+  string role = 3;     // "customer" | "admin"
 }
