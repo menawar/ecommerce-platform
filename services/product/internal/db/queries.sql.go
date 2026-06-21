@@ -191,6 +191,32 @@ func (q *Queries) GetProductWithInventory(ctx context.Context, id pgtype.UUID) (
 	return i, err
 }
 
+const insertReservation = `-- name: InsertReservation :exec
+INSERT INTO stock_reservations (id) VALUES ($1)
+`
+
+// The idempotency gate: the PK on id rejects a duplicate reservation_id.
+func (q *Queries) InsertReservation(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, insertReservation, id)
+	return err
+}
+
+const insertReservationItem = `-- name: InsertReservationItem :exec
+INSERT INTO reservation_items (reservation_id, product_id, quantity)
+VALUES ($1, $2, $3)
+`
+
+type InsertReservationItemParams struct {
+	ReservationID pgtype.UUID
+	ProductID     pgtype.UUID
+	Quantity      int32
+}
+
+func (q *Queries) InsertReservationItem(ctx context.Context, arg InsertReservationItemParams) error {
+	_, err := q.db.Exec(ctx, insertReservationItem, arg.ReservationID, arg.ProductID, arg.Quantity)
+	return err
+}
+
 const listProducts = `-- name: ListProducts :many
 SELECT id, sku, name, description, price_cents, currency, category_id, created_at FROM products
 WHERE $3::uuid IS NULL
@@ -296,4 +322,29 @@ func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProduct
 		return nil, err
 	}
 	return items, nil
+}
+
+const reserveInventory = `-- name: ReserveInventory :execrows
+UPDATE inventory
+SET reserved = reserved + $1,
+    version  = version + 1
+WHERE product_id = $2
+  AND quantity - reserved >= $1
+`
+
+type ReserveInventoryParams struct {
+	Quantity  int32
+	ProductID pgtype.UUID
+}
+
+// The oversell guard, as ONE atomic statement. Returns rows-affected: 1 if the
+// row had enough available stock (quantity - reserved >= qty), 0 otherwise. The
+// row is locked for the duration, so concurrent reservers serialize and can never
+// both pass the check on the same stock. version is bumped as a change marker.
+func (q *Queries) ReserveInventory(ctx context.Context, arg ReserveInventoryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reserveInventory, arg.Quantity, arg.ProductID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
