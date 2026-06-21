@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package user.v1;
+
+// UserService owns identity. It is the ONLY service that may touch userdb;
+// every other service learns who the caller is from the signed JWT, never by
+// reading this service's tables. That is the database-per-service rule made
+// concrete at the contract level.
+service UserService {
+  // Register creates an account and returns its server-generated id.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  // Login verifies credentials and returns a signed JWT the caller presents to
+  // protected endpoints.
+  rpc Login(LoginRequest) returns (LoginResponse);
+}
+
+message RegisterRequest {
+  string email = 1;
+  // Plaintext on the wire only — TLS protects it in transit, the server hashes
+  // it immediately, and it is NEVER stored. (Phase 1 runs without TLS locally;
+  // the gateway terminates TLS in a real deployment.)
+  string password = 2;
+}
+
+message RegisterResponse {
+  string user_id = 1; // server-generated UUID
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string access_token = 1; // signed JWT
+  int64 expires_at = 2;    // token expiry, unix seconds
+}
