@@ -47,7 +47,27 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/auth/register", h.register)
 	r.Post("/auth/login", h.login)
 
+	// Protected routes: a nested group with its own middleware. requireAuth runs
+	// only for routes inside this group, leaving /auth/* and /healthz public.
+	r.Group(func(pr chi.Router) {
+		pr.Use(h.requireAuth)
+		pr.Get("/me", h.me)
+	})
+
 	return r
+}
+
+// me is a protected dummy endpoint that proves auth works: it returns the caller
+// identity that requireAuth extracted from the token. The Phase 1 acceptance
+// uses it as the "protected endpoint that accepts a good token, rejects a bad one".
+func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
+	id, ok := IdentityFrom(r.Context())
+	if !ok {
+		// Unreachable if requireAuth ran; defensive against a future routing slip.
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"user_id": id.UserID, "role": id.Role})
 }
 
 // requestLogger is a middleware: it takes the next handler and returns a handler
