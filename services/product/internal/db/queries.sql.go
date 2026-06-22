@@ -32,13 +32,20 @@ func (q *Queries) CommitInventory(ctx context.Context, arg CommitInventoryParams
 
 const countProducts = `-- name: CountProducts :one
 SELECT count(*) FROM products
-WHERE $1::uuid IS NULL
-   OR category_id = $1
+WHERE ($1::uuid IS NULL OR category_id = $1)
+  AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%')
 `
 
-// Total for the same filter, so ListProducts can report total alongside the page.
-func (q *Queries) CountProducts(ctx context.Context, categoryID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countProducts, categoryID)
+type CountProductsParams struct {
+	CategoryID pgtype.UUID
+	Search     *string
+}
+
+// Total matching the SAME filters as ListProductsWithInventory, so a page can
+// report the overall total. ILIKE is case-insensitive LIKE; the value is a bound
+// parameter (never string-concatenated), so it's injection-safe.
+func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProducts, arg.CategoryID, arg.Search)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -250,57 +257,12 @@ func (q *Queries) InsertReservationItem(ctx context.Context, arg InsertReservati
 	return err
 }
 
-const listProducts = `-- name: ListProducts :many
-SELECT id, sku, name, description, price_cents, currency, category_id, created_at FROM products
-WHERE $3::uuid IS NULL
-   OR category_id = $3
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListProductsParams struct {
-	Limit      int32
-	Offset     int32
-	CategoryID pgtype.UUID
-}
-
-// Optional category filter via a nullable named arg: when category_id is NULL the
-// first branch short-circuits and every row matches.
-func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
-	rows, err := q.db.Query(ctx, listProducts, arg.Limit, arg.Offset, arg.CategoryID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Product
-	for rows.Next() {
-		var i Product
-		if err := rows.Scan(
-			&i.ID,
-			&i.Sku,
-			&i.Name,
-			&i.Description,
-			&i.PriceCents,
-			&i.Currency,
-			&i.CategoryID,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listProductsWithInventory = `-- name: ListProductsWithInventory :many
 SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE $3::uuid IS NULL
-   OR p.category_id = $3
+WHERE ($3::uuid IS NULL OR p.category_id = $3)
+  AND ($4::text IS NULL OR p.name ILIKE '%' || $4 || '%')
 ORDER BY p.created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -309,6 +271,7 @@ type ListProductsWithInventoryParams struct {
 	Limit      int32
 	Offset     int32
 	CategoryID pgtype.UUID
+	Search     *string
 }
 
 type ListProductsWithInventoryRow struct {
@@ -326,7 +289,12 @@ type ListProductsWithInventoryRow struct {
 }
 
 func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProductsWithInventoryParams) ([]ListProductsWithInventoryRow, error) {
-	rows, err := q.db.Query(ctx, listProductsWithInventory, arg.Limit, arg.Offset, arg.CategoryID)
+	rows, err := q.db.Query(ctx, listProductsWithInventory,
+		arg.Limit,
+		arg.Offset,
+		arg.CategoryID,
+		arg.Search,
+	)
 	if err != nil {
 		return nil, err
 	}

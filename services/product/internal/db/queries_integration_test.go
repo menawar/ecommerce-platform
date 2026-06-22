@@ -82,27 +82,36 @@ func TestListAndCount_FilterByCategory(t *testing.T) {
 
 	catA, _ := q.CreateCategory(ctx, db.CreateCategoryParams{Name: "A", Slug: "a"})
 	catB, _ := q.CreateCategory(ctx, db.CreateCategoryParams{Name: "B", Slug: "b"})
-	mustProduct(t, q, "a1", catA.ID)
-	mustProduct(t, q, "a2", catA.ID)
-	mustProduct(t, q, "b1", catB.ID)
+	mustStockedProduct(t, q, "a1", catA.ID)
+	mustStockedProduct(t, q, "a2", catA.ID)
+	mustStockedProduct(t, q, "b1", catB.ID)
 
-	listA, err := q.ListProducts(ctx, db.ListProductsParams{CategoryID: catA.ID, Limit: 10, Offset: 0})
+	listA, err := q.ListProductsWithInventory(ctx, db.ListProductsWithInventoryParams{CategoryID: catA.ID, Limit: 10, Offset: 0})
 	if err != nil {
-		t.Fatalf("ListProducts: %v", err)
+		t.Fatalf("ListProductsWithInventory: %v", err)
 	}
 	if len(listA) != 2 {
 		t.Errorf("category A list = %d, want 2", len(listA))
 	}
 
-	countA, _ := q.CountProducts(ctx, catA.ID)
+	countA, _ := q.CountProducts(ctx, db.CountProductsParams{CategoryID: catA.ID})
 	if countA != 2 {
 		t.Errorf("category A count = %d, want 2", countA)
 	}
 
 	// NULL category filter -> all rows visible in this tx (the 3 we inserted).
-	all, _ := q.ListProducts(ctx, db.ListProductsParams{CategoryID: pgtype.UUID{}, Limit: 10, Offset: 0})
+	all, _ := q.ListProductsWithInventory(ctx, db.ListProductsWithInventoryParams{CategoryID: pgtype.UUID{}, Limit: 10, Offset: 0})
 	if len(all) < 3 {
 		t.Errorf("unfiltered list = %d, want >= 3", len(all))
+	}
+
+	// Search by name (ILIKE, case-insensitive) -> only "a1".
+	found, err := q.ListProductsWithInventory(ctx, db.ListProductsWithInventoryParams{Search: strptr("A1"), Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("search list: %v", err)
+	}
+	if len(found) != 1 || found[0].Sku != "a1" {
+		t.Errorf("search 'A1' = %d rows, want 1 (a1)", len(found))
 	}
 }
 
@@ -140,3 +149,16 @@ func mustProduct(t *testing.T, q *db.Queries, sku string, catID pgtype.UUID) db.
 	}
 	return p
 }
+
+// mustStockedProduct creates a product AND its inventory row, so it appears in the
+// inventory-joined list/count queries.
+func mustStockedProduct(t *testing.T, q *db.Queries, sku string, catID pgtype.UUID) db.Product {
+	t.Helper()
+	p := mustProduct(t, q, sku, catID)
+	if _, err := q.CreateInventory(context.Background(), db.CreateInventoryParams{ProductID: p.ID, Quantity: 1}); err != nil {
+		t.Fatalf("CreateInventory(%s): %v", sku, err)
+	}
+	return p
+}
+
+func strptr(s string) *string { return &s }
