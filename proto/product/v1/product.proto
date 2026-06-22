@@ -78,6 +78,7 @@ message ListProductsRequest {
   int32 page = 1;        // 1-based; defaults to 1
   int32 page_size = 2;   // defaults to 20, capped at 100
   string category_id = 3; // empty = all categories
+  string search = 4;      // empty = no name filter; else case-insensitive substring
 }
 message ListProductsResponse {
   repeated Product products = 1;

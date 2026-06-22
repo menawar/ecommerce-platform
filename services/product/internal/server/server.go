@@ -138,9 +138,16 @@ func (s *Server) ListProducts(ctx context.Context, req *productv1.ListProductsRe
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid category_id")
 	}
+	// Empty search -> nil pointer -> SQL NULL -> the filter short-circuits (no
+	// filtering). A non-empty value becomes a bound ILIKE parameter.
+	var search *string
+	if s := req.GetSearch(); s != "" {
+		search = &s
+	}
 
 	rows, err := s.q.ListProductsWithInventory(ctx, db.ListProductsWithInventoryParams{
 		CategoryID: categoryID,
+		Search:     search,
 		Limit:      size,
 		Offset:     (page - 1) * size,
 	})
@@ -148,7 +155,7 @@ func (s *Server) ListProducts(ctx context.Context, req *productv1.ListProductsRe
 		return nil, s.internal(ctx, "list products", err)
 	}
 
-	total, err := s.q.CountProducts(ctx, categoryID)
+	total, err := s.q.CountProducts(ctx, db.CountProductsParams{CategoryID: categoryID, Search: search})
 	if err != nil {
 		return nil, s.internal(ctx, "count products", err)
 	}

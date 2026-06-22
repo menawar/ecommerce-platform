@@ -18,20 +18,13 @@ RETURNING *;
 SELECT * FROM products
 WHERE id = $1;
 
--- name: ListProducts :many
--- Optional category filter via a nullable named arg: when category_id is NULL the
--- first branch short-circuits and every row matches.
-SELECT * FROM products
-WHERE sqlc.narg('category_id')::uuid IS NULL
-   OR category_id = sqlc.narg('category_id')
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2;
-
 -- name: CountProducts :one
--- Total for the same filter, so ListProducts can report total alongside the page.
+-- Total matching the SAME filters as ListProductsWithInventory, so a page can
+-- report the overall total. ILIKE is case-insensitive LIKE; the value is a bound
+-- parameter (never string-concatenated), so it's injection-safe.
 SELECT count(*) FROM products
-WHERE sqlc.narg('category_id')::uuid IS NULL
-   OR category_id = sqlc.narg('category_id');
+WHERE (sqlc.narg('category_id')::uuid IS NULL OR category_id = sqlc.narg('category_id'))
+  AND (sqlc.narg('search')::text IS NULL OR name ILIKE '%' || sqlc.narg('search') || '%');
 
 -- name: CreateInventory :one
 INSERT INTO inventory (product_id, quantity)
@@ -53,8 +46,8 @@ WHERE p.id = $1;
 SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE sqlc.narg('category_id')::uuid IS NULL
-   OR p.category_id = sqlc.narg('category_id')
+WHERE (sqlc.narg('category_id')::uuid IS NULL OR p.category_id = sqlc.narg('category_id'))
+  AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
 ORDER BY p.created_at DESC
 LIMIT $1 OFFSET $2;
 
