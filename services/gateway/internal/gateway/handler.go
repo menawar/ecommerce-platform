@@ -13,19 +13,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 )
 
-// Handler holds the gateway's dependencies. It depends on the generated
-// UserServiceClient INTERFACE, so tests can inject a fake and real code injects
-// a gRPC-backed client — same seam as everywhere else in this codebase.
+// Handler holds the gateway's dependencies — one generated client INTERFACE per
+// backing service, so tests inject fakes and real code injects gRPC-backed
+// clients. As the platform grows, the gateway fans out to more services from here.
 type Handler struct {
-	users userv1.UserServiceClient
-	log   *slog.Logger
+	users    userv1.UserServiceClient
+	products productv1.ProductServiceClient
+	log      *slog.Logger
 }
 
-func NewHandler(users userv1.UserServiceClient, log *slog.Logger) *Handler {
-	return &Handler{users: users, log: log}
+func NewHandler(users userv1.UserServiceClient, products productv1.ProductServiceClient, log *slog.Logger) *Handler {
+	return &Handler{users: users, products: products, log: log}
 }
 
 // Router builds the middleware chain and routes. Middleware run top-to-bottom on
@@ -47,8 +49,12 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/auth/register", h.register)
 	r.Post("/auth/login", h.login)
 
+	// Catalog browsing is public — anyone can shop before logging in.
+	r.Get("/products", h.listProducts)
+	r.Get("/products/{id}", h.getProduct)
+
 	// Protected routes: a nested group with its own middleware. requireAuth runs
-	// only for routes inside this group, leaving /auth/* and /healthz public.
+	// only for routes inside this group, leaving /auth/*, /products, /healthz public.
 	r.Group(func(pr chi.Router) {
 		pr.Use(h.requireAuth)
 		pr.Get("/me", h.me)
