@@ -30,17 +30,28 @@ export class GatewayError extends Error {
 export async function gatewayFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
 
-  const res = await fetch(`${GATEWAY_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-    // Reads should reflect current data, not a cached snapshot. (Next 16 doesn't
-    // cache fetch by default, but we're explicit about intent.)
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${GATEWAY_URL}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
+      // Reads should reflect current data, not a cached snapshot. (Next 16 doesn't
+      // cache fetch by default, but we're explicit about intent.)
+      cache: "no-store",
+    });
+  } catch {
+    // fetch() REJECTS (vs. returning a non-2xx) only on network-level failures:
+    // connection refused, DNS, timeout — i.e. the gateway isn't reachable. The raw
+    // "fetch failed" is useless to a user, so surface an actionable message instead.
+    throw new GatewayError(
+      503,
+      `Cannot reach the API gateway at ${GATEWAY_URL}. Make sure the backend services are running.`,
+    );
+  }
 
   if (!res.ok) {
     let message = res.statusText;
