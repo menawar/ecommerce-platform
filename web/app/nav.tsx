@@ -21,6 +21,9 @@ export async function Nav() {
           </Link>
           {loggedIn ? (
             <>
+              <Link href="/cart" className="hover:underline">
+                Cart
+              </Link>
               <Link href="/account" className="hover:underline">
                 Account
               </Link>
