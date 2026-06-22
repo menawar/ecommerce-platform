@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 // The home page is a Server Component (the App Router default). No "use client"
 // here — it renders to HTML on the server and ships zero JavaScript for this view.
 export default function Home() {
@@ -8,12 +10,12 @@ export default function Home() {
         A storefront for the Go microservices platform. Browse the catalog, sign in,
         build a cart, and check out.
       </p>
-      <a
+      <Link
         href="/products"
         className="mt-8 inline-block rounded-md bg-foreground px-4 py-2 font-medium text-background"
       >
         Browse products
-      </a>
+      </Link>
     </main>
   );
 }
