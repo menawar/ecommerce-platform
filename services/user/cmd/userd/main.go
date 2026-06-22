@@ -26,6 +26,7 @@ import (
 	"github.com/menawar/ecommerce-platform/pkg/auth"
 	"github.com/menawar/ecommerce-platform/pkg/grpcmw"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
+	"github.com/menawar/ecommerce-platform/pkg/postgres"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/user/internal/server"
 	"github.com/menawar/ecommerce-platform/services/user/internal/store"
@@ -38,6 +39,7 @@ type config struct {
 	grpcAddr   string
 	httpAddr   string
 	jwtSecret  string
+	dbURL      string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
@@ -49,6 +51,7 @@ func main() {
 		grpcAddr:   env("USER_GRPC_ADDR", ":50051"),
 		httpAddr:   env("USER_HTTP_ADDR", ":2112"),
 		jwtSecret:  os.Getenv("JWT_SECRET"),
+		dbURL:      env("USER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/userdb?sslmode=disable"),
 		accessTTL:  15 * time.Minute,
 		refreshTTL: 7 * 24 * time.Hour,
 	}
@@ -71,9 +74,17 @@ func main() {
 }
 
 func run(ctx context.Context, log *slog.Logger, cfg config) error {
-	// Compose the service. Today the repo is in-memory; in Phase 2 this single
-	// line becomes store.NewPostgres(pool) and nothing else changes.
-	repo := store.NewMemory()
+	// Compose the service. The repo is now Postgres-backed — the ONE line that
+	// changed from the in-memory version (everything downstream depends on the
+	// store.Repository interface, so the server is untouched).
+	pool, err := postgres.NewPool(ctx, cfg.dbURL)
+	if err != nil {
+		return fmt.Errorf("connect userdb: %w", err)
+	}
+	defer pool.Close()
+	log.Info("connected to userdb")
+
+	repo := store.NewPostgres(pool)
 	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL)
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL)
 	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, log)
