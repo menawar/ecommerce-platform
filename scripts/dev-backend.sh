@@ -17,14 +17,16 @@ echo "Building service binaries..."
 mkdir -p bin
 go build -o bin/userd ./services/user/cmd/userd
 go build -o bin/productd ./services/product/cmd/productd
+go build -o bin/cartd ./services/cart/cmd/cartd
 go build -o bin/gatewayd ./services/gateway/cmd/gatewayd
 
-echo "Starting userd + productd + gatewayd (gateway at ${GATEWAY_HTTP_ADDR}). Ctrl-C to stop."
+echo "Starting userd + productd + cartd + gatewayd (gateway at ${GATEWAY_HTTP_ADDR}). Ctrl-C to stop."
 # kill the whole process group on exit so no service is left orphaned (the same
 # signal issue we hit with `go run`/`next start` children).
 trap 'echo; echo "stopping services..."; kill 0' EXIT
 
 ./bin/userd &
 ./bin/productd &
+./bin/cartd &
 ./bin/gatewayd &
 wait

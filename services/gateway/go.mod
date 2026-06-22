@@ -11,6 +11,7 @@ replace (
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
+	github.com/google/uuid v1.6.0
 	github.com/menawar/ecommerce-platform/pkg v0.0.0-00010101000000-000000000000
 	github.com/menawar/ecommerce-platform/proto v0.0.0-00010101000000-000000000000
 	golang.org/x/sync v0.21.0
@@ -19,7 +20,6 @@ require (
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect

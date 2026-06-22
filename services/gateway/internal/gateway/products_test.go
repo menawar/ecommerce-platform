@@ -47,7 +47,7 @@ func (f *fakeProductClient) CommitStock(context.Context, *productv1.CommitStockR
 
 func newProductTestServer(t *testing.T, fake *fakeProductClient) *httptest.Server {
 	t.Helper()
-	h := gateway.NewHandler(&fakeUserClient{}, fake, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := gateway.NewHandler(&fakeUserClient{}, fake, &fakeCartClient{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(h.Router())
 	t.Cleanup(ts.Close)
 	return ts
