@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 )
@@ -23,11 +24,17 @@ import (
 type Handler struct {
 	users    userv1.UserServiceClient
 	products productv1.ProductServiceClient
+	carts    cartv1.CartServiceClient
 	log      *slog.Logger
 }
 
-func NewHandler(users userv1.UserServiceClient, products productv1.ProductServiceClient, log *slog.Logger) *Handler {
-	return &Handler{users: users, products: products, log: log}
+func NewHandler(
+	users userv1.UserServiceClient,
+	products productv1.ProductServiceClient,
+	carts cartv1.CartServiceClient,
+	log *slog.Logger,
+) *Handler {
+	return &Handler{users: users, products: products, carts: carts, log: log}
 }
 
 // Router builds the middleware chain and routes. Middleware run top-to-bottom on
@@ -58,6 +65,14 @@ func (h *Handler) Router() http.Handler {
 	r.Group(func(pr chi.Router) {
 		pr.Use(h.requireAuth)
 		pr.Get("/me", h.me)
+
+		// Cart is per-user: every handler reads the user_id from the validated
+		// token (Identity), never from the request — so one user can't touch
+		// another's cart.
+		pr.Get("/cart", h.getCart)
+		pr.Post("/cart/items", h.addCartItem)
+		pr.Put("/cart/items/{productID}", h.updateCartItem)
+		pr.Delete("/cart/items/{productID}", h.removeCartItem)
 	})
 
 	return r
