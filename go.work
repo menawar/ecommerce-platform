@@ -20,6 +20,7 @@ use (
 	./services/cart
 	./services/gateway
 	./services/hello
+	./services/order
 	./services/payment
 	./services/product
 	./services/user
