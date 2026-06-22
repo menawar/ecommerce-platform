@@ -42,7 +42,8 @@ func (f *fakeUserClient) ValidateToken(_ context.Context, in *userv1.ValidateTok
 
 func newTestServer(t *testing.T, fake *fakeUserClient) *httptest.Server {
 	t.Helper()
-	h := gateway.NewHandler(fake, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Auth tests don't hit product routes, so a zero-value product fake is fine.
+	h := gateway.NewHandler(fake, &fakeProductClient{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(h.Router())
 	t.Cleanup(ts.Close)
 	return ts
