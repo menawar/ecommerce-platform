@@ -12,12 +12,13 @@ import (
 )
 
 const createOrder = `-- name: CreateOrder :one
-INSERT INTO orders (user_id, status, total_cents, currency, reservation_id, idempotency_key)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO orders (id, user_id, status, total_cents, currency, reservation_id, idempotency_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at
 `
 
 type CreateOrderParams struct {
+	ID             pgtype.UUID
 	UserID         pgtype.UUID
 	Status         string
 	TotalCents     int64
@@ -26,8 +27,11 @@ type CreateOrderParams struct {
 	IdempotencyKey *string
 }
 
+// id is supplied (not defaulted) so reservation_id can equal the order id — the
+// saga reserves stock under the order's own id, making ReserveStock idempotent.
 func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error) {
 	row := q.db.QueryRow(ctx, createOrder,
+		arg.ID,
 		arg.UserID,
 		arg.Status,
 		arg.TotalCents,
