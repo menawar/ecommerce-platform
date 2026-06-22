@@ -1,0 +1,16 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "migrations"
+    queries: "internal/db/queries.sql"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        sql_package: "pgx/v5"
+        emit_pointers_for_null_types: true
+        overrides:
+          # sqlc doesn't know the citext extension type; tell it citext is a
+          # plain Go string so generated params/results are `string`.
+          - db_type: "citext"
+            go_type: "string"
