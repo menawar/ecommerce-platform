@@ -22,6 +22,9 @@ const (
 	ProductService_CreateProduct_FullMethodName = "/product.v1.ProductService/CreateProduct"
 	ProductService_GetProduct_FullMethodName    = "/product.v1.ProductService/GetProduct"
 	ProductService_ListProducts_FullMethodName  = "/product.v1.ProductService/ListProducts"
+	ProductService_ReserveStock_FullMethodName  = "/product.v1.ProductService/ReserveStock"
+	ProductService_ReleaseStock_FullMethodName  = "/product.v1.ProductService/ReleaseStock"
+	ProductService_CommitStock_FullMethodName   = "/product.v1.ProductService/CommitStock"
 )
 
 // ProductServiceClient is the client API for ProductService service.
@@ -35,6 +38,10 @@ type ProductServiceClient interface {
 	CreateProduct(ctx context.Context, in *CreateProductRequest, opts ...grpc.CallOption) (*CreateProductResponse, error)
 	GetProduct(ctx context.Context, in *GetProductRequest, opts ...grpc.CallOption) (*GetProductResponse, error)
 	ListProducts(ctx context.Context, in *ListProductsRequest, opts ...grpc.CallOption) (*ListProductsResponse, error)
+	// Saga surface. All keyed on reservation_id and idempotent.
+	ReserveStock(ctx context.Context, in *ReserveStockRequest, opts ...grpc.CallOption) (*ReserveStockResponse, error)
+	ReleaseStock(ctx context.Context, in *ReleaseStockRequest, opts ...grpc.CallOption) (*ReleaseStockResponse, error)
+	CommitStock(ctx context.Context, in *CommitStockRequest, opts ...grpc.CallOption) (*CommitStockResponse, error)
 }
 
 type productServiceClient struct {
@@ -75,6 +82,36 @@ func (c *productServiceClient) ListProducts(ctx context.Context, in *ListProduct
 	return out, nil
 }
 
+func (c *productServiceClient) ReserveStock(ctx context.Context, in *ReserveStockRequest, opts ...grpc.CallOption) (*ReserveStockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReserveStockResponse)
+	err := c.cc.Invoke(ctx, ProductService_ReserveStock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *productServiceClient) ReleaseStock(ctx context.Context, in *ReleaseStockRequest, opts ...grpc.CallOption) (*ReleaseStockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReleaseStockResponse)
+	err := c.cc.Invoke(ctx, ProductService_ReleaseStock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *productServiceClient) CommitStock(ctx context.Context, in *CommitStockRequest, opts ...grpc.CallOption) (*CommitStockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CommitStockResponse)
+	err := c.cc.Invoke(ctx, ProductService_CommitStock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProductServiceServer is the server API for ProductService service.
 // All implementations must embed UnimplementedProductServiceServer
 // for forward compatibility.
@@ -86,6 +123,10 @@ type ProductServiceServer interface {
 	CreateProduct(context.Context, *CreateProductRequest) (*CreateProductResponse, error)
 	GetProduct(context.Context, *GetProductRequest) (*GetProductResponse, error)
 	ListProducts(context.Context, *ListProductsRequest) (*ListProductsResponse, error)
+	// Saga surface. All keyed on reservation_id and idempotent.
+	ReserveStock(context.Context, *ReserveStockRequest) (*ReserveStockResponse, error)
+	ReleaseStock(context.Context, *ReleaseStockRequest) (*ReleaseStockResponse, error)
+	CommitStock(context.Context, *CommitStockRequest) (*CommitStockResponse, error)
 	mustEmbedUnimplementedProductServiceServer()
 }
 
@@ -104,6 +145,15 @@ func (UnimplementedProductServiceServer) GetProduct(context.Context, *GetProduct
 }
 func (UnimplementedProductServiceServer) ListProducts(context.Context, *ListProductsRequest) (*ListProductsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListProducts not implemented")
+}
+func (UnimplementedProductServiceServer) ReserveStock(context.Context, *ReserveStockRequest) (*ReserveStockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReserveStock not implemented")
+}
+func (UnimplementedProductServiceServer) ReleaseStock(context.Context, *ReleaseStockRequest) (*ReleaseStockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReleaseStock not implemented")
+}
+func (UnimplementedProductServiceServer) CommitStock(context.Context, *CommitStockRequest) (*CommitStockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CommitStock not implemented")
 }
 func (UnimplementedProductServiceServer) mustEmbedUnimplementedProductServiceServer() {}
 func (UnimplementedProductServiceServer) testEmbeddedByValue()                        {}
@@ -180,6 +230,60 @@ func _ProductService_ListProducts_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ProductService_ReserveStock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReserveStockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProductServiceServer).ReserveStock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProductService_ReserveStock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProductServiceServer).ReserveStock(ctx, req.(*ReserveStockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProductService_ReleaseStock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseStockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProductServiceServer).ReleaseStock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProductService_ReleaseStock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProductServiceServer).ReleaseStock(ctx, req.(*ReleaseStockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ProductService_CommitStock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CommitStockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ProductServiceServer).CommitStock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ProductService_CommitStock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ProductServiceServer).CommitStock(ctx, req.(*CommitStockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ProductService_ServiceDesc is the grpc.ServiceDesc for ProductService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -198,6 +302,18 @@ var ProductService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListProducts",
 			Handler:    _ProductService_ListProducts_Handler,
+		},
+		{
+			MethodName: "ReserveStock",
+			Handler:    _ProductService_ReserveStock_Handler,
+		},
+		{
+			MethodName: "ReleaseStock",
+			Handler:    _ProductService_ReleaseStock_Handler,
+		},
+		{
+			MethodName: "CommitStock",
+			Handler:    _ProductService_CommitStock_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

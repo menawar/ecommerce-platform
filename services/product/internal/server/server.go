@@ -18,6 +18,7 @@ import (
 
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
 	"github.com/menawar/ecommerce-platform/services/product/internal/db"
+	"github.com/menawar/ecommerce-platform/services/product/internal/inventory"
 )
 
 const (
@@ -30,13 +31,14 @@ const (
 // via WithTx, inside a transaction.
 type Server struct {
 	productv1.UnimplementedProductServiceServer
-	pool *pgxpool.Pool
-	q    *db.Queries
-	log  *slog.Logger
+	pool     *pgxpool.Pool
+	q        *db.Queries
+	reserver *inventory.Reserver
+	log      *slog.Logger
 }
 
 func NewServer(pool *pgxpool.Pool, log *slog.Logger) *Server {
-	return &Server{pool: pool, q: db.New(pool), log: log}
+	return &Server{pool: pool, q: db.New(pool), reserver: inventory.NewReserver(pool), log: log}
 }
 
 // CreateProduct inserts the product AND its inventory row atomically. Both must

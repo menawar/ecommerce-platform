@@ -55,12 +55,22 @@ func seedProduct(t *testing.T, pool *pgxpool.Pool, quantity int32) string {
 
 func reservedQty(t *testing.T, pool *pgxpool.Pool, productID string) int32 {
 	t.Helper()
+	return getInventory(t, pool, productID).Reserved
+}
+
+func totalQty(t *testing.T, pool *pgxpool.Pool, productID string) int32 {
+	t.Helper()
+	return getInventory(t, pool, productID).Quantity
+}
+
+func getInventory(t *testing.T, pool *pgxpool.Pool, productID string) db.Inventory {
+	t.Helper()
 	pid, _ := uuid.Parse(productID)
 	inv, err := db.New(pool).GetInventory(context.Background(), pgtype.UUID{Bytes: pid, Valid: true})
 	if err != nil {
 		t.Fatalf("get inventory: %v", err)
 	}
-	return inv.Reserved
+	return inv
 }
 
 func TestReserve_HappyPath(t *testing.T) {

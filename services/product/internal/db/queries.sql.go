@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const commitInventory = `-- name: CommitInventory :exec
+UPDATE inventory
+SET quantity = quantity - $1,
+    reserved = reserved - $1,
+    version  = version + 1
+WHERE product_id = $2
+`
+
+type CommitInventoryParams struct {
+	Quantity  int32
+	ProductID pgtype.UUID
+}
+
+// Finalize: the goods actually leave — drop BOTH quantity and reserved.
+func (q *Queries) CommitInventory(ctx context.Context, arg CommitInventoryParams) error {
+	_, err := q.db.Exec(ctx, commitInventory, arg.Quantity, arg.ProductID)
+	return err
+}
+
 const countProducts = `-- name: CountProducts :one
 SELECT count(*) FROM products
 WHERE $1::uuid IS NULL
@@ -191,6 +210,20 @@ func (q *Queries) GetProductWithInventory(ctx context.Context, id pgtype.UUID) (
 	return i, err
 }
 
+const getReservationStatusForUpdate = `-- name: GetReservationStatusForUpdate :one
+SELECT status FROM stock_reservations WHERE id = $1 FOR UPDATE
+`
+
+// SELECT ... FOR UPDATE locks the reservation row for the rest of the transaction,
+// serializing concurrent Release/Commit of the same reservation so they can't both
+// act on it (idempotency under contention).
+func (q *Queries) GetReservationStatusForUpdate(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getReservationStatusForUpdate, id)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const insertReservation = `-- name: InsertReservation :exec
 INSERT INTO stock_reservations (id) VALUES ($1)
 `
@@ -324,6 +357,53 @@ func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProduct
 	return items, nil
 }
 
+const listReservationItems = `-- name: ListReservationItems :many
+SELECT product_id, quantity FROM reservation_items WHERE reservation_id = $1
+`
+
+type ListReservationItemsRow struct {
+	ProductID pgtype.UUID
+	Quantity  int32
+}
+
+func (q *Queries) ListReservationItems(ctx context.Context, reservationID pgtype.UUID) ([]ListReservationItemsRow, error) {
+	rows, err := q.db.Query(ctx, listReservationItems, reservationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReservationItemsRow
+	for rows.Next() {
+		var i ListReservationItemsRow
+		if err := rows.Scan(&i.ProductID, &i.Quantity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const releaseInventory = `-- name: ReleaseInventory :exec
+UPDATE inventory
+SET reserved = reserved - $1,
+    version  = version + 1
+WHERE product_id = $2
+`
+
+type ReleaseInventoryParams struct {
+	Quantity  int32
+	ProductID pgtype.UUID
+}
+
+// Compensation: give the held units back to "available" (drop reserved).
+func (q *Queries) ReleaseInventory(ctx context.Context, arg ReleaseInventoryParams) error {
+	_, err := q.db.Exec(ctx, releaseInventory, arg.Quantity, arg.ProductID)
+	return err
+}
+
 const reserveInventory = `-- name: ReserveInventory :execrows
 UPDATE inventory
 SET reserved = reserved + $1,
@@ -347,4 +427,18 @@ func (q *Queries) ReserveInventory(ctx context.Context, arg ReserveInventoryPara
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setReservationStatus = `-- name: SetReservationStatus :exec
+UPDATE stock_reservations SET status = $2 WHERE id = $1
+`
+
+type SetReservationStatusParams struct {
+	ID     pgtype.UUID
+	Status string
+}
+
+func (q *Queries) SetReservationStatus(ctx context.Context, arg SetReservationStatusParams) error {
+	_, err := q.db.Exec(ctx, setReservationStatus, arg.ID, arg.Status)
+	return err
 }
