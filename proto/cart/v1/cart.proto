@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package cart.v1;
+
+// CartService owns the shopping cart (Redis-backed). Every call is keyed by
+// user_id, which the gateway fills in from the validated JWT — clients never
+// pass their own user_id. The cart holds only product_id + quantity; prices are
+// resolved at checkout, never stored here.
+//
+// buf's STANDARD lint requires a unique response type per RPC, so each returns its
+// own *Response that wraps the shared Cart message.
+service CartService {
+  rpc GetCart(GetCartRequest) returns (GetCartResponse);
+  rpc AddItem(AddItemRequest) returns (AddItemResponse);
+  rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse); // set absolute quantity (0 removes)
+  rpc RemoveItem(RemoveItemRequest) returns (RemoveItemResponse);
+  rpc ClearCart(ClearCartRequest) returns (ClearCartResponse); // called by Order after checkout
+}
+
+message CartItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message Cart {
+  string user_id = 1;
+  repeated CartItem items = 2;
+}
+
+message GetCartRequest {
+  string user_id = 1;
+}
+message GetCartResponse {
+  Cart cart = 1;
+}
+
+message AddItemRequest {
+  string user_id = 1;
+  string product_id = 2;
+  int32 quantity = 3; // amount to ADD (must be > 0)
+}
+message AddItemResponse {
+  Cart cart = 1;
+}
+
+message UpdateItemRequest {
+  string user_id = 1;
+  string product_id = 2;
+  int32 quantity = 3; // absolute quantity; 0 removes the line
+}
+message UpdateItemResponse {
+  Cart cart = 1;
+}
+
+message RemoveItemRequest {
+  string user_id = 1;
+  string product_id = 2;
+}
+message RemoveItemResponse {
+  Cart cart = 1;
+}
+
+message ClearCartRequest {
+  string user_id = 1;
+}
+message ClearCartResponse {}
