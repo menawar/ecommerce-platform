@@ -19,10 +19,16 @@ PRODUCT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/productdb?ss
 PRODUCT_MIGRATIONS := services/product/migrations
 USER_DB_URL        ?= postgres://ecommerce:ecommerce@localhost:5433/userdb?sslmode=disable
 USER_MIGRATIONS    := services/user/migrations
+PAYMENT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/paymentdb?sslmode=disable
+PAYMENT_MIGRATIONS := services/payment/migrations
+ORDER_DB_URL       ?= postgres://ecommerce:ecommerce@localhost:5433/orderdb?sslmode=disable
+ORDER_MIGRATIONS   := services/order/migrations
 
 .PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy \
 	product-migrate-up product-migrate-down product-migrate-create product-sqlc \
-	user-migrate-up user-migrate-down user-migrate-create user-sqlc
+	user-migrate-up user-migrate-down user-migrate-create user-sqlc \
+	payment-migrate-up payment-migrate-down payment-sqlc \
+	order-migrate-up order-migrate-down order-sqlc
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -87,3 +93,17 @@ product-sqlc: ## Regenerate product sqlc code from queries.sql
 
 user-sqlc: ## Regenerate user sqlc code from queries.sql
 	cd services/user && $(SQLC) generate
+
+payment-migrate-up: ## Apply all paymentdb migrations
+	$(MIGRATE) -path $(PAYMENT_MIGRATIONS) -database "$(PAYMENT_DB_URL)" up
+payment-migrate-down: ## Roll back the last paymentdb migration
+	$(MIGRATE) -path $(PAYMENT_MIGRATIONS) -database "$(PAYMENT_DB_URL)" down 1
+payment-sqlc: ## Regenerate payment sqlc code
+	cd services/payment && $(SQLC) generate
+
+order-migrate-up: ## Apply all orderdb migrations
+	$(MIGRATE) -path $(ORDER_MIGRATIONS) -database "$(ORDER_DB_URL)" up
+order-migrate-down: ## Roll back the last orderdb migration
+	$(MIGRATE) -path $(ORDER_MIGRATIONS) -database "$(ORDER_DB_URL)" down 1
+order-sqlc: ## Regenerate order sqlc code
+	cd services/order && $(SQLC) generate

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package payment.v1;
+
+// PaymentService processes charges. It runs in mock mode by default (a
+// deterministic MockProvider); a real Stripe adapter is a later stretch goal.
+// CreatePayment is idempotent on idempotency_key — the Order saga may retry it,
+// and a retry must never charge twice.
+service PaymentService {
+  rpc CreatePayment(CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc GetPayment(GetPaymentRequest) returns (GetPaymentResponse);
+}
+
+message Payment {
+  string id = 1;
+  string order_id = 2;
+  int64 amount_cents = 3;
+  string currency = 4;
+  string status = 5;       // pending | succeeded | failed
+  string provider = 6;     // mock | stripe
+  string provider_ref = 7; // the provider's charge reference
+  int64 created_at = 8;
+}
+
+message CreatePaymentRequest {
+  string order_id = 1;
+  int64 amount_cents = 2;
+  string currency = 3;
+  string idempotency_key = 4;
+}
+message CreatePaymentResponse {
+  string payment_id = 1;
+  string status = 2; // succeeded | failed (terminal after processing)
+}
+
+message GetPaymentRequest {
+  string payment_id = 1;
+}
+message GetPaymentResponse {
+  Payment payment = 1;
+}
