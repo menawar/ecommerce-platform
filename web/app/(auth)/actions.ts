@@ -6,7 +6,7 @@
 import { redirect } from "next/navigation";
 
 import { GatewayError } from "@/lib/gateway";
-import { login, register, setSession } from "@/lib/session";
+import { clearSession, login, register, setSession } from "@/lib/session";
 
 // The shape useActionState threads between submissions (prev state -> next state).
 export type AuthState = { error?: string };
@@ -27,6 +27,13 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
   // redirect() throws a special signal Next handles as navigation. It MUST be
   // outside the try/catch — otherwise the catch would swallow the redirect.
   redirect("/products");
+}
+
+// A no-arg Server Action: a <form action={logoutAction}> needs no client JS and no
+// useActionState — submit clears the cookie and redirects.
+export async function logoutAction(): Promise<void> {
+  await clearSession();
+  redirect("/login");
 }
 
 export async function registerAction(_prev: AuthState, formData: FormData): Promise<AuthState> {

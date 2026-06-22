@@ -46,3 +46,15 @@ export async function setSession(token: string, expiresAtUnix: number): Promise<
 export async function clearSession(): Promise<void> {
   (await cookies()).delete(SESSION_COOKIE);
 }
+
+// getMe calls the protected /me route; gatewayFetch forwards the cookie as a
+// Bearer token. A 401 here means the token is missing/expired/invalid.
+export async function getMe(): Promise<{ user_id: string; role: string }> {
+  return gatewayFetch<{ user_id: string; role: string }>("/me");
+}
+
+// isLoggedIn is a cheap presence check for UI (which nav links to show). It does
+// NOT prove the token is valid — that's the gateway's job on each real request.
+export async function isLoggedIn(): Promise<boolean> {
+  return Boolean((await cookies()).get(SESSION_COOKIE)?.value);
+}
