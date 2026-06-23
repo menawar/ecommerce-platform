@@ -63,6 +63,8 @@ func httpStatusFromGRPC(code codes.Code) int {
 		return http.StatusNotFound // 404
 	case codes.AlreadyExists:
 		return http.StatusConflict // 409
+	case codes.FailedPrecondition:
+		return http.StatusUnprocessableEntity // 422 (e.g. empty cart, can't cancel a paid order)
 	case codes.DeadlineExceeded:
 		return http.StatusGatewayTimeout // 504
 	case codes.Unavailable:
