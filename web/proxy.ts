@@ -22,5 +22,5 @@ export function proxy(request: NextRequest) {
 // matcher scopes the proxy to protected routes only — catalog/auth stay public,
 // and static assets are never touched.
 export const config = {
-  matcher: ["/account/:path*", "/cart"],
+  matcher: ["/account/:path*", "/cart", "/checkout", "/orders", "/orders/:path*"],
 };

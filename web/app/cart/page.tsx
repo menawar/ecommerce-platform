@@ -95,6 +95,12 @@ export default async function CartPage() {
             <span className="text-lg font-semibold">Total</span>
             <span className="text-lg font-semibold">{formatPrice(total, "NGN")}</span>
           </div>
+          <Link
+            href="/checkout"
+            className="mt-6 inline-block rounded-md bg-foreground px-5 py-2.5 font-medium text-background"
+          >
+            Proceed to checkout
+          </Link>
         </>
       )}
     </main>
