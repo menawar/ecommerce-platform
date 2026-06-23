@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -101,12 +102,15 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL)
 	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, events.NewNATSPublisher(js), log)
 
-	// Interceptors run in chain order: logging (outer) wraps recovery (inner) wraps
-	// the handler — so logging records the final status even when recovery has
-	// turned a panic into an Internal error.
+	// Interceptors run in chain order: logging (outer) wraps metrics wraps recovery
+	// (inner) wraps the handler — so logging and metrics both record the final status
+	// even when recovery has turned a panic into an Internal error. Metrics registers
+	// against the default registry, which is exactly what /metrics (promhttp) serves.
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "user")
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
+			grpcmw.UnaryMetrics(metrics),
 			grpcmw.UnaryRecovery(log),
 		),
 	)
