@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/menawar/ecommerce-platform/pkg/events"
 	"github.com/menawar/ecommerce-platform/pkg/grpcmw"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
 	"github.com/menawar/ecommerce-platform/pkg/outbox"
@@ -42,6 +43,7 @@ type config struct {
 	cartAddr    string
 	productAddr string
 	paymentAddr string
+	natsURL     string
 }
 
 func main() {
@@ -53,6 +55,7 @@ func main() {
 		cartAddr:    env("CART_GRPC_ADDR", "localhost:50053"),
 		productAddr: env("PRODUCT_GRPC_ADDR", "localhost:50052"),
 		paymentAddr: env("PAYMENT_GRPC_ADDR", "localhost:50054"),
+		natsURL:     env("NATS_URL", "nats://localhost:4222"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -103,9 +106,17 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	orderv1.RegisterOrderServiceServer(grpcServer, server.NewServer(pool, sg, log))
 	reflection.Register(grpcServer)
 
-	// The outbox poller: publishes events the saga wrote, marking them delivered.
-	// LoggingPublisher stands in for NATS until Phase 5.
-	poller := outbox.NewPoller(outboxstore.New(pool), outbox.LoggingPublisher{Log: log}, log, outbox.WithInterval(time.Second))
+	// Connect to NATS JetStream and ensure the shared EVENTS stream exists. The
+	// outbox poller now publishes to NATS instead of just logging — the Publisher
+	// interface let us swap the implementation without touching the poller.
+	nc, js, err := events.Connect(ctx, cfg.natsURL, events.StreamName, events.StreamSubjects())
+	if err != nil {
+		return fmt.Errorf("connect nats: %w", err)
+	}
+	defer nc.Close()
+	log.Info("connected to nats jetstream")
+
+	poller := outbox.NewPoller(outboxstore.New(pool), events.NewNATSPublisher(js), log, outbox.WithInterval(time.Second))
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
