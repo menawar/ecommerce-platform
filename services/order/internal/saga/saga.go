@@ -6,7 +6,6 @@ package saga
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/menawar/ecommerce-platform/pkg/events"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	paymentv1 "github.com/menawar/ecommerce-platform/proto/payment/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
@@ -66,10 +66,10 @@ type lineItem struct {
 	quantity   int32
 }
 
-// orderEvent is the outbox payload. event_id makes each delivery uniquely
-// identifiable so at-least-once consumers can dedupe (Phase 5).
+// orderEvent is the DATA payload of order.* events. It's wrapped in an
+// events.Envelope (which supplies event_id/occurred_at/version) before going to
+// the outbox, so consumers dedupe on the envelope's event_id.
 type orderEvent struct {
-	EventID    string `json:"event_id"`
 	OrderID    string `json:"order_id"`
 	UserID     string `json:"user_id"`
 	TotalCents int64  `json:"total_cents"`
@@ -301,7 +301,7 @@ func (s *Saga) setStatus(ctx context.Context, orderID uuid.UUID, to order.Status
 		return err
 	}
 	if topic != "" && ev != nil {
-		if err := writeOutbox(ctx, q, topic, ev); err != nil {
+		if err := writeOutbox(ctx, q, topic, *ev); err != nil {
 			return err
 		}
 	}
@@ -324,15 +324,18 @@ func (s *Saga) markPaid(ctx context.Context, orderID, paymentID uuid.UUID, ev or
 	}); err != nil {
 		return err
 	}
-	if err := writeOutbox(ctx, q, "order.paid", &ev); err != nil {
+	if err := writeOutbox(ctx, q, "order.paid", ev); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func writeOutbox(ctx context.Context, q *db.Queries, topic string, ev *orderEvent) error {
-	ev.EventID = uuid.NewString()
-	payload, err := json.Marshal(ev)
+func writeOutbox(ctx context.Context, q *db.Queries, topic string, data orderEvent) error {
+	env, err := events.New(topic, data)
+	if err != nil {
+		return err
+	}
+	payload, err := env.Marshal()
 	if err != nil {
 		return err
 	}
