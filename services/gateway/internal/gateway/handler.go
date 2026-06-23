@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
+	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 )
@@ -25,6 +26,7 @@ type Handler struct {
 	users    userv1.UserServiceClient
 	products productv1.ProductServiceClient
 	carts    cartv1.CartServiceClient
+	orders   orderv1.OrderServiceClient
 	log      *slog.Logger
 }
 
@@ -32,9 +34,10 @@ func NewHandler(
 	users userv1.UserServiceClient,
 	products productv1.ProductServiceClient,
 	carts cartv1.CartServiceClient,
+	orders orderv1.OrderServiceClient,
 	log *slog.Logger,
 ) *Handler {
-	return &Handler{users: users, products: products, carts: carts, log: log}
+	return &Handler{users: users, products: products, carts: carts, orders: orders, log: log}
 }
 
 // Router builds the middleware chain and routes. Middleware run top-to-bottom on
@@ -73,6 +76,10 @@ func (h *Handler) Router() http.Handler {
 		pr.Post("/cart/items", h.addCartItem)
 		pr.Put("/cart/items/{productID}", h.updateCartItem)
 		pr.Delete("/cart/items/{productID}", h.removeCartItem)
+
+		pr.Post("/orders", h.placeOrder)
+		pr.Get("/orders", h.listOrders)
+		pr.Get("/orders/{id}", h.getOrder)
 	})
 
 	return r

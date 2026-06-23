@@ -58,7 +58,7 @@ func newCartTestServer(t *testing.T, cart *fakeCartClient) (*httptest.Server, st
 			return &userv1.ValidateTokenResponse{Valid: true, UserId: userID, Role: "customer"}, nil
 		},
 	}
-	h := gateway.NewHandler(uc, &fakeProductClient{}, cart, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := gateway.NewHandler(uc, &fakeProductClient{}, cart, &fakeOrderClient{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(h.Router())
 	t.Cleanup(ts.Close)
 	return ts, userID
