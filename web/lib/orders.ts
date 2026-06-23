@@ -31,3 +31,11 @@ export async function placeOrder(idempotencyKey: string): Promise<{ order_id: st
 export async function getOrder(id: string): Promise<Order> {
   return gatewayFetch<Order>(`/orders/${encodeURIComponent(id)}`);
 }
+
+// listOrders returns the caller's orders, newest first. The gateway scopes the
+// list to the authenticated user (user_id comes from the JWT, never the client),
+// so there's no user filter to pass — the cookie is the identity.
+export async function listOrders(): Promise<Order[]> {
+  const { orders } = await gatewayFetch<{ orders: Order[] }>("/orders");
+  return orders;
+}

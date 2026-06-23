@@ -24,6 +24,9 @@ export async function Nav() {
               <Link href="/cart" className="hover:underline">
                 Cart
               </Link>
+              <Link href="/orders" className="hover:underline">
+                Orders
+              </Link>
               <Link href="/account" className="hover:underline">
                 Account
               </Link>
