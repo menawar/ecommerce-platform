@@ -23,12 +23,15 @@ PAYMENT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/paymentdb?ss
 PAYMENT_MIGRATIONS := services/payment/migrations
 ORDER_DB_URL       ?= postgres://ecommerce:ecommerce@localhost:5433/orderdb?sslmode=disable
 ORDER_MIGRATIONS   := services/order/migrations
+NOTIFICATION_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/notificationdb?sslmode=disable
+NOTIFICATION_MIGRATIONS := services/notification/migrations
 
 .PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy \
 	product-migrate-up product-migrate-down product-migrate-create product-sqlc \
 	user-migrate-up user-migrate-down user-migrate-create user-sqlc \
 	payment-migrate-up payment-migrate-down payment-sqlc \
-	order-migrate-up order-migrate-down order-sqlc
+	order-migrate-up order-migrate-down order-sqlc \
+	notification-migrate-up notification-migrate-down notification-sqlc
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -107,3 +110,10 @@ order-migrate-down: ## Roll back the last orderdb migration
 	$(MIGRATE) -path $(ORDER_MIGRATIONS) -database "$(ORDER_DB_URL)" down 1
 order-sqlc: ## Regenerate order sqlc code
 	cd services/order && $(SQLC) generate
+
+notification-migrate-up: ## Apply all notificationdb migrations
+	$(MIGRATE) -path $(NOTIFICATION_MIGRATIONS) -database "$(NOTIFICATION_DB_URL)" up
+notification-migrate-down: ## Roll back the last notificationdb migration
+	$(MIGRATE) -path $(NOTIFICATION_MIGRATIONS) -database "$(NOTIFICATION_DB_URL)" down 1
+notification-sqlc: ## Regenerate notification sqlc code
+	cd services/notification && $(SQLC) generate
