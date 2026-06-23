@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package order.v1;
+
+// OrderService is the saga orchestrator's API. PlaceOrder turns the caller's cart
+// into a paid order (or a cancelled one on failure); it is idempotent on
+// idempotency_key. user_id is filled by the gateway from the JWT.
+service OrderService {
+  rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+  rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+}
+
+message OrderItem {
+  string product_id = 1;
+  string name = 2;        // snapshot at order time
+  int64 price_cents = 3;  // snapshot at order time
+  int32 quantity = 4;
+}
+
+message Order {
+  string id = 1;
+  string user_id = 2;
+  string status = 3;
+  int64 total_cents = 4;
+  string currency = 5;
+  string payment_id = 6; // empty until paid
+  repeated OrderItem items = 7;
+  int64 created_at = 8;
+}
+
+message PlaceOrderRequest {
+  string user_id = 1;
+  string idempotency_key = 2;
+}
+message PlaceOrderResponse {
+  string order_id = 1;
+  string status = 2; // CONFIRMED | CANCELLED (terminal after the saga runs)
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+}
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message ListOrdersRequest {
+  string user_id = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+message ListOrdersResponse {
+  repeated Order orders = 1; // without items (summary view)
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+}
+message CancelOrderResponse {
+  string status = 1;
+}

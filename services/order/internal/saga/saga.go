@@ -205,6 +205,40 @@ func (s *Saga) PlaceOrder(ctx context.Context, userID, idempotencyKey string) (*
 	return &Result{OrderID: orderID.String(), Status: order.StatusConfirmed}, nil
 }
 
+// Cancel handles an explicit CancelOrder request. A PAID/CONFIRMED order can't be
+// cancelled (the money moved); an already-CANCELLED one is a no-op. Otherwise it
+// releases any held reservation (safe/idempotent) and ends CANCELLED.
+func (s *Saga) Cancel(ctx context.Context, orderID string) (order.Status, error) {
+	oid, err := uuid.Parse(orderID)
+	if err != nil {
+		return "", status.Error(codes.InvalidArgument, "order_id must be a UUID")
+	}
+	o, err := s.q.GetOrder(ctx, pgUUID(oid))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", status.Error(codes.NotFound, "order not found")
+		}
+		return "", s.internal(ctx, "get order", err)
+	}
+
+	switch order.Status(o.Status) {
+	case order.StatusPaid, order.StatusConfirmed:
+		return "", status.Error(codes.FailedPrecondition, "cannot cancel a paid order")
+	case order.StatusCancelled:
+		return order.StatusCancelled, nil // idempotent
+	}
+
+	// Release any reservation (ReleaseStock is a no-op if nothing was reserved).
+	if _, rerr := s.products.ReleaseStock(ctx, &productv1.ReleaseStockRequest{ReservationId: orderID}); rerr != nil {
+		s.log.ErrorContext(ctx, "release stock during cancel", "err", rerr, "order_id", orderID)
+	}
+	ev := orderEvent{OrderID: orderID, UserID: uuidStr(o.UserID), TotalCents: o.TotalCents, Status: string(order.StatusCancelled)}
+	if err := s.setStatus(ctx, oid, order.StatusCancelled, "order.cancelled", &ev); err != nil {
+		return "", s.internal(ctx, "set CANCELLED", err)
+	}
+	return order.StatusCancelled, nil
+}
+
 // cancel sets CANCELLED and writes order.cancelled in one tx.
 func (s *Saga) cancel(ctx context.Context, orderID uuid.UUID, ev orderEvent) *Result {
 	cancelledEv := ev
