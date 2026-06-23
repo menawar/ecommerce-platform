@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc/reflection"
 
 	"github.com/menawar/ecommerce-platform/pkg/auth"
+	"github.com/menawar/ecommerce-platform/pkg/events"
 	"github.com/menawar/ecommerce-platform/pkg/grpcmw"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
 	"github.com/menawar/ecommerce-platform/pkg/postgres"
@@ -40,6 +41,7 @@ type config struct {
 	httpAddr   string
 	jwtSecret  string
 	dbURL      string
+	natsURL    string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
@@ -52,6 +54,7 @@ func main() {
 		httpAddr:   env("USER_HTTP_ADDR", ":2112"),
 		jwtSecret:  os.Getenv("JWT_SECRET"),
 		dbURL:      env("USER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/userdb?sslmode=disable"),
+		natsURL:    env("NATS_URL", "nats://localhost:4222"),
 		accessTTL:  15 * time.Minute,
 		refreshTTL: 7 * 24 * time.Hour,
 	}
@@ -84,10 +87,19 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	defer pool.Close()
 	log.Info("connected to userdb")
 
+	// Connect to NATS so registration can emit user.registered. Best-effort: if
+	// NATS is down we log and continue (the publish itself is non-fatal too).
+	nc, js, err := events.Connect(ctx, cfg.natsURL, events.StreamName, events.StreamSubjects())
+	if err != nil {
+		return fmt.Errorf("connect nats: %w", err)
+	}
+	defer nc.Close()
+	log.Info("connected to nats jetstream")
+
 	repo := store.NewPostgres(pool)
 	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL)
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL)
-	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, log)
+	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, events.NewNATSPublisher(js), log)
 
 	// Interceptors run in chain order: logging (outer) wraps recovery (inner) wraps
 	// the handler — so logging records the final status even when recovery has

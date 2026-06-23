@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/menawar/ecommerce-platform/pkg/auth"
+	"github.com/menawar/ecommerce-platform/pkg/events"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/user/internal/store"
 )
@@ -33,6 +34,7 @@ type Server struct {
 	accessIssuer  auth.TokenIssuer // 15m tokens
 	refreshIssuer auth.TokenIssuer // 7d tokens
 	validator     auth.TokenValidator
+	publisher     events.Publisher // emits user.registered; nil = don't publish
 	log           *slog.Logger
 
 	// dummyHash is a real bcrypt hash we compare against when an email is not
@@ -45,6 +47,7 @@ func NewServer(
 	repo store.Repository,
 	accessIssuer, refreshIssuer auth.TokenIssuer,
 	validator auth.TokenValidator,
+	publisher events.Publisher,
 	log *slog.Logger,
 ) *Server {
 	dummy, _ := auth.HashPassword("timing-equalizer-not-a-real-password")
@@ -53,6 +56,7 @@ func NewServer(
 		accessIssuer:  accessIssuer,
 		refreshIssuer: refreshIssuer,
 		validator:     validator,
+		publisher:     publisher,
 		log:           log,
 		dummyHash:     dummy,
 	}
@@ -97,6 +101,10 @@ func (s *Server) Register(ctx context.Context, req *userv1.RegisterRequest) (*us
 	}
 
 	s.log.InfoContext(ctx, "registered user", "user_id", u.ID)
+	// Emit user.registered (best-effort). Unlike the order saga's transactional
+	// outbox, a welcome notification isn't worth holding the registration tx open
+	// for — if the publish fails, the user is still registered; we just log it.
+	s.publishUserRegistered(ctx, u.ID, u.Email)
 	return &userv1.RegisterResponse{UserId: u.ID}, nil
 }
 
@@ -150,6 +158,30 @@ func (s *Server) ValidateToken(ctx context.Context, req *userv1.ValidateTokenReq
 		UserId: claims.UserID,
 		Role:   claims.Role,
 	}, nil
+}
+
+type userRegistered struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+}
+
+func (s *Server) publishUserRegistered(ctx context.Context, userID, email string) {
+	if s.publisher == nil {
+		return
+	}
+	env, err := events.New("user.registered", userRegistered{UserID: userID, Email: email})
+	if err != nil {
+		s.log.ErrorContext(ctx, "build user.registered", "err", err)
+		return
+	}
+	payload, err := env.Marshal()
+	if err != nil {
+		s.log.ErrorContext(ctx, "marshal user.registered", "err", err)
+		return
+	}
+	if err := s.publisher.Publish(ctx, "user.registered", payload); err != nil {
+		s.log.ErrorContext(ctx, "publish user.registered", "err", err)
+	}
 }
 
 func errInvalidCredentials() error {
