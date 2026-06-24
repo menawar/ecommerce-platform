@@ -52,6 +52,12 @@ func NewHandler(
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	// RequestID only stores the id in the context (where our logger reads it);
+	// it never puts it on the response. echoRequestID copies it onto the
+	// X-Request-Id response header so the client can show it on an error screen
+	// and quote it when reporting a problem — the handle that links a failed UI
+	// action to this request's logs and trace.
+	r.Use(echoRequestID)
 	r.Use(middleware.Recoverer)
 	// HTTP metrics middleware sits after Recoverer so that a handler panic that
 	// Recoverer turns into a 500 is correctly counted as status=500. It sits
@@ -96,6 +102,20 @@ func (h *Handler) Router() http.Handler {
 	})
 
 	return r
+}
+
+// echoRequestID copies the request id chi's RequestID middleware put in the
+// context onto the X-Request-Id response header. Response headers must be set
+// before the body is written, so this runs BEFORE the handler — by the time any
+// handler calls w.Write/WriteHeader, the header is already staged. It fires for
+// every response, success or error, so the client always has a correlation id.
+func echoRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id := middleware.GetReqID(r.Context()); id != "" {
+			w.Header().Set(middleware.RequestIDHeader, id)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // me is a protected dummy endpoint that proves auth works: it returns the caller

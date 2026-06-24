@@ -67,6 +67,37 @@ func postJSON(t *testing.T, url, body string) *http.Response {
 	return resp
 }
 
+// TestRouter_EchoesRequestID proves the gateway returns a correlation id the
+// frontend can surface. Two cases: an inbound X-Request-Id is preserved verbatim
+// (chi reuses it), and when absent the gateway still emits a non-empty one.
+func TestRouter_EchoesRequestID(t *testing.T) {
+	ts := newTestServer(t, &fakeUserClient{})
+
+	t.Run("inbound id is echoed back", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/healthz", nil)
+		req.Header.Set("X-Request-Id", "trace-abc-123")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET /healthz: %v", err)
+		}
+		defer resp.Body.Close()
+		if got := resp.Header.Get("X-Request-Id"); got != "trace-abc-123" {
+			t.Errorf("X-Request-Id = %q, want it echoed as trace-abc-123", got)
+		}
+	})
+
+	t.Run("generated when absent", func(t *testing.T) {
+		resp, err := http.Get(ts.URL + "/healthz")
+		if err != nil {
+			t.Fatalf("GET /healthz: %v", err)
+		}
+		defer resp.Body.Close()
+		if got := resp.Header.Get("X-Request-Id"); got == "" {
+			t.Error("X-Request-Id is empty, want a generated id")
+		}
+	})
+}
+
 func TestRegister_Created(t *testing.T) {
 	fake := &fakeUserClient{
 		registerFn: func(in *userv1.RegisterRequest) (*userv1.RegisterResponse, error) {

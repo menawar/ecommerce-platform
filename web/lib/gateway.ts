@@ -17,6 +17,11 @@ export class GatewayError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    // The gateway's X-Request-Id, captured on failures. It's the correlation
+    // handle the UI can show so a user-reported error matches the exact backend
+    // logs/trace for that request. Undefined when there's no response at all
+    // (e.g. the gateway is unreachable).
+    public readonly requestId?: string,
   ) {
     super(message);
     this.name = "GatewayError";
@@ -54,6 +59,9 @@ export async function gatewayFetch<T>(path: string, init: RequestInit = {}): Pro
   }
 
   if (!res.ok) {
+    // The gateway echoes the id it logged/traced on every response (see its
+    // echoRequestID middleware); grab it so the UI can quote it on the error.
+    const requestId = res.headers.get("X-Request-Id") ?? undefined;
     let message = res.statusText;
     try {
       const body = (await res.json()) as { error?: string };
@@ -61,7 +69,7 @@ export async function gatewayFetch<T>(path: string, init: RequestInit = {}): Pro
     } catch {
       // non-JSON error body — fall back to statusText
     }
-    throw new GatewayError(res.status, message);
+    throw new GatewayError(res.status, message, requestId);
   }
 
   if (res.status === 204) return undefined as T;
