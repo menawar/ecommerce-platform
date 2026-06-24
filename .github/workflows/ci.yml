@@ -66,13 +66,10 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
             | sh -s -- -b "$(go env GOPATH)/bin" v1.60.1
 
-      # The linter needs dependencies to properly typecheck code. We loop over the
-      # modules just like the lint step does, running go mod download in each.
-      - name: Download Dependencies
-        run: |
-          for dir in $(go work edit -json | jq -r '.Use[].DiskPath'); do
-            (cd $dir && go mod download)
-          done
+      # A full build guarantees the module cache is populated and all dependencies
+      # are available for the linter to typecheck.
+      - name: Build to populate cache
+        run: make build
 
       # go.work has no single module root, so we run once per module via the same
       # Makefile loop local dev uses — CI and `make lint` are byte-identical.
