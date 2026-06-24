@@ -10,10 +10,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/menawar/ecommerce-platform/pkg/httputil"
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/gateway/internal/gateway"
 )
@@ -40,10 +42,17 @@ func (f *fakeUserClient) ValidateToken(_ context.Context, in *userv1.ValidateTok
 	return f.validateFn(in)
 }
 
+// testMetrics returns an HTTPMetrics instance backed by a fresh, per-test
+// Prometheus registry — isolating each test's counters from the global default
+// and from other tests.
+func testMetrics() *httputil.HTTPMetrics {
+	return httputil.NewHTTPMetrics(prometheus.NewRegistry(), "test-gateway")
+}
+
 func newTestServer(t *testing.T, fake *fakeUserClient) *httptest.Server {
 	t.Helper()
 	// Auth tests don't hit product/cart routes, so zero-value fakes are fine.
-	h := gateway.NewHandler(fake, &fakeProductClient{}, &fakeCartClient{}, &fakeOrderClient{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := gateway.NewHandler(fake, &fakeProductClient{}, &fakeCartClient{}, &fakeOrderClient{}, testMetrics(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(h.Router())
 	t.Cleanup(ts.Close)
 	return ts

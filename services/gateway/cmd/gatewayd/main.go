@@ -14,10 +14,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/menawar/ecommerce-platform/pkg/httputil"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
@@ -33,56 +37,89 @@ func main() {
 	productAddr := env("PRODUCT_GRPC_ADDR", "localhost:50052")
 	cartAddr := env("CART_GRPC_ADDR", "localhost:50053")
 	orderAddr := env("ORDER_GRPC_ADDR", "localhost:50055")
+	otelEndpoint := env("OTEL_ENDPOINT", "localhost:4317")
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, log, httpAddr, userAddr, productAddr, cartAddr, orderAddr); err != nil {
+	if err := run(ctx, log, httpAddr, userAddr, productAddr, cartAddr, orderAddr, otelEndpoint); err != nil {
 		log.Error("server exited with error", "err", err)
 		os.Exit(1)
 	}
 	log.Info("server stopped cleanly")
 }
 
-func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr, cartAddr, orderAddr string) error {
+func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr, cartAddr, orderAddr, otelEndpoint string) error {
+	// Start the OTel tracer provider. InitTracer sets the global provider and
+	// propagator, which otelgrpc and otelhttp read automatically.
+	shutdownTracer, err := observability.InitTracer(ctx, "gateway", otelEndpoint)
+	if err != nil {
+		// Non-fatal: tracing is observability, not correctness. Log and continue.
+		log.Warn("failed to init tracer, continuing without tracing", "err", err)
+	} else {
+		defer func() {
+			if err := shutdownTracer(context.Background()); err != nil {
+				log.Error("tracer shutdown", "err", err)
+			}
+		}()
+		log.Info("opentelemetry tracing enabled", "endpoint", otelEndpoint)
+	}
+
 	// grpc.NewClient creates a lazily-connecting client: it does NOT dial here,
 	// it connects on the first RPC and reconnects automatically. So the gateway
 	// can start before the backing services are reachable. insecure creds =
 	// plaintext, fine inside the trusted compose network; TLS terminates at this edge.
-	userConn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	//
+	// otelgrpc.UnaryClientInterceptor() injects the current trace context
+	// (traceparent) into outgoing gRPC metadata so the receiving service
+	// creates a CHILD span under this trace. This is what makes one trace
+	// span gateway → user/product/cart/order/payment.
+	grpcOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	}
+	userConn, err := grpc.NewClient(userAddr, grpcOpts...)
 	if err != nil {
 		return fmt.Errorf("create user client: %w", err)
 	}
 	defer func() { _ = userConn.Close() }()
 
-	productConn, err := grpc.NewClient(productAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	productConn, err := grpc.NewClient(productAddr, grpcOpts...)
 	if err != nil {
 		return fmt.Errorf("create product client: %w", err)
 	}
 	defer func() { _ = productConn.Close() }()
 
-	cartConn, err := grpc.NewClient(cartAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cartConn, err := grpc.NewClient(cartAddr, grpcOpts...)
 	if err != nil {
 		return fmt.Errorf("create cart client: %w", err)
 	}
 	defer func() { _ = cartConn.Close() }()
 
-	orderConn, err := grpc.NewClient(orderAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	orderConn, err := grpc.NewClient(orderAddr, grpcOpts...)
 	if err != nil {
 		return fmt.Errorf("create order client: %w", err)
 	}
 	defer func() { _ = orderConn.Close() }()
+
+	httpMetrics := httputil.NewHTTPMetrics(prometheus.DefaultRegisterer, "gateway")
 
 	h := gateway.NewHandler(
 		userv1.NewUserServiceClient(userConn),
 		productv1.NewProductServiceClient(productConn),
 		cartv1.NewCartServiceClient(cartConn),
 		orderv1.NewOrderServiceClient(orderConn),
+		httpMetrics,
 		log,
 	)
 	httpServer := &http.Server{
-		Addr:              httpAddr,
-		Handler:           h.Router(),
+		Addr: httpAddr,
+		// otelhttp.NewHandler wraps the chi router to create a ROOT span for
+		// every incoming HTTP request. The span's trace context is stored in
+		// r.Context(), so when a handler makes a gRPC call through a client
+		// with otelgrpc, the client interceptor reads the active span and
+		// propagates its trace_id. This is the link from HTTP → gRPC.
+		Handler:           otelhttp.NewHandler(h.Router(), "gateway"),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

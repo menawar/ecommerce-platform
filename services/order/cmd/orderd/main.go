@@ -16,7 +16,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -37,25 +39,27 @@ import (
 )
 
 type config struct {
-	grpcAddr    string
-	httpAddr    string
-	dbURL       string
-	cartAddr    string
-	productAddr string
-	paymentAddr string
-	natsURL     string
+	grpcAddr     string
+	httpAddr     string
+	dbURL        string
+	cartAddr     string
+	productAddr  string
+	paymentAddr  string
+	natsURL      string
+	otelEndpoint string
 }
 
 func main() {
 	log := observability.NewLogger("order")
 	cfg := config{
-		grpcAddr:    env("ORDER_GRPC_ADDR", ":50055"),
-		httpAddr:    env("ORDER_HTTP_ADDR", ":2116"),
-		dbURL:       env("ORDER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/orderdb?sslmode=disable"),
-		cartAddr:    env("CART_GRPC_ADDR", "localhost:50053"),
-		productAddr: env("PRODUCT_GRPC_ADDR", "localhost:50052"),
-		paymentAddr: env("PAYMENT_GRPC_ADDR", "localhost:50054"),
-		natsURL:     env("NATS_URL", "nats://localhost:4222"),
+		grpcAddr:     env("ORDER_GRPC_ADDR", ":50055"),
+		httpAddr:     env("ORDER_HTTP_ADDR", ":2116"),
+		dbURL:        env("ORDER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/orderdb?sslmode=disable"),
+		cartAddr:     env("CART_GRPC_ADDR", "localhost:50053"),
+		productAddr:  env("PRODUCT_GRPC_ADDR", "localhost:50052"),
+		paymentAddr:  env("PAYMENT_GRPC_ADDR", "localhost:50054"),
+		natsURL:      env("NATS_URL", "nats://localhost:4222"),
+		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -100,8 +104,22 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		log,
 	)
 
+	shutdownTracer, err := observability.InitTracer(ctx, "order", cfg.otelEndpoint)
+	if err != nil {
+		log.Warn("failed to init tracer, continuing without tracing", "err", err)
+	} else {
+		defer func() {
+			if err := shutdownTracer(context.Background()); err != nil {
+				log.Error("tracer shutdown", "err", err)
+			}
+		}()
+		log.Info("opentelemetry tracing enabled", "endpoint", cfg.otelEndpoint)
+	}
+
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "order")
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryRecovery(log)),
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryRecovery(log)),
 	)
 	orderv1.RegisterOrderServiceServer(grpcServer, server.NewServer(pool, sg, log))
 	reflection.Register(grpcServer)
@@ -163,8 +181,14 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	return g.Wait()
 }
 
+// dial creates a lazy gRPC client with OTel client instrumentation — so the
+// order service's outgoing calls to product/payment/cart propagate the trace
+// context, creating child spans under the saga's span.
 func dial(addr string) (*grpc.ClientConn, error) {
-	return grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	return grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 }
 
 func env(key, def string) string {

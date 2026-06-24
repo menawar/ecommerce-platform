@@ -48,7 +48,7 @@ func newOrderTestServer(t *testing.T, order *fakeOrderClient) (*httptest.Server,
 			return &userv1.ValidateTokenResponse{Valid: true, UserId: userID, Role: "customer"}, nil
 		},
 	}
-	h := gateway.NewHandler(uc, &fakeProductClient{}, &fakeCartClient{}, order, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := gateway.NewHandler(uc, &fakeProductClient{}, &fakeCartClient{}, order, testMetrics(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(h.Router())
 	t.Cleanup(ts.Close)
 	return ts, userID
