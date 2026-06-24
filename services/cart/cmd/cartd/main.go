@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -30,17 +31,19 @@ import (
 )
 
 type config struct {
-	grpcAddr string
-	httpAddr string
-	redisURL string
+	grpcAddr     string
+	httpAddr     string
+	redisURL     string
+	otelEndpoint string
 }
 
 func main() {
 	log := observability.NewLogger("cart")
 	cfg := config{
-		grpcAddr: env("CART_GRPC_ADDR", ":50053"),
-		httpAddr: env("CART_HTTP_ADDR", ":2114"),
-		redisURL: env("REDIS_URL", "redis://localhost:6379/0"),
+		grpcAddr:     env("CART_GRPC_ADDR", ":50053"),
+		httpAddr:     env("CART_HTTP_ADDR", ":2114"),
+		redisURL:     env("REDIS_URL", "redis://localhost:6379/0"),
+		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -69,8 +72,21 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	}
 	log.Info("connected to redis")
 
+	shutdownTracer, err := observability.InitTracer(ctx, "cart", cfg.otelEndpoint)
+	if err != nil {
+		log.Warn("failed to init tracer, continuing without tracing", "err", err)
+	} else {
+		defer func() {
+			if err := shutdownTracer(context.Background()); err != nil {
+				log.Error("tracer shutdown", "err", err)
+			}
+		}()
+		log.Info("opentelemetry tracing enabled", "endpoint", cfg.otelEndpoint)
+	}
+
 	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "cart")
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
 			grpcmw.UnaryMetrics(metrics),
