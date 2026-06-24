@@ -80,7 +80,7 @@ func TestRouter_EchoesRequestID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET /healthz: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if got := resp.Header.Get("X-Request-Id"); got != "trace-abc-123" {
 			t.Errorf("X-Request-Id = %q, want it echoed as trace-abc-123", got)
 		}
@@ -91,7 +91,7 @@ func TestRouter_EchoesRequestID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET /healthz: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if got := resp.Header.Get("X-Request-Id"); got == "" {
 			t.Error("X-Request-Id is empty, want a generated id")
 		}
@@ -110,7 +110,7 @@ func TestRegister_Created(t *testing.T) {
 	ts := newTestServer(t, fake)
 
 	resp := postJSON(t, ts.URL+"/auth/register", `{"email":"ada@example.com","password":"supersecret","full_name":"Ada"}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
@@ -131,7 +131,7 @@ func TestRegister_DuplicateMapsTo409(t *testing.T) {
 	ts := newTestServer(t, fake)
 
 	resp := postJSON(t, ts.URL+"/auth/register", `{"email":"dup@example.com","password":"supersecret","full_name":"D"}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusConflict {
 		t.Errorf("status = %d, want 409", resp.StatusCode)
 	}
@@ -140,7 +140,7 @@ func TestRegister_DuplicateMapsTo409(t *testing.T) {
 func TestRegister_BadJSON(t *testing.T) {
 	ts := newTestServer(t, &fakeUserClient{})
 	resp := postJSON(t, ts.URL+"/auth/register", `{not json`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
@@ -155,7 +155,7 @@ func TestLogin_OKReturnsTokens(t *testing.T) {
 	ts := newTestServer(t, fake)
 
 	resp := postJSON(t, ts.URL+"/auth/login", `{"email":"a@b.com","password":"supersecret"}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -175,7 +175,7 @@ func TestLogin_BadCredentialsMapsTo401(t *testing.T) {
 	ts := newTestServer(t, fake)
 
 	resp := postJSON(t, ts.URL+"/auth/login", `{"email":"a@b.com","password":"nope12345"}`)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
 	}

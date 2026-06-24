@@ -85,17 +85,17 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	if err != nil {
 		return fmt.Errorf("cart client: %w", err)
 	}
-	defer cartConn.Close()
+	defer func() { _ = cartConn.Close() }()
 	productConn, err := dial(cfg.productAddr)
 	if err != nil {
 		return fmt.Errorf("product client: %w", err)
 	}
-	defer productConn.Close()
+	defer func() { _ = productConn.Close() }()
 	paymentConn, err := dial(cfg.paymentAddr)
 	if err != nil {
 		return fmt.Errorf("payment client: %w", err)
 	}
-	defer paymentConn.Close()
+	defer func() { _ = paymentConn.Close() }()
 
 	sg := saga.New(pool,
 		cartv1.NewCartServiceClient(cartConn),

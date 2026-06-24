@@ -14,6 +14,9 @@ MODULE_DIRS := $(shell find . -name go.mod -not -path '*/.*' -exec dirname {} \;
 MIGRATE := $(shell go env GOPATH)/bin/migrate
 SQLC    := $(shell go env GOPATH)/bin/sqlc
 
+# golangci-lint v2. Override if it's not on PATH (e.g. GOLANGCI=$(go env GOPATH)/bin/golangci-lint).
+GOLANGCI ?= golangci-lint
+
 # Per-service DB URLs. Host port 5433 maps to the postgres container's 5432.
 PRODUCT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/productdb?sslmode=disable
 PRODUCT_MIGRATIONS := services/product/migrations
@@ -26,7 +29,7 @@ ORDER_MIGRATIONS   := services/order/migrations
 NOTIFICATION_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/notificationdb?sslmode=disable
 NOTIFICATION_MIGRATIONS := services/notification/migrations
 
-.PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy \
+.PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy lint \
 	product-migrate-up product-migrate-down product-migrate-create product-sqlc \
 	user-migrate-up user-migrate-down user-migrate-create user-sqlc \
 	payment-migrate-up payment-migrate-down payment-sqlc \
@@ -72,6 +75,9 @@ test: ## go test every module (CI passes GOTEST_FLAGS=-race)
 
 tidy: ## go mod tidy every module
 	@for d in $(MODULE_DIRS); do echo "tidy $$d"; (cd $$d && go mod tidy) || exit 1; done
+
+lint: ## golangci-lint every module (uses the root .golangci.yml)
+	@for d in $(MODULE_DIRS); do echo "lint $$d"; (cd $$d && $(GOLANGCI) run ./...) || exit 1; done
 
 ## ---- Database migrations ----
 product-migrate-up: ## Apply all productdb migrations

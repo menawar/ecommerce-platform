@@ -70,7 +70,7 @@ func TestListProducts_ForwardsParamsAndShapesJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -112,7 +112,7 @@ func TestGetProduct_OKAndNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET existing: %v", err)
 	}
-	defer ok.Body.Close()
+	defer func() { _ = ok.Body.Close() }()
 	if ok.StatusCode != http.StatusOK {
 		t.Errorf("GET existing: status = %d, want 200", ok.StatusCode)
 	}
@@ -121,7 +121,7 @@ func TestGetProduct_OKAndNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET missing: %v", err)
 	}
-	defer nf.Body.Close()
+	defer func() { _ = nf.Body.Close() }()
 	if nf.StatusCode != http.StatusNotFound {
 		t.Errorf("GET missing: status = %d, want 404", nf.StatusCode)
 	}
