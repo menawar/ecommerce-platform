@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -62,9 +63,11 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	defer pool.Close()
 	log.Info("connected to productdb")
 
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "product")
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
+			grpcmw.UnaryMetrics(metrics),
 			grpcmw.UnaryRecovery(log),
 		),
 	)

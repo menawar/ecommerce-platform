@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -100,8 +101,9 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		log,
 	)
 
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "order")
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryRecovery(log)),
+		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryRecovery(log)),
 	)
 	orderv1.RegisterOrderServiceServer(grpcServer, server.NewServer(pool, sg, log))
 	reflection.Register(grpcServer)

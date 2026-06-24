@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -59,8 +60,9 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	defer pool.Close()
 	log.Info("connected to paymentdb")
 
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "payment")
 	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryRecovery(log)),
+		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryRecovery(log)),
 	)
 	// Mock provider by default; a real Stripe adapter would be selected here by config.
 	paymentv1.RegisterPaymentServiceServer(grpcServer, server.NewServer(pool, provider.NewMock(), log))

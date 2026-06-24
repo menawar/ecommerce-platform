@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
@@ -68,9 +69,11 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	}
 	log.Info("connected to redis")
 
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "cart")
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
+			grpcmw.UnaryMetrics(metrics),
 			grpcmw.UnaryRecovery(log),
 		),
 	)
