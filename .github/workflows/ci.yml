@@ -64,7 +64,7 @@ jobs:
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" v2.12.2
+            | sh -s -- -b "$(go env GOPATH)/bin" v1.60.1
 
       # go.work has no single module root, so we run once per module via the same
       # Makefile loop local dev uses — CI and `make lint` are byte-identical.
