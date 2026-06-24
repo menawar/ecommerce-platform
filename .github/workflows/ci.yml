@@ -64,7 +64,7 @@ jobs:
       - name: Install golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" v1.61.0
+            | sh -s -- -b "$(go env GOPATH)/bin" v1.64.5
 
       # A full build guarantees the module cache is populated and all dependencies
       # are available for the linter to typecheck.
