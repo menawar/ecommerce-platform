@@ -62,7 +62,9 @@ jobs:
       # version bump should be a deliberate commit. Keep this in sync with the
       # GOLANGCI version comment in .golangci.yml / Makefile.
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v2.12.2
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v1.61.0
 
       # A full build guarantees the module cache is populated and all dependencies
       # are available for the linter to typecheck.
