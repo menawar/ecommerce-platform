@@ -67,8 +67,8 @@ build: ## Build every module in the workspace
 vet: ## go vet every module
 	@for d in $(MODULE_DIRS); do echo "vet $$d"; (cd $$d && go vet ./...) || exit 1; done
 
-test: ## go test every module
-	@for d in $(MODULE_DIRS); do echo "test $$d"; (cd $$d && go test ./...) || exit 1; done
+test: ## go test every module (CI passes GOTEST_FLAGS=-race)
+	@for d in $(MODULE_DIRS); do echo "test $$d"; (cd $$d && go test $(GOTEST_FLAGS) ./...) || exit 1; done
 
 tidy: ## go mod tidy every module
 	@for d in $(MODULE_DIRS); do echo "tidy $$d"; (cd $$d && go mod tidy) || exit 1; done

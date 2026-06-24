@@ -1,0 +1,46 @@
+name: CI
+
+# Run on every push to main and on every PR targeting it. PR runs are the gate
+# we actually care about (block a merge that breaks the build/tests); the push
+# run keeps main's badge honest.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-progress run when a new commit is pushed to the same ref — no point
+# spending minutes on a diff that's already superseded.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go build · vet · race test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup-go reads the workspace's go directive and provisions that toolchain.
+      # cache: true keeps the module + build cache between runs (keyed off the
+      # go.sum files it finds), which is the bulk of the speedup on a cold runner.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+          cache-dependency-path: "**/go.sum"
+
+      # One invocation per concern, reusing the Makefile's MODULE_DIRS loop so CI
+      # and local dev run the EXACT same commands across every workspace module.
+      - name: Build
+        run: make build
+
+      - name: Vet
+        run: make vet
+
+      # -race needs cgo + a C toolchain; ubuntu-latest has gcc, so this just works.
+      # DB-integration tests SKIP (not fail) when Postgres/Redis/NATS are absent,
+      # so no service containers are needed here.
+      - name: Test (race)
+        run: make test GOTEST_FLAGS=-race

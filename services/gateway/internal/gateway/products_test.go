@@ -108,13 +108,19 @@ func TestGetProduct_OKAndNotFound(t *testing.T) {
 	}
 	ts := newProductTestServer(t, fake)
 
-	ok, _ := http.Get(ts.URL + "/products/p1")
+	ok, err := http.Get(ts.URL + "/products/p1")
+	if err != nil {
+		t.Fatalf("GET existing: %v", err)
+	}
 	defer ok.Body.Close()
 	if ok.StatusCode != http.StatusOK {
 		t.Errorf("GET existing: status = %d, want 200", ok.StatusCode)
 	}
 
-	nf, _ := http.Get(ts.URL + "/products/missing")
+	nf, err := http.Get(ts.URL + "/products/missing")
+	if err != nil {
+		t.Fatalf("GET missing: %v", err)
+	}
 	defer nf.Body.Close()
 	if nf.StatusCode != http.StatusNotFound {
 		t.Errorf("GET missing: status = %d, want 404", nf.StatusCode)
