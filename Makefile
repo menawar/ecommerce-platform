@@ -53,10 +53,12 @@ infra-logs: ## Tail infra logs
 infra-ps: ## Show infra container status
 	docker compose -f $(INFRA) ps
 
-# `up`/`down` are aliases for infra today; they'll also bring up app services
-# (docker-compose.yml) once those exist.
-up: infra-up   ## Bring everything up (infra for now)
-down: infra-down ## Bring everything down (keep volumes)
+# Bring up the whole stack: infra + apps. The order is guaranteed by depends_on.
+up: ## Bring everything up (infra + apps), wait for healthy
+	docker compose -f $(INFRA) -f docker-compose.yml up -d --wait
+
+down: ## Bring everything down (keep volumes)
+	docker compose -f $(INFRA) -f docker-compose.yml down
 
 ## ---- Go workspace ----
 build: ## Build every module in the workspace
