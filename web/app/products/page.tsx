@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { listProducts } from "@/lib/gateway";
+import { listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
+import { ErrorPanel } from "../error-panel";
 
 const PAGE_SIZE = 12;
 
@@ -15,7 +16,30 @@ export default async function ProductsPage({
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const { products, total } = await listProducts({ q, page, pageSize: PAGE_SIZE });
+  // Catch the gateway error HERE rather than letting it throw to error.tsx: a
+  // Server Component can render the requestId into HTML directly, whereas the
+  // error boundary would only receive a redacted error (no requestId, no message
+  // in production). Anything that ISN'T a GatewayError is genuinely unexpected —
+  // rethrow it and let the error boundary catch it.
+  let products, total;
+  try {
+    ({ products, total } = await listProducts({ q, page, pageSize: PAGE_SIZE }));
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      return (
+        <main className="mx-auto max-w-5xl px-6 py-10">
+          <h1 className="text-2xl font-semibold">Products</h1>
+          <div className="mt-6">
+            <ErrorPanel
+              message={`Couldn’t load products: ${err.message}`}
+              requestId={err.requestId}
+            />
+          </div>
+        </main>
+      );
+    }
+    throw err;
+  }
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
