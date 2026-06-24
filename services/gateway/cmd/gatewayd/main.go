@@ -14,10 +14,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/menawar/ecommerce-platform/pkg/httputil"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
@@ -73,11 +75,14 @@ func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr,
 	}
 	defer func() { _ = orderConn.Close() }()
 
+	httpMetrics := httputil.NewHTTPMetrics(prometheus.DefaultRegisterer, "gateway")
+
 	h := gateway.NewHandler(
 		userv1.NewUserServiceClient(userConn),
 		productv1.NewProductServiceClient(productConn),
 		cartv1.NewCartServiceClient(cartConn),
 		orderv1.NewOrderServiceClient(orderConn),
+		httpMetrics,
 		log,
 	)
 	httpServer := &http.Server{
