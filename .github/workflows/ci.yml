@@ -62,11 +62,55 @@ jobs:
       # version bump should be a deliberate commit. Keep this in sync with the
       # GOLANGCI version comment in .golangci.yml / Makefile.
       - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-            | sh -s -- -b "$(go env GOPATH)/bin" v2.12.2
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
+
+      # A full build guarantees the module cache is populated and all dependencies
+      # are available for the linter to typecheck.
+      - name: Build to populate cache
+        run: make build
 
       # go.work has no single module root, so we run once per module via the same
       # Makefile loop local dev uses — CI and `make lint` are byte-identical.
       - name: Lint (all modules)
         run: make lint GOLANGCI="$(go env GOPATH)/bin/golangci-lint"
+
+  web:
+    name: Web lint · typecheck · build · test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup-node caches node_modules keyed off package-lock.json. Without this,
+      # npm ci on a cold runner takes ~30s; with cache it's <5s.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      # Type-check the entire project without emitting files. Catches type errors
+      # that eslint's TypeScript rules miss (e.g. incorrect generic constraints).
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # A production build proves that Server Components, Server Actions, and
+      # middleware all compile and tree-shake correctly — failures here catch
+      # import issues that only surface at build time (e.g. importing a server-only
+      # module from a Client Component).
+      - name: Build
+        run: npm run build
+
+      # Component + unit tests via Vitest + React Testing Library. These cover the
+      # checkout idempotency key, gateway error handling, and formatting helpers.
+      - name: Test
+        run: npm test
+

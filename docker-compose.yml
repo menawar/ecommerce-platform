@@ -13,7 +13,7 @@ services:
       JWT_SECRET: "dev-insecure-secret"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:2112/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:2112/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -35,7 +35,7 @@ services:
       PRODUCT_DB_URL: "postgres://ecommerce:ecommerce@postgres:5432/productdb?sslmode=disable"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:2113/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:2113/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -55,7 +55,7 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:2114/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:2114/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -75,7 +75,7 @@ services:
       PAYMENT_DB_URL: "postgres://ecommerce:ecommerce@postgres:5432/paymentdb?sslmode=disable"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:2115/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:2115/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -99,7 +99,7 @@ services:
       NATS_URL: "nats://nats:4222"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:2116/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:2116/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -127,7 +127,7 @@ services:
       NATS_URL: "nats://nats:4222"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:2117/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:2117/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -154,7 +154,7 @@ services:
       JWT_SECRET: "dev-insecure-secret"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/healthz || exit 1"]
+      test: ["CMD", "/healthcheck", "http://localhost:8080/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5

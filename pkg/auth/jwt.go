@@ -107,7 +107,7 @@ func (m *JWTManager) Validate(tokenString string) (Claims, error) {
 	if err != nil {
 		// Collapse every failure reason into the sentinel; keep the detail wrapped
 		// for our own logs, not for the caller's response.
-		return Claims{}, fmt.Errorf("%w: %v", ErrInvalidToken, err)
+		return Claims{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 
 	return Claims{UserID: claims.Subject, Role: claims.Role}, nil
