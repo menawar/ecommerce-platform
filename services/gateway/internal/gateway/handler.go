@@ -12,7 +12,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/menawar/ecommerce-platform/pkg/httputil"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
@@ -23,11 +25,12 @@ import (
 // backing service, so tests inject fakes and real code injects gRPC-backed
 // clients. As the platform grows, the gateway fans out to more services from here.
 type Handler struct {
-	users    userv1.UserServiceClient
-	products productv1.ProductServiceClient
-	carts    cartv1.CartServiceClient
-	orders   orderv1.OrderServiceClient
-	log      *slog.Logger
+	users       userv1.UserServiceClient
+	products    productv1.ProductServiceClient
+	carts       cartv1.CartServiceClient
+	orders      orderv1.OrderServiceClient
+	httpMetrics *httputil.HTTPMetrics
+	log         *slog.Logger
 }
 
 func NewHandler(
@@ -35,9 +38,10 @@ func NewHandler(
 	products productv1.ProductServiceClient,
 	carts cartv1.CartServiceClient,
 	orders orderv1.OrderServiceClient,
+	httpMetrics *httputil.HTTPMetrics,
 	log *slog.Logger,
 ) *Handler {
-	return &Handler{users: users, products: products, carts: carts, orders: orders, log: log}
+	return &Handler{users: users, products: products, carts: carts, orders: orders, httpMetrics: httpMetrics, log: log}
 }
 
 // Router builds the middleware chain and routes. Middleware run top-to-bottom on
@@ -49,7 +53,16 @@ func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	// HTTP metrics middleware sits after Recoverer so that a handler panic that
+	// Recoverer turns into a 500 is correctly counted as status=500. It sits
+	// before the requestLogger so both see the same wrapped ResponseWriter.
+	r.Use(httputil.Middleware(h.httpMetrics))
 	r.Use(h.requestLogger)
+
+	// /metrics is for Prometheus scraping — mounted outside the auth group,
+	// above the business routes. promhttp.Handler() serves the default registry
+	// which is where httputil.NewHTTPMetrics registered its collectors.
+	r.Handle("/metrics", promhttp.Handler())
 
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

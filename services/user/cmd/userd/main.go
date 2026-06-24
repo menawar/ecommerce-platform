@@ -18,7 +18,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -37,26 +39,28 @@ import (
 // (rather than calling os.Getenv scattered through the code) makes the service's
 // full set of knobs visible in one place and easy to validate.
 type config struct {
-	grpcAddr   string
-	httpAddr   string
-	jwtSecret  string
-	dbURL      string
-	natsURL    string
-	accessTTL  time.Duration
-	refreshTTL time.Duration
+	grpcAddr     string
+	httpAddr     string
+	jwtSecret    string
+	dbURL        string
+	natsURL      string
+	otelEndpoint string
+	accessTTL    time.Duration
+	refreshTTL   time.Duration
 }
 
 func main() {
 	log := observability.NewLogger("user")
 
 	cfg := config{
-		grpcAddr:   env("USER_GRPC_ADDR", ":50051"),
-		httpAddr:   env("USER_HTTP_ADDR", ":2112"),
-		jwtSecret:  os.Getenv("JWT_SECRET"),
-		dbURL:      env("USER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/userdb?sslmode=disable"),
-		natsURL:    env("NATS_URL", "nats://localhost:4222"),
-		accessTTL:  15 * time.Minute,
-		refreshTTL: 7 * 24 * time.Hour,
+		grpcAddr:     env("USER_GRPC_ADDR", ":50051"),
+		httpAddr:     env("USER_HTTP_ADDR", ":2112"),
+		jwtSecret:    os.Getenv("JWT_SECRET"),
+		dbURL:        env("USER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/userdb?sslmode=disable"),
+		natsURL:      env("NATS_URL", "nats://localhost:4222"),
+		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
+		accessTTL:    15 * time.Minute,
+		refreshTTL:   7 * 24 * time.Hour,
 	}
 	if cfg.jwtSecret == "" {
 		// Fail soft in dev, but make the insecurity LOUD. Never let an unset
@@ -101,12 +105,28 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL)
 	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, events.NewNATSPublisher(js), log)
 
-	// Interceptors run in chain order: logging (outer) wraps recovery (inner) wraps
-	// the handler — so logging records the final status even when recovery has
-	// turned a panic into an Internal error.
+	shutdownTracer, err := observability.InitTracer(ctx, "user", cfg.otelEndpoint)
+	if err != nil {
+		log.Warn("failed to init tracer, continuing without tracing", "err", err)
+	} else {
+		defer func() {
+			if err := shutdownTracer(context.Background()); err != nil {
+				log.Error("tracer shutdown", "err", err)
+			}
+		}()
+		log.Info("opentelemetry tracing enabled", "endpoint", cfg.otelEndpoint)
+	}
+
+	// Interceptors run in chain order: logging (outer) wraps metrics wraps recovery
+	// (inner) wraps the handler — so logging and metrics both record the final status
+	// even when recovery has turned a panic into an Internal error. Metrics registers
+	// against the default registry, which is exactly what /metrics (promhttp) serves.
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "user")
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
+			grpcmw.UnaryMetrics(metrics),
 			grpcmw.UnaryRecovery(log),
 		),
 	)

@@ -16,7 +16,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -29,17 +31,19 @@ import (
 )
 
 type config struct {
-	grpcAddr string
-	httpAddr string
-	dbURL    string
+	grpcAddr     string
+	httpAddr     string
+	dbURL        string
+	otelEndpoint string
 }
 
 func main() {
 	log := observability.NewLogger("product")
 	cfg := config{
-		grpcAddr: env("PRODUCT_GRPC_ADDR", ":50052"),
-		httpAddr: env("PRODUCT_HTTP_ADDR", ":2113"),
-		dbURL:    env("PRODUCT_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/productdb?sslmode=disable"),
+		grpcAddr:     env("PRODUCT_GRPC_ADDR", ":50052"),
+		httpAddr:     env("PRODUCT_HTTP_ADDR", ":2113"),
+		dbURL:        env("PRODUCT_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/productdb?sslmode=disable"),
+		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -62,9 +66,24 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	defer pool.Close()
 	log.Info("connected to productdb")
 
+	shutdownTracer, err := observability.InitTracer(ctx, "product", cfg.otelEndpoint)
+	if err != nil {
+		log.Warn("failed to init tracer, continuing without tracing", "err", err)
+	} else {
+		defer func() {
+			if err := shutdownTracer(context.Background()); err != nil {
+				log.Error("tracer shutdown", "err", err)
+			}
+		}()
+		log.Info("opentelemetry tracing enabled", "endpoint", cfg.otelEndpoint)
+	}
+
+	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "product")
 	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
+			grpcmw.UnaryMetrics(metrics),
 			grpcmw.UnaryRecovery(log),
 		),
 	)
