@@ -6,3 +6,13 @@ export function formatPrice(cents: number, currency: string): string {
     currency: currency || "NGN",
   }).format(cents / 100);
 }
+
+// The gateway sends created_at as epoch SECONDS (Go's time.Unix()), but JS Date
+// expects milliseconds — hence × 1000. Forgetting this silently dates everything
+// to 1970.
+export function formatDate(epochSeconds: number): string {
+  return new Intl.DateTimeFormat("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(epochSeconds * 1000));
+}
