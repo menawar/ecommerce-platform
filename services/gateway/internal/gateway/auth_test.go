@@ -58,7 +58,7 @@ func TestProtectedRoute(t *testing.T) {
 	login := postJSON(t, ts.URL+"/auth/login", `{"email":"a@b.com","password":"supersecret"}`)
 	var lr map[string]any
 	_ = json.NewDecoder(login.Body).Decode(&lr)
-	login.Body.Close()
+	_ = login.Body.Close()
 	token, _ := lr["access_token"].(string)
 	if token == "" {
 		t.Fatal("login returned no access_token")
@@ -67,7 +67,7 @@ func TestProtectedRoute(t *testing.T) {
 	// 2) Valid token -> 200 + identity.
 	t.Run("valid token accepted", func(t *testing.T) {
 		resp := getWithAuth(t, ts.URL+"/me", "Bearer "+token)
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
@@ -81,7 +81,7 @@ func TestProtectedRoute(t *testing.T) {
 	// 3) Garbage token -> 401.
 	t.Run("bad token rejected", func(t *testing.T) {
 		resp := getWithAuth(t, ts.URL+"/me", "Bearer not.a.real.token")
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("status = %d, want 401", resp.StatusCode)
 		}
@@ -90,7 +90,7 @@ func TestProtectedRoute(t *testing.T) {
 	// 4) Missing header -> 401.
 	t.Run("missing header rejected", func(t *testing.T) {
 		resp := getWithAuth(t, ts.URL+"/me", "")
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusUnauthorized {
 			t.Errorf("status = %d, want 401", resp.StatusCode)
 		}

@@ -97,7 +97,7 @@ func TestGetCart_UsesTokenUserID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /cart: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -127,7 +127,7 @@ func TestAddCartItem_ForwardsBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -151,13 +151,13 @@ func TestUpdateAndRemove_UseURLParam(t *testing.T) {
 	ts, _ := newCartTestServer(t, cart)
 
 	up, _ := http.DefaultClient.Do(authReq(t, http.MethodPut, ts.URL+"/cart/items/pX", `{"quantity":7}`))
-	up.Body.Close()
+	_ = up.Body.Close()
 	if updatedPID != "pX" {
 		t.Errorf("update product = %q, want pX", updatedPID)
 	}
 
 	rm, _ := http.DefaultClient.Do(authReq(t, http.MethodDelete, ts.URL+"/cart/items/pY", ""))
-	rm.Body.Close()
+	_ = rm.Body.Close()
 	if removedPID != "pY" {
 		t.Errorf("remove product = %q, want pY", removedPID)
 	}
@@ -170,7 +170,7 @@ func TestCart_RequiresAuth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
 	}

@@ -44,3 +44,29 @@ jobs:
       # so no service containers are needed here.
       - name: Test (race)
         run: make test GOTEST_FLAGS=-race
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The linter type-checks the program, so it needs the toolchain (but not the
+      # build cache — linting has its own analysis cache).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+
+      # Install a PINNED golangci-lint, not "latest": a new upstream release can
+      # enable new analyzers and turn a green main red with no code change, so the
+      # version bump should be a deliberate commit. Keep this in sync with the
+      # GOLANGCI version comment in .golangci.yml / Makefile.
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.12.2
+
+      # go.work has no single module root, so we run once per module via the same
+      # Makefile loop local dev uses — CI and `make lint` are byte-identical.
+      - name: Lint (all modules)
+        run: make lint GOLANGCI="$(go env GOPATH)/bin/golangci-lint"

@@ -1,0 +1,22 @@
+# golangci-lint configuration (schema v2). golangci-lint is a *meta-linter*: it
+# runs many independent analyzers in one pass, sharing the parsed/type-checked
+# program so they're far faster than running each tool separately.
+#
+# A single root config applies to every module: golangci-lint walks up from the
+# directory it runs in to find this file, so `make lint`'s per-module loop all
+# share these settings.
+version: "2"
+
+linters:
+  # "standard" = the curated default set (errcheck, govet, ineffassign,
+  # staticcheck, unused) — high signal, low false-positive. We add a few that
+  # match patterns this codebase leans on.
+  default: standard
+  enable:
+    - bodyclose   # we make HTTP requests in the gateway/tests — catch leaked response bodies
+    - errorlint   # we wrap with %w and branch with errors.Is/As — catch mismatches (e.g. == instead of Is)
+
+  exclusions:
+    # "lax" skips files carrying the "// Code generated ... DO NOT EDIT." header,
+    # so proto stubs and sqlc query code are never linted (we don't own them).
+    generated: lax

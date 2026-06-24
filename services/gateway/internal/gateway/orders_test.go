@@ -70,7 +70,7 @@ func TestPlaceOrder_ForwardsTokenUserAndIdempotencyKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /orders: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
@@ -85,7 +85,7 @@ func TestPlaceOrder_MissingIdempotencyKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("missing Idempotency-Key: status = %d, want 400", resp.StatusCode)
 	}
@@ -106,7 +106,7 @@ func TestGetOrder_OwnershipCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("other user's order: status = %d, want 404", resp.StatusCode)
 	}
@@ -126,7 +126,7 @@ func TestListOrders_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var body struct {
 		Orders []map[string]any `json:"orders"`
 	}
