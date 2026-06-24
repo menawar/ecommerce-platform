@@ -1,0 +1,25 @@
+# What Docker should NOT send to the build daemon as "context".
+#
+# Every `docker build` tars up the context dir (here the repo root, since compose
+# uses `context: .`) and ships it to the daemon. Anything listed here is excluded:
+# smaller context = faster builds, better cache hits, and no chance of a stray
+# secret or 400MB of node_modules leaking into an image layer.
+
+# VCS + CI metadata — never needed to compile a binary.
+.git
+.github
+.gitignore
+
+# The entire frontend: it has its own build pipeline and its node_modules dwarf
+# the Go source. The Go images never touch web/.
+web
+
+# Go build artifacts produced on the host (the image rebuilds these itself).
+bin
+**/*.test
+
+# Local-only files.
+*.log
+.env
+**/.env.local
+scratchpad
