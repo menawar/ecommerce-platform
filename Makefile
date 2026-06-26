@@ -108,8 +108,10 @@ user-migrate-create: ## Create a new userdb migration: make user-migrate-create 
 
 user-make-admin: ## Promote a registered user to admin: make user-make-admin EMAIL=you@example.com
 	@test -n "$(EMAIL)" || { echo "EMAIL is required: make user-make-admin EMAIL=you@example.com"; exit 1; }
-	psql "$(USER_DB_URL)" -v email="$(EMAIL)" \
-		-c "UPDATE users SET role='admin', updated_at=now() WHERE email = :'email';"
+	@# Feed the SQL via stdin (not -c): psql only interpolates :'email' for
+	@# scripts/stdin, not for -c command strings, which it sends to the server as-is.
+	printf "%s\n" "UPDATE users SET role='admin', updated_at=now() WHERE email = :'email';" \
+		| psql "$(USER_DB_URL)" -v email="$(EMAIL)"
 
 ## ---- Code generation ----
 product-sqlc: ## Regenerate product sqlc code from queries.sql
