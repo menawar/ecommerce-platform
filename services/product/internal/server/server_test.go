@@ -159,3 +159,47 @@ func TestListProducts_Pagination(t *testing.T) {
 		t.Errorf("total = %d, want 3", resp.GetTotal())
 	}
 }
+
+func TestListProducts_Sort(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+
+	// Distinct prices so the ordering is deterministic regardless of insert order.
+	for sku, price := range map[string]int64{"cheap": 100, "mid": 500, "pricey": 900} {
+		if _, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
+			Sku: sku, Name: sku, PriceCents: price, InitialQuantity: 1,
+		}); err != nil {
+			t.Fatalf("create %s: %v", sku, err)
+		}
+	}
+
+	asc, err := client.ListProducts(ctx, &productv1.ListProductsRequest{Sort: "price_asc"})
+	if err != nil {
+		t.Fatalf("ListProducts price_asc: %v", err)
+	}
+	ap := asc.GetProducts()
+	if len(ap) != 3 {
+		t.Fatalf("price_asc returned %d products, want 3", len(ap))
+	}
+	for i := 1; i < len(ap); i++ {
+		if ap[i-1].GetPriceCents() > ap[i].GetPriceCents() {
+			t.Errorf("price_asc not ascending: %d before %d", ap[i-1].GetPriceCents(), ap[i].GetPriceCents())
+		}
+	}
+
+	desc, err := client.ListProducts(ctx, &productv1.ListProductsRequest{Sort: "price_desc"})
+	if err != nil {
+		t.Fatalf("ListProducts price_desc: %v", err)
+	}
+	dp := desc.GetProducts()
+	for i := 1; i < len(dp); i++ {
+		if dp[i-1].GetPriceCents() < dp[i].GetPriceCents() {
+			t.Errorf("price_desc not descending: %d before %d", dp[i-1].GetPriceCents(), dp[i].GetPriceCents())
+		}
+	}
+
+	// An unknown sort key must fall back to the default ordering, never error.
+	if _, err := client.ListProducts(ctx, &productv1.ListProductsRequest{Sort: "bogus"}); err != nil {
+		t.Fatalf("unknown sort should not error: %v", err)
+	}
+}

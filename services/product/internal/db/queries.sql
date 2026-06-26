@@ -48,7 +48,12 @@ FROM products p
 JOIN inventory i ON i.product_id = p.id
 WHERE (sqlc.narg('category_id')::uuid IS NULL OR p.category_id = sqlc.narg('category_id'))
   AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
-ORDER BY p.created_at DESC
+-- Each CASE is active for only one sort value; the others evaluate to NULL (no
+-- ordering effect). created_at DESC is the default and a stable final tiebreak.
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'price_asc'  THEN p.price_cents END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'price_desc' THEN p.price_cents END DESC,
+  p.created_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: InsertReservation :exec

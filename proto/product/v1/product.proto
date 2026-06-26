@@ -81,6 +81,7 @@ message ListProductsRequest {
   int32 page_size = 2;   // defaults to 20, capped at 100
   string category_id = 3; // empty = all categories
   string search = 4;      // empty = no name filter; else case-insensitive substring
+  string sort = 5;        // "price_asc" | "price_desc"; anything else = newest first
 }
 message ListProductsResponse {
   repeated Product products = 1;

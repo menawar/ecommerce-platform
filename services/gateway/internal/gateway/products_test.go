@@ -72,7 +72,7 @@ func TestListProducts_ForwardsParamsAndShapesJSON(t *testing.T) {
 	}
 	ts := newProductTestServer(t, fake)
 
-	resp, err := http.Get(ts.URL + "/products?page=2&page_size=5&q=wid&category_id=cat1")
+	resp, err := http.Get(ts.URL + "/products?page=2&page_size=5&q=wid&category_id=cat1&sort=price_asc")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestListProducts_ForwardsParamsAndShapesJSON(t *testing.T) {
 	}
 
 	// Params were forwarded to the gRPC request.
-	if gotReq.GetPage() != 2 || gotReq.GetPageSize() != 5 || gotReq.GetSearch() != "wid" || gotReq.GetCategoryId() != "cat1" {
+	if gotReq.GetPage() != 2 || gotReq.GetPageSize() != 5 || gotReq.GetSearch() != "wid" || gotReq.GetCategoryId() != "cat1" || gotReq.GetSort() != "price_asc" {
 		t.Errorf("forwarded request = %+v", gotReq)
 	}
 

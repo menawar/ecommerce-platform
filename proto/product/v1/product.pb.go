@@ -687,6 +687,7 @@ type ListProductsRequest struct {
 	PageSize      int32                  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`      // defaults to 20, capped at 100
 	CategoryId    string                 `protobuf:"bytes,3,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"` // empty = all categories
 	Search        string                 `protobuf:"bytes,4,opt,name=search,proto3" json:"search,omitempty"`                           // empty = no name filter; else case-insensitive substring
+	Sort          string                 `protobuf:"bytes,5,opt,name=sort,proto3" json:"sort,omitempty"`                               // "price_asc" | "price_desc"; anything else = newest first
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -745,6 +746,13 @@ func (x *ListProductsRequest) GetCategoryId() string {
 func (x *ListProductsRequest) GetSearch() string {
 	if x != nil {
 		return x.Search
+	}
+	return ""
+}
+
+func (x *ListProductsRequest) GetSort() string {
+	if x != nil {
+		return x.Sort
 	}
 	return ""
 }
@@ -854,13 +862,14 @@ const file_product_v1_product_proto_rawDesc = "" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\"C\n" +
 	"\x12GetProductResponse\x12-\n" +
-	"\aproduct\x18\x01 \x01(\v2\x13.product.v1.ProductR\aproduct\"\x7f\n" +
+	"\aproduct\x18\x01 \x01(\v2\x13.product.v1.ProductR\aproduct\"\x93\x01\n" +
 	"\x13ListProductsRequest\x12\x12\n" +
 	"\x04page\x18\x01 \x01(\x05R\x04page\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1f\n" +
 	"\vcategory_id\x18\x03 \x01(\tR\n" +
 	"categoryId\x12\x16\n" +
-	"\x06search\x18\x04 \x01(\tR\x06search\"]\n" +
+	"\x06search\x18\x04 \x01(\tR\x06search\x12\x12\n" +
+	"\x04sort\x18\x05 \x01(\tR\x04sort\"]\n" +
 	"\x14ListProductsResponse\x12/\n" +
 	"\bproducts\x18\x01 \x03(\v2\x13.product.v1.ProductR\bproducts\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x03R\x05total2\xfc\x03\n" +
