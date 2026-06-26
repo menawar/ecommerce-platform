@@ -1,26 +1,355 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────────────────────
+   Plateau Store — Design System Tokens
+   Extracted from the "Plateau Store.dc.html" design mockup.
+   ────────────────────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary palette */
+  --plt-green-deep: #143d29;
+  --plt-green-mid: #1a4a33;
+  --plt-green-dark-footer: #0f2e1f;
+  --plt-green-text: #1f7a4d;
+  --plt-green-bg-light: #eafaf1;
+
+  /* Accent */
+  --plt-terracotta: #b8542b;
+  --plt-terracotta-light: #fcf4ee;
+  --plt-gold: #fbbf24;
+
+  /* Neutrals */
+  --plt-bg: #f3f3f3;
+  --plt-card: #ffffff;
+  --plt-text: #131517;
+  --plt-text-secondary: #5a5f66;
+  --plt-text-muted: #9aa4b0;
+  --plt-text-light: #888888;
+  --plt-border: #eef1f4;
+  --plt-border-mid: #cfd6de;
+  --plt-border-heavy: #e2e6ea;
+  --plt-surface: #f3f5f7;
+  --plt-surface-alt: #f7f9fb;
+
+  /* Feedback */
+  --plt-star: #f5a623;
+  --plt-error: #b42318;
+  --plt-error-bg: #fdeceb;
+  --plt-error-border: #fecaca;
+  --plt-success-bg: #eafaf1;
+  --plt-badge-red: #dc2626;
+
+  /* Hero */
+  --plt-hero-start: #fbf4e6;
+  --plt-hero-end: #f3ecd8;
+
+  /* Footer text */
+  --plt-footer-text: #cfe0c9;
+  --plt-footer-muted: #9fbf97;
+  --plt-footer-dim: #7fa178;
+  --plt-footer-rule: #2a5740;
+
+  /* Radii */
+  --plt-radius-sm: 6px;
+  --plt-radius-md: 8px;
+  --plt-radius-lg: 10px;
+  --plt-radius-xl: 12px;
+  --plt-radius-pill: 24px;
+  --plt-radius-full: 9999px;
+
+  /* Tailwind overrides */
+  --background: var(--plt-bg);
+  --foreground: var(--plt-text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-plt-green-deep: var(--plt-green-deep);
+  --color-plt-green-mid: var(--plt-green-mid);
+  --color-plt-terracotta: var(--plt-terracotta);
+  --color-plt-terracotta-light: var(--plt-terracotta-light);
+  --color-plt-gold: var(--plt-gold);
+  --color-plt-bg: var(--plt-bg);
+  --color-plt-card: var(--plt-card);
+  --color-plt-text: var(--plt-text);
+  --color-plt-text-secondary: var(--plt-text-secondary);
+  --color-plt-text-muted: var(--plt-text-muted);
+  --color-plt-border: var(--plt-border);
+  --color-plt-border-mid: var(--plt-border-mid);
+  --color-plt-border-heavy: var(--plt-border-heavy);
+  --color-plt-surface: var(--plt-surface);
+  --color-plt-star: var(--plt-star);
+  --color-plt-green-text: var(--plt-green-text);
+  --color-plt-error: var(--plt-error);
+  --color-plt-error-bg: var(--plt-error-bg);
+  --color-plt-badge-red: var(--plt-badge-red);
+  --font-sans: 'Hanken Grotesk', sans-serif;
 }
 
+/* Force light mode — the Plateau design is light-only */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--plt-bg);
+    --foreground: var(--plt-text);
   }
 }
 
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  background: var(--plt-bg);
+  color: var(--plt-text);
+  font-family: 'Hanken Grotesk', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Form elements ────────────────────────────────────────────────────────── */
+
+input,
+select,
+button,
+textarea {
+  font-family: 'Hanken Grotesk', sans-serif;
+  outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--plt-text-muted);
+}
+
+/* ── Reusable component classes ───────────────────────────────────────────── */
+
+/* Product card placeholder image */
+.plt-img-placeholder {
+  aspect-ratio: 1 / 1;
+  background: repeating-linear-gradient(45deg, #eceff3 0 8px, #f5f7f9 8px 16px);
+  border-radius: var(--plt-radius-sm);
+  display: flex;
+  align-items: flex-end;
+  padding: 9px;
+  position: relative;
+}
+
+.plt-img-placeholder-lg {
+  aspect-ratio: 1 / 1;
+  background: repeating-linear-gradient(45deg, #e6eaef 0 11px, #f0f3f6 11px 22px);
+  border-radius: var(--plt-radius-lg);
+  display: flex;
+  align-items: flex-end;
+  padding: 14px;
+}
+
+.plt-img-thumb {
+  width: 62px;
+  height: 62px;
+  background: repeating-linear-gradient(45deg, #eceff3 0 6px, #f5f7f9 6px 12px);
+  border: 1px solid var(--plt-border-heavy);
+  border-radius: var(--plt-radius-sm);
+}
+
+/* Badge styles */
+.plt-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 4px;
+}
+
+.plt-badge-dark { background: var(--plt-text); }
+.plt-badge-red { background: var(--plt-badge-red); }
+
+/* Star rating display */
+.plt-stars {
+  font-size: 12px;
+  color: var(--plt-star);
+  letter-spacing: 0.5px;
+}
+
+/* CTA pill buttons */
+.plt-btn-primary {
+  background: var(--plt-terracotta);
+  color: #fff;
+  border: 0;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: var(--plt-radius-pill);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.plt-btn-primary:hover { opacity: 0.9; }
+.plt-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.plt-btn-primary-lg {
+  background: var(--plt-terracotta);
+  color: #fff;
+  border: 0;
+  padding: 13px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: var(--plt-radius-pill);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.plt-btn-primary-lg:hover { opacity: 0.9; }
+.plt-btn-primary-lg:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.plt-btn-gold {
+  background: var(--plt-gold);
+  color: var(--plt-text);
+  border: 0;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  border-radius: var(--plt-radius-pill);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  width: 100%;
+}
+.plt-btn-gold:hover { opacity: 0.9; }
+.plt-btn-gold:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.plt-btn-outline {
+  background: none;
+  border: 1px solid var(--plt-border-mid);
+  color: var(--plt-text);
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--plt-radius-pill);
+  cursor: pointer;
+  width: 100%;
+  transition: background 0.15s;
+}
+.plt-btn-outline:hover { background: var(--plt-surface); }
+
+.plt-btn-hero {
+  background: var(--plt-green-deep);
+  color: #fff;
+  border: 0;
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: var(--plt-radius-md);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.plt-btn-hero:hover { opacity: 0.9; }
+
+/* Input fields */
+.plt-input {
+  border: 1px solid var(--plt-border-mid);
+  border-radius: var(--plt-radius-md);
+  padding: 12px 14px;
+  font-size: 14px;
+  width: 100%;
+  background: var(--plt-card);
+  color: var(--plt-text);
+  transition: border-color 0.15s;
+}
+.plt-input:focus {
+  border-color: var(--plt-terracotta);
+}
+
+/* Cards */
+.plt-card {
+  background: var(--plt-card);
+  border-radius: var(--plt-radius-md);
+  padding: 22px 24px;
+}
+
+.plt-card-lg {
+  background: var(--plt-card);
+  border-radius: var(--plt-radius-lg);
+  padding: 22px;
+}
+
+/* Quantity stepper */
+.plt-qty-stepper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--plt-border-mid);
+  border-radius: var(--plt-radius-md);
+  overflow: hidden;
+}
+
+.plt-qty-btn {
+  border: 0;
+  background: var(--plt-surface);
+  width: 38px;
+  height: 38px;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.plt-qty-btn:hover { background: var(--plt-border-heavy); }
+
+.plt-qty-val {
+  width: 46px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* Radio option cards */
+.plt-radio-card {
+  cursor: pointer;
+  border-radius: var(--plt-radius-md);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--plt-border-heavy);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.plt-radio-card.active {
+  border: 2px solid var(--plt-terracotta);
+  background: var(--plt-terracotta-light);
+}
+
+.plt-radio-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--plt-terracotta);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.plt-radio-dot-inner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--plt-terracotta);
+}
+
+/* Skeleton loading animation */
+@keyframes plt-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.plt-skeleton {
+  background: linear-gradient(90deg, #eceff3 25%, #f5f7f9 37%, #eceff3 63%);
+  background-size: 200% 100%;
+  animation: plt-shimmer 1.5s ease infinite;
+  border-radius: var(--plt-radius-md);
 }

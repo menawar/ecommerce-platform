@@ -5,16 +5,24 @@ import { ErrorPanel } from "../error-panel";
 
 const PAGE_SIZE = 12;
 
+const SORT_OPTIONS = [
+  "Featured",
+  "Price: Low to High",
+  "Price: High to Low",
+  "Top rated",
+];
+
 // A Server Component: it runs on the server, awaits the gateway call directly, and
 // streams HTML to the browser. searchParams is async in the App Router (Next 16).
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; sort?: string }>;
 }) {
   const sp = await searchParams;
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
+  const sort = sp.sort ?? "Featured";
 
   // Catch the gateway error HERE rather than letting it throw to error.tsx: a
   // Server Component can render the requestId into HTML directly, whereas the
@@ -27,11 +35,11 @@ export default async function ProductsPage({
   } catch (err) {
     if (err instanceof GatewayError) {
       return (
-        <main className="mx-auto max-w-5xl px-6 py-10">
-          <h1 className="text-2xl font-semibold">Products</h1>
-          <div className="mt-6">
+        <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+          <h1 style={{ fontSize: 20, fontWeight: 800 }}>Products</h1>
+          <div style={{ marginTop: 24 }}>
             <ErrorPanel
-              message={`Couldn’t load products: ${err.message}`}
+              message={`Couldn't load products: ${err.message}`}
               requestId={err.requestId}
             />
           </div>
@@ -43,54 +51,347 @@ export default async function ProductsPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Products</h1>
+    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+      {/* Breadcrumb */}
+      <div
+        style={{
+          fontSize: 13,
+          color: "var(--plt-text-secondary)",
+          marginBottom: 16,
+        }}
+      >
+        <Link href="/" style={{ color: "inherit", textDecoration: "none" }}>
+          Home
+        </Link>{" "}
+        ›{" "}
+        <b style={{ color: "var(--plt-text)" }}>
+          {q ? `Search: "${q}"` : "All produce"}
+        </b>{" "}
+        &nbsp;·&nbsp;{" "}
+        <b style={{ color: "var(--plt-text)" }}>{total}</b> results
+      </div>
 
-      {/* A plain GET <form>: submitting navigates to /products?q=… — full-text
-          search with ZERO client JavaScript. The server re-renders with the filter.
-          This is the "you often don't need a Client Component" lesson. */}
-      <form action="/products" className="mt-4 flex gap-2">
-        <input
-          type="search"
-          name="q"
-          defaultValue={q}
-          placeholder="Search products…"
-          className="w-full rounded-md border border-zinc-300 px-3 py-2"
-        />
-        <button className="rounded-md bg-foreground px-4 py-2 font-medium text-background">
-          Search
-        </button>
-      </form>
+      <div
+        style={{
+          display: "flex",
+          gap: 20,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        {/* ── Sidebar ──────────────────────────────────────────────────── */}
+        <div
+          style={{
+            width: 230,
+            flex: "0 0 230px",
+            background: "var(--plt-card)",
+            borderRadius: "var(--plt-radius-md)",
+            padding: 20,
+          }}
+        >
+          {/* Search form */}
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>
+            Search
+          </div>
+          <form
+            action="/products"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 9,
+              paddingBottom: 18,
+              borderBottom: "1px solid var(--plt-border-heavy)",
+            }}
+          >
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="Search products…"
+              className="plt-input"
+              style={{ fontSize: 13 }}
+            />
+            <button className="plt-btn-primary" type="submit">
+              Search
+            </button>
+          </form>
 
-      {products.length === 0 ? (
-        <p className="mt-10 text-zinc-600">No products found.</p>
-      ) : (
-        <ul className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {products.map((p) => (
-            <li key={p.id} className="rounded-lg border border-zinc-200 p-4 hover:border-zinc-400">
-              <Link href={`/products/${p.id}`} className="block">
-                <h2 className="font-medium">{p.name}</h2>
-                <p className="mt-1 text-sm text-zinc-500">{formatPrice(p.price_cents, p.currency)}</p>
-                <p className="mt-2 text-xs text-zinc-400">
-                  {p.available > 0 ? `${p.available} in stock` : "Out of stock"}
-                </p>
+          {/* Customer rating */}
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              padding: "18px 0 10px",
+            }}
+          >
+            Customer rating
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 9,
+              fontSize: 13,
+              paddingBottom: 18,
+              borderBottom: "1px solid var(--plt-border-heavy)",
+            }}
+          >
+            <div style={{ color: "var(--plt-star)", letterSpacing: ".5px" }}>
+              ★★★★☆{" "}
+              <span style={{ color: "var(--plt-terracotta)" }}>&amp; up</span>
+            </div>
+            <div style={{ color: "var(--plt-star)", letterSpacing: ".5px" }}>
+              ★★★☆☆{" "}
+              <span style={{ color: "var(--plt-terracotta)" }}>&amp; up</span>
+            </div>
+          </div>
+
+          {/* Farm filter */}
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 800,
+              padding: "18px 0 10px",
+            }}
+          >
+            Farm / Co-op
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              fontSize: 13,
+            }}
+          >
+            {["Vom Farms", "Bukuru Co-op", "Riyom Growers", "Barkin Ladi Farms", "Gyero Gardens", "Heipang Produce"].map(
+              (farm) => (
+                <label
+                  key={farm}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 9,
+                    cursor: "pointer",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 15,
+                      height: 15,
+                      border: "1.5px solid var(--plt-text-muted)",
+                      borderRadius: 3,
+                      display: "inline-block",
+                    }}
+                  />
+                  {farm}
+                </label>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* ── Main grid ────────────────────────────────────────────────── */}
+        <div style={{ flex: 1, minWidth: 280 }}>
+          {/* Toolbar */}
+          <div
+            style={{
+              background: "var(--plt-card)",
+              borderRadius: "var(--plt-radius-sm)",
+              padding: "11px 16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 16,
+              flexWrap: "wrap",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: 13, color: "var(--plt-text-secondary)" }}>
+              Showing{" "}
+              <b style={{ color: "var(--plt-text)" }}>{products.length}</b>{" "}
+              products
+              {q && (
+                <>
+                  {" "}
+                  for <b style={{ color: "var(--plt-text)" }}>&quot;{q}&quot;</b>
+                </>
+              )}
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontSize: 13,
+              }}
+            >
+              Sort by
+              <form action="/products" style={{ display: "inline" }}>
+                {q && <input type="hidden" name="q" value={q} />}
+                <select
+                  name="sort"
+                  defaultValue={sort}
+                  style={{
+                    border: "1px solid var(--plt-border-mid)",
+                    borderRadius: "var(--plt-radius-sm)",
+                    padding: "7px 10px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    background: "var(--plt-card)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {SORT_OPTIONS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </form>
+            </div>
+          </div>
+
+          {/* Empty state */}
+          {products.length === 0 && (
+            <div
+              style={{
+                background: "var(--plt-card)",
+                borderRadius: "var(--plt-radius-md)",
+                padding: "60px 20px",
+                textAlign: "center",
+                color: "var(--plt-text-secondary)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: "var(--plt-text)",
+                  marginBottom: 6,
+                }}
+              >
+                No produce found
+              </div>
+              Try another search or{" "}
+              <Link
+                href="/products"
+                style={{ color: "var(--plt-terracotta)", fontWeight: 600 }}
+              >
+                clear your search
               </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+              .
+            </div>
+          )}
 
-      <nav className="mt-8 flex items-center justify-between text-sm">
-        <PageLink q={q} page={page - 1} disabled={page <= 1}>
-          ← Prev
-        </PageLink>
-        <span className="text-zinc-500">
-          Page {page} of {totalPages} · {total} items
-        </span>
-        <PageLink q={q} page={page + 1} disabled={page >= totalPages}>
-          Next →
-        </PageLink>
-      </nav>
+          {/* Product grid */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {products.map((p) => (
+              <Link
+                key={p.id}
+                href={`/products/${p.id}`}
+                style={{
+                  background: "var(--plt-card)",
+                  borderRadius: "var(--plt-radius-md)",
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  textDecoration: "none",
+                  color: "var(--plt-text)",
+                  transition: "box-shadow 0.2s",
+                }}
+              >
+                <div className="plt-img-placeholder">
+                  {p.available > 0 && (
+                    <span className="plt-badge plt-badge-dark">In stock</span>
+                  )}
+                  {p.available <= 0 && (
+                    <span className="plt-badge plt-badge-red">Sold out</span>
+                  )}
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 10,
+                      color: "var(--plt-text-muted)",
+                    }}
+                  >
+                    {p.sku}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.3,
+                    margin: "11px 0 6px",
+                    height: 34,
+                    overflow: "hidden",
+                  }}
+                >
+                  {p.name}
+                </div>
+                <div className="plt-stars">
+                  ★★★★★{" "}
+                  <span style={{ color: "var(--plt-terracotta)" }}>
+                    ({p.available})
+                  </span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 7,
+                    margin: "7px 0 3px",
+                  }}
+                >
+                  <span style={{ fontSize: 17, fontWeight: 800 }}>
+                    {formatPrice(p.price_cents, p.currency)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "var(--plt-green-text)",
+                    fontWeight: 700,
+                    marginBottom: 11,
+                  }}
+                >
+                  {p.available > 0 ? "Delivered this week" : "Out of stock"}
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          <nav
+            style={{
+              marginTop: 24,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              background: "var(--plt-card)",
+              borderRadius: "var(--plt-radius-md)",
+              padding: "12px 16px",
+              fontSize: 13,
+            }}
+          >
+            <PageLink q={q} page={page - 1} disabled={page <= 1}>
+              ← Prev
+            </PageLink>
+            <span style={{ color: "var(--plt-text-secondary)" }}>
+              Page {page} of {totalPages} · {total} items
+            </span>
+            <PageLink q={q} page={page + 1} disabled={page >= totalPages}>
+              Next →
+            </PageLink>
+          </nav>
+        </div>
+      </div>
     </main>
   );
 }
@@ -106,12 +407,22 @@ function PageLink({
   disabled: boolean;
   children: React.ReactNode;
 }) {
-  if (disabled) return <span className="text-zinc-300">{children}</span>;
+  if (disabled)
+    return (
+      <span style={{ color: "var(--plt-text-muted)" }}>{children}</span>
+    );
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
   qs.set("page", String(page));
   return (
-    <Link href={`/products?${qs}`} className="font-medium underline">
+    <Link
+      href={`/products?${qs}`}
+      style={{
+        fontWeight: 600,
+        color: "var(--plt-terracotta)",
+        textDecoration: "none",
+      }}
+    >
       {children}
     </Link>
   );

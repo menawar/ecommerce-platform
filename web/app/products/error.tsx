@@ -10,18 +10,70 @@
 // catch-and-render, not here.
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-xl font-semibold">Something went wrong</h1>
-      <p className="mt-2 text-zinc-600">{error.message}</p>
-      {error.digest && (
-        <p className="mt-2 font-mono text-xs text-zinc-400">Reference: {error.digest}</p>
-      )}
-      <button
-        onClick={() => reset()}
-        className="mt-4 rounded-md border border-zinc-300 px-4 py-2 font-medium"
+    <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px" }}>
+      <div
+        style={{
+          background: "var(--plt-card)",
+          borderRadius: "var(--plt-radius-xl)",
+          padding: "44px 36px",
+          textAlign: "center",
+        }}
       >
-        Try again
-      </button>
+        <div
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: "50%",
+            background: "var(--plt-error-bg)",
+            color: "var(--plt-error)",
+            fontSize: 38,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 20px",
+          }}
+        >
+          !
+        </div>
+        <h1
+          style={{
+            fontSize: 22,
+            fontWeight: 800,
+            marginBottom: 8,
+            marginTop: 0,
+          }}
+        >
+          Something went wrong
+        </h1>
+        <p
+          style={{
+            fontSize: 14,
+            color: "var(--plt-text-secondary)",
+            marginBottom: 6,
+          }}
+        >
+          {error.message}
+        </p>
+        {error.digest && (
+          <p
+            style={{
+              fontFamily: "monospace",
+              fontSize: 11,
+              color: "var(--plt-text-muted)",
+              marginBottom: 20,
+            }}
+          >
+            Reference: {error.digest}
+          </p>
+        )}
+        <button
+          onClick={() => reset()}
+          className="plt-btn-outline"
+          style={{ width: "auto", padding: "10px 24px" }}
+        >
+          Try again
+        </button>
+      </div>
     </main>
   );
 }

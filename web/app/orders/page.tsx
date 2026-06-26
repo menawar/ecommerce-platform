@@ -5,11 +5,6 @@ import { GatewayError } from "@/lib/gateway";
 import { listOrders } from "@/lib/orders";
 import { formatPrice, formatDate } from "@/lib/format";
 
-const statusStyle: Record<string, string> = {
-  CONFIRMED: "bg-green-50 text-green-700",
-  CANCELLED: "bg-red-50 text-red-700",
-};
-
 // Order history. A Server Component: it calls the gateway with the user's cookie
 // on the server, so the order list (and the JWT) never touch the browser. Status
 // here is already terminal — our saga resolves CONFIRMED/CANCELLED synchronously
@@ -26,38 +21,92 @@ export default async function OrdersPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Your orders</h1>
+    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 60px" }}>
+      <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 18, marginTop: 0 }}>
+        Your orders
+      </h1>
 
       {orders.length === 0 ? (
-        <p className="mt-6 text-zinc-600">
-          You haven&apos;t placed any orders yet.{" "}
-          <Link href="/products" className="font-medium underline">
+        <div
+          className="plt-card-lg"
+          style={{ padding: "60px 20px", textAlign: "center" }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+            No orders yet
+          </div>
+          <div
+            style={{
+              fontSize: 14,
+              color: "var(--plt-text-secondary)",
+              marginBottom: 20,
+            }}
+          >
+            You haven&apos;t placed any orders yet.
+          </div>
+          <Link href="/products" className="plt-btn-primary-lg">
             Browse products
           </Link>
-          .
-        </p>
+        </div>
       ) : (
-        <ul className="mt-6 divide-y divide-zinc-200">
-          {orders.map((o) => (
-            <li key={o.id}>
-              <Link
-                href={`/orders/${o.id}`}
-                className="flex items-center justify-between py-4 hover:bg-zinc-50"
-              >
-                <div>
-                  <span
-                    className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${statusStyle[o.status] ?? "bg-zinc-100 text-zinc-700"}`}
-                  >
-                    {o.status}
-                  </span>
-                  <p className="mt-1 text-sm text-zinc-500">{formatDate(o.created_at)}</p>
+        <div className="plt-card-lg" style={{ padding: 0, overflow: "hidden" }}>
+          {orders.map((o, i) => (
+            <Link
+              key={o.id}
+              href={`/orders/${o.id}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "18px 22px",
+                borderBottom:
+                  i < orders.length - 1
+                    ? "1px solid var(--plt-border)"
+                    : "none",
+                textDecoration: "none",
+                color: "var(--plt-text)",
+                transition: "background 0.15s",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    display: "inline-block",
+                    borderRadius: 4,
+                    padding: "3px 8px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    background:
+                      o.status === "CONFIRMED"
+                        ? "var(--plt-green-bg-light)"
+                        : o.status === "CANCELLED"
+                          ? "var(--plt-error-bg)"
+                          : "var(--plt-surface)",
+                    color:
+                      o.status === "CONFIRMED"
+                        ? "var(--plt-green-text)"
+                        : o.status === "CANCELLED"
+                          ? "var(--plt-error)"
+                          : "var(--plt-text-secondary)",
+                  }}
+                >
+                  {o.status}
+                </span>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "var(--plt-text-secondary)",
+                    marginTop: 4,
+                  }}
+                >
+                  {formatDate(o.created_at)}
                 </div>
-                <span className="font-medium">{formatPrice(o.total_cents, o.currency)}</span>
-              </Link>
-            </li>
+              </div>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>
+                {formatPrice(o.total_cents, o.currency)}
+              </span>
+            </Link>
           ))}
-        </ul>
+        </div>
       )}
     </main>
   );

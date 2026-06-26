@@ -15,13 +15,38 @@ export function ErrorPanel({
   requestId?: string;
 }) {
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 p-6">
-      <h2 className="text-lg font-semibold text-red-800">{title}</h2>
-      <p className="mt-1 text-red-700">{message}</p>
+    <div
+      style={{
+        background: "var(--plt-error-bg)",
+        border: "1px solid var(--plt-error-border)",
+        borderRadius: "var(--plt-radius-lg)",
+        padding: "20px 24px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: "var(--plt-error)",
+          marginBottom: 6,
+        }}
+      >
+        {title}
+      </div>
+      <div style={{ fontSize: 14, color: "#b42318" }}>{message}</div>
       {requestId && (
         // Monospace + muted: it's a support/debugging handle, not primary content.
         // A user can quote it; we can grep the gateway logs/trace for the same id.
-        <p className="mt-3 font-mono text-xs text-red-500">Reference: {requestId}</p>
+        <div
+          style={{
+            marginTop: 12,
+            fontFamily: "monospace",
+            fontSize: 11,
+            color: "#d97560",
+          }}
+        >
+          Reference: {requestId}
+        </div>
       )}
     </div>
   );

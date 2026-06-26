@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { GatewayError } from "@/lib/gateway";
 import { getMe } from "@/lib/session";
@@ -18,24 +19,70 @@ export default async function AccountPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold">Your account</h1>
-      <dl className="mt-6 space-y-2 text-sm">
-        <div>
-          <dt className="text-zinc-500">User ID</dt>
-          <dd className="font-mono">{me.user_id}</dd>
-        </div>
-        <div>
-          <dt className="text-zinc-500">Role</dt>
-          <dd>{me.role}</dd>
-        </div>
-      </dl>
+    <main style={{ maxWidth: 640, margin: "0 auto", padding: "40px 20px 60px" }}>
+      <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 18, marginTop: 0 }}>
+        Your account
+      </h1>
 
-      <form action={logoutAction} className="mt-8">
-        <button className="rounded-md border border-zinc-300 px-4 py-2 font-medium">
-          Log out
-        </button>
-      </form>
+      <div className="plt-card-lg">
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16 }}>
+          Account details
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            fontSize: 14,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "10px 0",
+              borderBottom: "1px solid var(--plt-border)",
+            }}
+          >
+            <span style={{ color: "var(--plt-text-secondary)" }}>User ID</span>
+            <span style={{ fontFamily: "monospace", fontSize: 12 }}>
+              {me.user_id}
+            </span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              padding: "10px 0",
+              borderBottom: "1px solid var(--plt-border)",
+            }}
+          >
+            <span style={{ color: "var(--plt-text-secondary)" }}>Role</span>
+            <span style={{ fontWeight: 600 }}>{me.role}</span>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            marginTop: 24,
+          }}
+        >
+          <Link
+            href="/orders"
+            className="plt-btn-primary-lg"
+            style={{ textDecoration: "none", textAlign: "center", flex: 1 }}
+          >
+            View orders
+          </Link>
+          <form action={logoutAction} style={{ flex: 1 }}>
+            <button className="plt-btn-outline" style={{ width: "100%" }}>
+              Log out
+            </button>
+          </form>
+        </div>
+      </div>
     </main>
   );
 }
