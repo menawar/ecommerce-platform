@@ -41,8 +41,12 @@ help: ## Show this help
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 ## ---- Infrastructure ----
-infra-up: ## Start infra (postgres, redis, nats, jaeger, prometheus), wait for healthy
+infra-up: ## Start infra (postgres, redis, nats, jaeger, prometheus, minio), wait for healthy
 	docker compose -f $(INFRA) up -d --wait
+	# Bucket setup runs after MinIO is healthy. It's a one-shot (behind the "init"
+	# compose profile) so it isn't part of the --wait set above, which would fail
+	# on its clean exit.
+	docker compose -f $(INFRA) run --rm createbuckets
 
 infra-down: ## Stop infra, keep data volumes
 	docker compose -f $(INFRA) down

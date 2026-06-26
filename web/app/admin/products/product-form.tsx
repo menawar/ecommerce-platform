@@ -78,8 +78,17 @@ export function ProductForm() {
       </div>
 
       <div style={rowStyle}>
-        <label htmlFor="image_url" style={labelStyle}>Image URL (optional)</label>
-        <input id="image_url" name="image_url" type="url" className="plt-input" placeholder="https://…" />
+        <label htmlFor="image" style={labelStyle}>Image (optional)</label>
+        <input
+          id="image"
+          name="image"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          className="plt-input"
+        />
+        <p style={{ fontSize: 11, color: "var(--plt-text-secondary)", marginTop: 4 }}>
+          PNG, JPEG, WebP, or GIF · 5 MB max
+        </p>
       </div>
 
       <button disabled={pending} className="plt-btn-gold" style={{ marginTop: 4 }}>
