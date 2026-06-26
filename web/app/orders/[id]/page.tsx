@@ -4,9 +4,11 @@ import { notFound, redirect } from "next/navigation";
 import { GatewayError } from "@/lib/gateway";
 import { getOrder } from "@/lib/orders";
 import { formatPrice } from "@/lib/format";
+import { StatusPoller } from "./status-poller";
 
-// The checkout result view. After place-order redirects here, this shows whether
-// the saga ended CONFIRMED or CANCELLED.
+// The checkout result view. After place-order redirects here (or the PSP returns
+// the customer here post-payment), this shows the saga outcome — and while the
+// order is still PAYMENT_PENDING it polls until the webhook settles it.
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -23,6 +25,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
 
   const isConfirmed = order.status === "CONFIRMED";
   const isCancelled = order.status === "CANCELLED";
+  const isPending = !isConfirmed && !isCancelled; // PAYMENT_PENDING and friends
 
   return (
     <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px" }}>
@@ -57,15 +60,18 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             margin: "0 auto 20px",
           }}
         >
-          {isConfirmed ? "✓" : isCancelled ? "✕" : "?"}
+          {isConfirmed ? "✓" : isCancelled ? "✕" : "⏳"}
         </div>
+
+        {/* While the order awaits its payment outcome, poll until it settles. */}
+        {isPending && <StatusPoller />}
 
         <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8, marginTop: 0 }}>
           {isConfirmed
             ? "Order confirmed"
             : isCancelled
               ? "Order cancelled"
-              : `Order ${order.status}`}
+              : "Awaiting payment"}
         </h1>
 
         <div
@@ -82,6 +88,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <>
               Your order was cancelled (payment declined). You were not charged
               and the reserved stock was released.
+            </>
+          )}
+          {isPending && (
+            <>
+              We&apos;re confirming your payment. This page will update
+              automatically — no need to refresh.
             </>
           )}
         </div>

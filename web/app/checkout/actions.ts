@@ -13,7 +13,7 @@ export async function placeOrderAction(_prev: CheckoutState, formData: FormData)
     return { error: "Missing idempotency key — please refresh and try again." };
   }
 
-  let res: { order_id: string; status: string };
+  let res: { order_id: string; status: string; authorization_url: string };
   try {
     res = await placeOrder(key);
   } catch (err) {
@@ -24,7 +24,14 @@ export async function placeOrderAction(_prev: CheckoutState, formData: FormData)
     throw err;
   }
 
-  // Both CONFIRMED and CANCELLED are valid terminal outcomes (a decline is not an
-  // error — it's a cancelled order). The order page renders whichever it is.
+  // The async saga returns PAYMENT_PENDING + a hosted-checkout URL: send the
+  // customer there to authorize payment. The PSP redirects them back to the order
+  // page, which polls until the webhook settles the order to CONFIRMED/CANCELLED.
+  if (res.authorization_url) {
+    redirect(res.authorization_url);
+  }
+
+  // No authorization_url means the saga ended before payment (e.g. out of stock):
+  // it's already terminal, so go straight to the order result page.
   redirect(`/orders/${res.order_id}`);
 }

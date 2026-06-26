@@ -20,8 +20,12 @@ export type Order = {
 };
 
 // placeOrder forwards the client-generated key as the Idempotency-Key header. The
-// gateway passes it to the saga, which dedupes a retried submit to one order.
-export async function placeOrder(idempotencyKey: string): Promise<{ order_id: string; status: string }> {
+// gateway passes it to the saga, which dedupes a retried submit to one order. In
+// the async payment flow the saga returns PAYMENT_PENDING plus an authorization_url
+// — the PSP hosted-checkout page the customer must visit to authorize payment.
+export async function placeOrder(
+  idempotencyKey: string,
+): Promise<{ order_id: string; status: string; authorization_url: string }> {
   return gatewayFetch("/orders", {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
