@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 import { imageObjectKey, isAllowedImageType, MAX_IMAGE_BYTES } from "./upload-validate";
 
@@ -55,4 +55,15 @@ export async function uploadImage(file: File): Promise<string> {
 
   // key already starts with "products/"; PUBLIC_BASE_URL points at the bucket root.
   return `${PUBLIC_BASE_URL.replace(/\/$/, "")}/${key}`;
+}
+
+// deleteImage best-effort removes an object previously returned by uploadImage,
+// given its public URL. Used to avoid orphaning the upload when the subsequent
+// product create fails (e.g. duplicate SKU). Best-effort by design: a failed
+// cleanup must not mask the original error, so the caller ignores any throw.
+export async function deleteImage(publicUrl: string): Promise<void> {
+  const base = PUBLIC_BASE_URL.replace(/\/$/, "");
+  if (!publicUrl.startsWith(`${base}/`)) return; // not one of ours — leave it alone
+  const key = publicUrl.slice(base.length + 1);
+  await client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }

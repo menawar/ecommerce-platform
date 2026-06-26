@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createProduct, GatewayError } from "@/lib/gateway";
 import { getMe } from "@/lib/session";
 import { parsePriceToCents } from "@/lib/money";
-import { uploadImage, UploadError } from "@/lib/storage";
+import { uploadImage, deleteImage, UploadError } from "@/lib/storage";
 
 export type CreateProductState = { error: string } | null;
 
@@ -66,6 +66,16 @@ export async function createProductAction(
       initial_quantity: quantity,
     });
   } catch (err) {
+    // The product wasn't created, so a just-uploaded image is now orphaned in the
+    // bucket — best-effort remove it. Cleanup failure must never mask the real
+    // error, so it's swallowed.
+    if (imageURL) {
+      try {
+        await deleteImage(imageURL);
+      } catch {
+        // ignore — orphan cleanup is best-effort
+      }
+    }
     if (err instanceof GatewayError) {
       if (err.status === 401) redirect("/login");
       if (err.status === 409) return { error: "A product with that SKU already exists." };
