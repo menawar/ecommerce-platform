@@ -63,6 +63,10 @@ infra-ps: ## Show infra container status
 # Bring up the whole stack: infra + apps. The order is guaranteed by depends_on.
 up: ## Bring everything up (infra + apps), wait for healthy
 	docker compose -f $(INFRA) -f docker-compose.yml up -d --wait
+	# Create the MinIO product-images bucket. It's a one-shot behind the "init"
+	# compose profile (so it isn't part of the --wait set above, which would fail
+	# on its clean exit) — run it explicitly, same as infra-up. Idempotent.
+	docker compose -f $(INFRA) -f docker-compose.yml run --rm createbuckets
 
 down: ## Bring everything down (keep volumes)
 	docker compose -f $(INFRA) -f docker-compose.yml down
@@ -104,8 +108,10 @@ user-migrate-create: ## Create a new userdb migration: make user-migrate-create 
 
 user-make-admin: ## Promote a registered user to admin: make user-make-admin EMAIL=you@example.com
 	@test -n "$(EMAIL)" || { echo "EMAIL is required: make user-make-admin EMAIL=you@example.com"; exit 1; }
-	psql "$(USER_DB_URL)" -v email="$(EMAIL)" \
-		-c "UPDATE users SET role='admin', updated_at=now() WHERE email = :'email';"
+	@# Feed the SQL via stdin (not -c): psql only interpolates :'email' for
+	@# scripts/stdin, not for -c command strings, which it sends to the server as-is.
+	printf "%s\n" "UPDATE users SET role='admin', updated_at=now() WHERE email = :'email';" \
+		| psql "$(USER_DB_URL)" -v email="$(EMAIL)"
 
 ## ---- Code generation ----
 product-sqlc: ## Regenerate product sqlc code from queries.sql
