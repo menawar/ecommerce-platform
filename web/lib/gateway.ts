@@ -94,3 +94,26 @@ export async function listProducts(params: {
 export async function getProduct(id: string): Promise<Product> {
   return gatewayFetch<Product>(`/products/${encodeURIComponent(id)}`);
 }
+
+// CreateProductInput mirrors the gateway's createProductRequest (snake_case).
+// price_cents is integer minor units; the caller converts from major units.
+export type CreateProductInput = {
+  sku: string;
+  name: string;
+  description: string;
+  price_cents: number;
+  currency: string;
+  category_id: string;
+  initial_quantity: number;
+  image_url: string;
+};
+
+// createProduct POSTs to the admin-only route. The session cookie is forwarded as
+// a Bearer token by gatewayFetch; the gateway's requireAdmin enforces the gate,
+// so a non-admin caller gets a 403 GatewayError here.
+export async function createProduct(input: CreateProductInput): Promise<Product> {
+  return gatewayFetch<Product>("/products", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
