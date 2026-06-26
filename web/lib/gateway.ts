@@ -139,3 +139,9 @@ export async function updateProduct(id: string, input: UpdateProductInput): Prom
     body: JSON.stringify(input),
   });
 }
+
+// deleteProduct soft-deletes (archives) a product. The gateway returns 204, which
+// gatewayFetch maps to undefined.
+export async function deleteProduct(id: string): Promise<void> {
+  await gatewayFetch<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
+}

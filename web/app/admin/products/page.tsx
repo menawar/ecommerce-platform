@@ -6,6 +6,7 @@ import { getMe } from "@/lib/session";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../../error-panel";
 import { ProductForm } from "./product-form";
+import { DeleteProductButton } from "./delete-button";
 
 const PAGE_SIZE = 100;
 
@@ -93,12 +94,15 @@ export default async function AdminProductsPage() {
                     </td>
                     <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.available}</td>
                     <td style={{ padding: "8px 6px", textAlign: "right" }}>
-                      <Link
-                        href={`/admin/products/${p.id}/edit`}
-                        style={{ color: "var(--plt-terracotta)", textDecoration: "none", fontWeight: 600 }}
-                      >
-                        Edit
-                      </Link>
+                      <span style={{ display: "inline-flex", gap: 14, alignItems: "center" }}>
+                        <Link
+                          href={`/admin/products/${p.id}/edit`}
+                          style={{ color: "var(--plt-terracotta)", textDecoration: "none", fontWeight: 600 }}
+                        >
+                          Edit
+                        </Link>
+                        <DeleteProductButton id={p.id} name={p.name} />
+                      </span>
                     </td>
                   </tr>
                 ))}

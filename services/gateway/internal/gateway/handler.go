@@ -109,6 +109,7 @@ func (h *Handler) Router() http.Handler {
 		ar.Use(h.requireAdmin)
 		ar.Post("/products", h.createProduct)
 		ar.Patch("/products/{id}", h.updateProduct)
+		ar.Delete("/products/{id}", h.deleteProduct)
 	})
 
 	return r

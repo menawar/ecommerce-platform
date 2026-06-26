@@ -78,6 +78,9 @@ func (f *fakeProduct) CreateProduct(context.Context, *productv1.CreateProductReq
 func (f *fakeProduct) UpdateProduct(context.Context, *productv1.UpdateProductRequest, ...grpc.CallOption) (*productv1.UpdateProductResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (f *fakeProduct) DeleteProduct(context.Context, *productv1.DeleteProductRequest, ...grpc.CallOption) (*productv1.DeleteProductResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 func (f *fakeProduct) ListProducts(context.Context, *productv1.ListProductsRequest, ...grpc.CallOption) (*productv1.ListProductsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }

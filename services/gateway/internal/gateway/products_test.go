@@ -26,6 +26,7 @@ type fakeProductClient struct {
 	getFn    func(*productv1.GetProductRequest) (*productv1.GetProductResponse, error)
 	createFn func(*productv1.CreateProductRequest) (*productv1.CreateProductResponse, error)
 	updateFn func(*productv1.UpdateProductRequest) (*productv1.UpdateProductResponse, error)
+	deleteFn func(*productv1.DeleteProductRequest) (*productv1.DeleteProductResponse, error)
 }
 
 var _ productv1.ProductServiceClient = (*fakeProductClient)(nil)
@@ -45,6 +46,12 @@ func (f *fakeProductClient) CreateProduct(_ context.Context, in *productv1.Creat
 func (f *fakeProductClient) UpdateProduct(_ context.Context, in *productv1.UpdateProductRequest, _ ...grpc.CallOption) (*productv1.UpdateProductResponse, error) {
 	if f.updateFn != nil {
 		return f.updateFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeProductClient) DeleteProduct(_ context.Context, in *productv1.DeleteProductRequest, _ ...grpc.CallOption) (*productv1.DeleteProductResponse, error) {
+	if f.deleteFn != nil {
+		return f.deleteFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "unused")
 }
@@ -234,6 +241,56 @@ func TestUpdateProduct_AdminGate(t *testing.T) {
 		t.Errorf("forwarded update request = %+v", gotReq)
 	}
 	if got := patch("customer-token"); got != http.StatusForbidden {
+		t.Errorf("customer: status = %d, want 403", got)
+	}
+}
+
+// TestDeleteProduct_AdminGate checks DELETE /products/{id}: admin -> 204 (id
+// forwarded), customer -> 403.
+func TestDeleteProduct_AdminGate(t *testing.T) {
+	var gotID string
+	pc := &fakeProductClient{
+		deleteFn: func(in *productv1.DeleteProductRequest) (*productv1.DeleteProductResponse, error) {
+			gotID = in.GetId()
+			return &productv1.DeleteProductResponse{}, nil
+		},
+	}
+	uc := &fakeUserClient{
+		validateFn: func(in *userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error) {
+			role := "customer"
+			if in.GetToken() == "admin-token" {
+				role = "admin"
+			}
+			return &userv1.ValidateTokenResponse{Valid: true, UserId: "u1", Role: role}, nil
+		},
+	}
+	h := gateway.NewHandler(uc, pc, &fakeCartClient{}, &fakeOrderClient{}, testMetrics(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ts := httptest.NewServer(h.Router())
+	t.Cleanup(ts.Close)
+
+	del := func(token string) int {
+		req, err := http.NewRequest(http.MethodDelete, ts.URL+"/products/p1", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("DELETE: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	if got := del("admin-token"); got != http.StatusNoContent {
+		t.Errorf("admin: status = %d, want 204", got)
+	}
+	if gotID != "p1" {
+		t.Errorf("forwarded id = %q, want p1", gotID)
+	}
+	if got := del("customer-token"); got != http.StatusForbidden {
 		t.Errorf("customer: status = %d, want 403", got)
 	}
 }

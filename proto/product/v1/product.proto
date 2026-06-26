@@ -8,6 +8,7 @@ package product.v1;
 service ProductService {
   rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
   rpc UpdateProduct(UpdateProductRequest) returns (UpdateProductResponse);
+  rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse); // soft delete (archive)
   rpc GetProduct(GetProductRequest) returns (GetProductResponse);
   rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
 
@@ -86,6 +87,13 @@ message UpdateProductRequest {
 message UpdateProductResponse {
   Product product = 1;
 }
+
+// Soft delete: archives the product so it leaves the catalog while its rows (and
+// the order/reservation references to them) survive. Not reversible from the API.
+message DeleteProductRequest {
+  string id = 1;
+}
+message DeleteProductResponse {}
 
 message GetProductRequest {
   string product_id = 1;
