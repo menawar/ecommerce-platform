@@ -106,6 +106,10 @@ export default async function ProductsPage({
               borderBottom: "1px solid var(--plt-border-heavy)",
             }}
           >
+            {/* Carry the active sort through a search so the two filters compose. */}
+            {sort && sort !== "featured" && (
+              <input type="hidden" name="sort" value={sort} />
+            )}
             <input
               type="search"
               name="q"
@@ -390,13 +394,13 @@ export default async function ProductsPage({
               fontSize: 13,
             }}
           >
-            <PageLink q={q} page={page - 1} disabled={page <= 1}>
+            <PageLink q={q} sort={sort} page={page - 1} disabled={page <= 1}>
               ← Prev
             </PageLink>
             <span style={{ color: "var(--plt-text-secondary)" }}>
               Page {page} of {totalPages} · {total} items
             </span>
-            <PageLink q={q} page={page + 1} disabled={page >= totalPages}>
+            <PageLink q={q} sort={sort} page={page + 1} disabled={page >= totalPages}>
               Next →
             </PageLink>
           </nav>
@@ -408,11 +412,13 @@ export default async function ProductsPage({
 
 function PageLink({
   q,
+  sort,
   page,
   disabled,
   children,
 }: {
   q: string;
+  sort: string;
   page: number;
   disabled: boolean;
   children: React.ReactNode;
@@ -423,6 +429,8 @@ function PageLink({
     );
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
+  // Keep the active sort across pages; "featured" is the default, so omit it.
+  if (sort && sort !== "featured") qs.set("sort", sort);
   qs.set("page", String(page));
   return (
     <Link
