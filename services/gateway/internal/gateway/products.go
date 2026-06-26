@@ -124,6 +124,53 @@ func (h *Handler) createProduct(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toProductDTO(resp.GetProduct()))
 }
 
+// updateProductRequest is the admin JSON body for PATCH /products/{id}. It's a
+// full-replace of the mutable fields plus an absolute stock level; sku is omitted
+// (immutable). The Product service owns validation, so bad input flows back as
+// 400/404/422 via writeGRPCError.
+type updateProductRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	PriceCents  int64  `json:"price_cents"`
+	Currency    string `json:"currency"`
+	CategoryID  string `json:"category_id"`
+	ImageURL    string `json:"image_url"`
+	// Pointer so an omitted/null quantity is distinguishable from 0: nil means
+	// "leave stock unchanged" (forwarded as the service's negative sentinel), so a
+	// caller editing only catalog fields can't accidentally zero out inventory.
+	Quantity *int32 `json:"quantity"`
+}
+
+// updateProduct: PATCH /products/{id} (admin only). Decodes the body, forwards to
+// UpdateProduct, returns the updated product.
+func (h *Handler) updateProduct(w http.ResponseWriter, r *http.Request) {
+	var req updateProductRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	quantity := int32(-1) // default: leave inventory unchanged
+	if req.Quantity != nil {
+		quantity = *req.Quantity
+	}
+	resp, err := h.products.UpdateProduct(r.Context(), &productv1.UpdateProductRequest{
+		Id:          chi.URLParam(r, "id"),
+		Name:        req.Name,
+		Description: req.Description,
+		PriceCents:  req.PriceCents,
+		Currency:    req.Currency,
+		CategoryId:  req.CategoryID,
+		ImageUrl:    req.ImageURL,
+		Quantity:    quantity,
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toProductDTO(resp.GetProduct()))
+}
+
 func atoiOrZero(s string) int {
 	n, _ := strconv.Atoi(s) // err -> 0, which the service treats as "use default"
 	return n

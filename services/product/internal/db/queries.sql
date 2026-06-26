@@ -18,6 +18,22 @@ RETURNING *;
 SELECT * FROM products
 WHERE id = $1;
 
+-- name: UpdateProduct :one
+-- Full-replace of the mutable catalog fields (sku is immutable, so it's not here).
+UPDATE products
+SET name = $2, description = $3, price_cents = $4, currency = $5, category_id = $6, image_url = $7
+WHERE id = $1
+RETURNING *;
+
+-- name: SetInventoryQuantity :one
+-- Absolute restock. The inventory_reserved_le_quantity CHECK rejects a level below
+-- the currently reserved units; version is bumped so this composes with the
+-- reserve optimistic-lock. Returns the row so the caller can recompute available.
+UPDATE inventory
+SET quantity = $2, version = version + 1
+WHERE product_id = $1
+RETURNING *;
+
 -- name: CountProducts :one
 -- Total matching the SAME filters as ListProductsWithInventory, so a page can
 -- report the overall total. ILIKE is case-insensitive LIKE; the value is a bound

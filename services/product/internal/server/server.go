@@ -104,6 +104,86 @@ func (s *Server) CreateProduct(ctx context.Context, req *productv1.CreateProduct
 	}, nil
 }
 
+// UpdateProduct full-replaces a product's mutable fields and sets an absolute new
+// stock level, in ONE transaction so the catalog row and inventory never disagree.
+// sku is immutable (not in the request). Setting stock below the reserved units is
+// rejected by the DB CHECK and surfaced as FailedPrecondition.
+func (s *Server) UpdateProduct(ctx context.Context, req *productv1.UpdateProductRequest) (*productv1.UpdateProductResponse, error) {
+	id, err := parseRequiredUUID(req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid id")
+	}
+	if req.GetName() == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if req.GetPriceCents() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "price_cents must be non-negative")
+	}
+	// quantity < 0 is the "leave inventory unchanged" sentinel (so editing catalog
+	// fields needn't know — or disturb — the current stock level).
+	categoryID, err := parseOptionalUUID(req.GetCategoryId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid category_id")
+	}
+
+	currency := req.GetCurrency()
+	if currency == "" {
+		currency = "NGN"
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, s.internal(ctx, "begin tx", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.q.WithTx(tx)
+
+	product, err := qtx.UpdateProduct(ctx, db.UpdateProductParams{
+		ID:          id,
+		Name:        req.GetName(),
+		Description: req.GetDescription(),
+		PriceCents:  req.GetPriceCents(),
+		Currency:    currency,
+		CategoryID:  categoryID,
+		ImageUrl:    req.GetImageUrl(),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "product not found")
+		}
+		return nil, s.internal(ctx, "update product", err)
+	}
+
+	// Touch inventory only when a non-negative quantity was supplied; otherwise read
+	// the current row so the response still reports the right available count.
+	var available int32
+	if q := req.GetQuantity(); q >= 0 {
+		inv, err := qtx.SetInventoryQuantity(ctx, db.SetInventoryQuantityParams{ProductID: id, Quantity: q})
+		if err != nil {
+			if isCheckViolation(err) {
+				return nil, status.Error(codes.FailedPrecondition, "cannot set stock below the currently reserved units")
+			}
+			return nil, s.internal(ctx, "set inventory quantity", err)
+		}
+		available = inv.Quantity - inv.Reserved
+	} else {
+		inv, err := qtx.GetInventory(ctx, id)
+		if err != nil {
+			return nil, s.internal(ctx, "get inventory", err)
+		}
+		available = inv.Quantity - inv.Reserved
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, s.internal(ctx, "commit tx", err)
+	}
+
+	s.log.InfoContext(ctx, "updated product", "product_id", uuidString(product.ID))
+	return &productv1.UpdateProductResponse{
+		Product: productFromModel(product, available),
+	}, nil
+}
+
 func (s *Server) GetProduct(ctx context.Context, req *productv1.GetProductRequest) (*productv1.GetProductResponse, error) {
 	id, err := parseRequiredUUID(req.GetProductId())
 	if err != nil {
@@ -192,6 +272,13 @@ func (s *Server) internal(ctx context.Context, msg string, err error) error {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// isCheckViolation reports whether err is a Postgres CHECK-constraint violation
+// (SQLSTATE 23514) — e.g. setting inventory.quantity below reserved.
+func isCheckViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514"
 }
 
 // --- pgtype <-> proto mappers ---
