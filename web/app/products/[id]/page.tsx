@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProduct, GatewayError } from "@/lib/gateway";
+import { getProduct, listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
 import { addToCartAction } from "@/app/cart/actions";
 
@@ -21,31 +21,263 @@ export default async function ProductDetail({
     throw err;
   }
 
-  return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <Link href="/products" className="text-sm text-zinc-500 underline">
-        ← Back to products
-      </Link>
-      <h1 className="mt-4 text-3xl font-semibold">{product.name}</h1>
-      <p className="mt-2 text-xl">{formatPrice(product.price_cents, product.currency)}</p>
-      <p className="mt-1 text-sm text-zinc-500">SKU {product.sku}</p>
-      <p className="mt-1 text-sm text-zinc-500">
-        {product.available > 0 ? `${product.available} in stock` : "Out of stock"}
-      </p>
-      {product.description && <p className="mt-6 text-zinc-700">{product.description}</p>}
+  // Fetch related products
+  let related: Awaited<ReturnType<typeof listProducts>>["products"] = [];
+  try {
+    const result = await listProducts({ page: 1, pageSize: 4 });
+    related = result.products.filter((p) => p.id !== product.id).slice(0, 4);
+  } catch {
+    // silently skip related products if fetch fails
+  }
 
-      {/* Add-to-cart is a plain form bound to a Server Action. A logged-out user's
-          request 401s at the gateway and the action redirects them to /login. */}
-      <form action={addToCartAction} className="mt-8">
-        <input type="hidden" name="product_id" value={product.id} />
-        <input type="hidden" name="quantity" value="1" />
-        <button
-          disabled={product.available <= 0}
-          className="rounded-md bg-foreground px-4 py-2 font-medium text-background disabled:opacity-50"
+  return (
+    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+      {/* Back link */}
+      <Link
+        href="/products"
+        style={{
+          fontSize: 13,
+          color: "var(--plt-terracotta)",
+          fontWeight: 600,
+          textDecoration: "none",
+          display: "inline-block",
+          marginBottom: 16,
+        }}
+      >
+        ‹ Back to results
+      </Link>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 30,
+          flexWrap: "wrap",
+          alignItems: "flex-start",
+        }}
+      >
+        {/* ── Left: Images ─────────────────────────────────────────────── */}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 300,
+            display: "flex",
+            gap: 14,
+          }}
         >
-          {product.available > 0 ? "Add to cart" : "Out of stock"}
-        </button>
-      </form>
+          {/* Thumbnails */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="plt-img-thumb" />
+            ))}
+          </div>
+
+          {/* Main image */}
+          <div className="plt-img-placeholder-lg" style={{ flex: 1 }}>
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontSize: 12,
+                color: "var(--plt-text-muted)",
+              }}
+            >
+              {product.sku}
+            </span>
+          </div>
+        </div>
+
+        {/* ── Right: Product info ──────────────────────────────────────── */}
+        <div style={{ width: 380, flex: "0 0 380px" }}>
+          <h1
+            style={{
+              fontSize: 24,
+              fontWeight: 800,
+              lineHeight: 1.2,
+              margin: 0,
+            }}
+          >
+            {product.name}
+          </h1>
+          <div
+            style={{
+              fontSize: 13,
+              color: "var(--plt-text-secondary)",
+              margin: "7px 0",
+            }}
+          >
+            SKU <b style={{ color: "var(--plt-text)" }}>{product.sku}</b>
+          </div>
+          <div className="plt-stars" style={{ fontSize: 14 }}>
+            ★★★★★{" "}
+            <span style={{ color: "var(--plt-terracotta)" }}>
+              {product.available} in stock
+            </span>
+          </div>
+
+          {/* Price section */}
+          <div
+            style={{
+              borderTop: "1px solid var(--plt-border-heavy)",
+              margin: "16px 0",
+              paddingTop: 16,
+              display: "flex",
+              alignItems: "baseline",
+              gap: 10,
+            }}
+          >
+            <span style={{ fontSize: 32, fontWeight: 800 }}>
+              {formatPrice(product.price_cents, product.currency)}
+            </span>
+          </div>
+
+          <div
+            style={{
+              fontSize: 14,
+              color: "var(--plt-green-text)",
+              fontWeight: 700,
+              marginBottom: 4,
+            }}
+          >
+            {product.available > 0 ? "In stock · harvested fresh" : "Out of stock"}
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "var(--plt-text-secondary)",
+              marginBottom: 18,
+            }}
+          >
+            Delivered this week across Jos &amp; Plateau. Free delivery on bulk
+            orders over ₦50,000.
+          </div>
+
+          {/* Add to cart / Buy now */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            {/* Add-to-cart is a plain form bound to a Server Action. A logged-out user's
+                request 401s at the gateway and the action redirects them to /login. */}
+            <form action={addToCartAction}>
+              <input type="hidden" name="product_id" value={product.id} />
+              <input type="hidden" name="quantity" value="1" />
+              <button
+                disabled={product.available <= 0}
+                className="plt-btn-primary-lg"
+                style={{ width: "100%" }}
+              >
+                {product.available > 0 ? "Add to cart" : "Out of stock"}
+              </button>
+            </form>
+          </div>
+
+          {/* About this produce */}
+          <div
+            style={{
+              borderTop: "1px solid var(--plt-border-heavy)",
+              marginTop: 20,
+              paddingTop: 16,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>
+              About this product
+            </div>
+            {product.description && (
+              <div
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  color: "#3d444c",
+                }}
+              >
+                {product.description}
+              </div>
+            )}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                marginTop: 12,
+                fontSize: 13,
+                color: "#3d444c",
+              }}
+            >
+              <div>✓ Freshly harvested &amp; graded for quality</div>
+              <div>✓ SKU {product.sku}</div>
+              <div>✓ Cold-chain handled to keep it farm-fresh</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── You might also like ─────────────────────────────────────────── */}
+      {related.length > 0 && (
+        <div className="plt-card" style={{ marginTop: 26 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>
+            You might also like
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(186px, 1fr))",
+              gap: 16,
+            }}
+          >
+            {related.map((p) => (
+              <Link
+                key={p.id}
+                href={`/products/${p.id}`}
+                style={{
+                  background: "var(--plt-card)",
+                  border: "1px solid var(--plt-border)",
+                  borderRadius: "var(--plt-radius-md)",
+                  padding: 14,
+                  display: "flex",
+                  flexDirection: "column",
+                  textDecoration: "none",
+                  color: "var(--plt-text)",
+                }}
+              >
+                <div className="plt-img-placeholder">
+                  <span
+                    style={{
+                      fontFamily: "monospace",
+                      fontSize: 10,
+                      color: "var(--plt-text-muted)",
+                    }}
+                  >
+                    {p.sku}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.3,
+                    margin: "11px 0 6px",
+                    height: 34,
+                    overflow: "hidden",
+                  }}
+                >
+                  {p.name}
+                </div>
+                <div className="plt-stars">★★★★★</div>
+                <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6 }}>
+                  {formatPrice(p.price_cents, p.currency)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

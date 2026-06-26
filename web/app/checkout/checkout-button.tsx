@@ -17,13 +17,23 @@ export function CheckoutButton() {
   const [state, formAction, pending] = useActionState<CheckoutState, FormData>(placeOrderAction, null);
 
   return (
-    <form action={formAction} className="mt-6">
+    <form action={formAction} style={{ marginTop: 16 }}>
       <input type="hidden" name="idempotency_key" value={idempotencyKey} />
-      {state?.error && <p className="mb-3 text-sm text-red-600">{state.error}</p>}
-      <button
-        disabled={pending}
-        className="rounded-md bg-foreground px-5 py-2.5 font-medium text-background disabled:opacity-60"
-      >
+      {state?.error && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--plt-error)",
+            background: "var(--plt-error-bg)",
+            padding: "10px 12px",
+            borderRadius: "var(--plt-radius-sm)",
+            marginBottom: 12,
+          }}
+        >
+          {state.error}
+        </div>
+      )}
+      <button disabled={pending} className="plt-btn-gold">
         {pending ? "Placing order…" : "Place order"}
       </button>
     </form>

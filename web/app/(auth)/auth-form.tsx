@@ -20,13 +20,21 @@ export function AuthForm({
   const isRegister = mode === "register";
 
   return (
-    <form action={formAction} className="mt-6 flex flex-col gap-3">
+    <form
+      action={formAction}
+      style={{
+        marginTop: 24,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
       {isRegister && (
         <input
           name="full_name"
           required
           placeholder="Full name"
-          className="rounded-md border border-zinc-300 px-3 py-2"
+          className="plt-input"
         />
       )}
       <input
@@ -35,7 +43,7 @@ export function AuthForm({
         required
         placeholder="Email"
         autoComplete="email"
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="plt-input"
       />
       <input
         name="password"
@@ -44,30 +52,61 @@ export function AuthForm({
         minLength={8}
         placeholder="Password (min 8 chars)"
         autoComplete={isRegister ? "new-password" : "current-password"}
-        className="rounded-md border border-zinc-300 px-3 py-2"
+        className="plt-input"
       />
 
-      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state.error && (
+        <div
+          style={{
+            fontSize: 13,
+            color: "var(--plt-error)",
+            background: "var(--plt-error-bg)",
+            padding: "10px 12px",
+            borderRadius: "var(--plt-radius-sm)",
+          }}
+        >
+          {state.error}
+        </div>
+      )}
 
       <button
         disabled={pending}
-        className="rounded-md bg-foreground px-4 py-2 font-medium text-background disabled:opacity-60"
+        className="plt-btn-primary-lg"
+        style={{ width: "100%", marginTop: 4 }}
       >
         {pending ? "Please wait…" : isRegister ? "Create account" : "Sign in"}
       </button>
 
-      <p className="text-sm text-zinc-500">
+      <p
+        style={{
+          fontSize: 13,
+          color: "var(--plt-text-secondary)",
+          textAlign: "center",
+        }}
+      >
         {isRegister ? (
           <>
             Already have an account?{" "}
-            <Link href="/login" className="underline">
+            <Link
+              href="/login"
+              style={{
+                color: "var(--plt-terracotta)",
+                fontWeight: 600,
+              }}
+            >
               Sign in
             </Link>
           </>
         ) : (
           <>
             New here?{" "}
-            <Link href="/register" className="underline">
+            <Link
+              href="/register"
+              style={{
+                color: "var(--plt-terracotta)",
+                fontWeight: 600,
+              }}
+            >
               Create an account
             </Link>
           </>
