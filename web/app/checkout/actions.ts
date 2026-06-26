@@ -28,6 +28,11 @@ export async function placeOrderAction(_prev: CheckoutState, formData: FormData)
   // customer there to authorize payment. The PSP redirects them back to the order
   // page, which polls until the webhook settles the order to CONFIRMED/CANCELLED.
   if (res.authorization_url) {
+    // A relative URL is the in-app mock-PSP simulator (dev only); thread the order
+    // id so it can return the customer. A real PSP returns an absolute URL.
+    if (res.authorization_url.startsWith("/")) {
+      redirect(`${res.authorization_url}?order=${res.order_id}`);
+    }
     redirect(res.authorization_url);
   }
 

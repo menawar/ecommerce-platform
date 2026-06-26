@@ -58,11 +58,13 @@ var _ AsyncProvider = Mock{}
 const mockRefPrefix = "mock_pi_"
 
 // Initialize always "creates" the transaction (the customer hasn't paid yet, so
-// there's nothing to decline here). It returns a fake authorization URL and a
-// reference with the amount baked in for Verify to read back.
+// there's nothing to decline here). It returns a RELATIVE authorization URL — an
+// in-app dev simulator page — and a reference with the amount baked in for Verify
+// to read back. A real PSP returns an absolute https URL; the web BFF distinguishes
+// the two (relative => internal mock page) when it redirects the customer.
 func (Mock) Initialize(_ context.Context, amountCents int64, _, _, _ string) (string, string, error) {
 	ref := fmt.Sprintf("%s%d_%s", mockRefPrefix, amountCents, uuid.NewString())
-	return "https://mock-psp.local/checkout/" + ref, ref, nil
+	return "/checkout/pay/" + ref, ref, nil
 }
 
 // Verify decodes the amount from the reference and applies the same %100==13 rule
