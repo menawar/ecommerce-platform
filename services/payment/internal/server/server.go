@@ -32,14 +32,13 @@ type Server struct {
 	paymentv1.UnimplementedPaymentServiceServer
 	pool         *pgxpool.Pool
 	q            *db.Queries
-	provider     provider.Provider      // legacy synchronous charge (CreatePayment)
 	async        provider.AsyncProvider // redirect+webhook charge (InitializePayment)
-	providerName string                 // provider name stored on async payment rows
+	providerName string                 // provider name stored on payment rows
 	log          *slog.Logger
 }
 
-func NewServer(pool *pgxpool.Pool, prov provider.Provider, log *slog.Logger) *Server {
-	return &Server{pool: pool, q: db.New(pool), provider: prov, log: log}
+func NewServer(pool *pgxpool.Pool, log *slog.Logger) *Server {
+	return &Server{pool: pool, q: db.New(pool), log: log}
 }
 
 // WithAsync configures the asynchronous (redirect+webhook) provider used by
@@ -50,76 +49,8 @@ func (s *Server) WithAsync(name string, a provider.AsyncProvider) *Server {
 	return s
 }
 
-func (s *Server) CreatePayment(ctx context.Context, req *paymentv1.CreatePaymentRequest) (*paymentv1.CreatePaymentResponse, error) {
-	orderID, err := uuid.Parse(req.GetOrderId())
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "order_id must be a UUID")
-	}
-	if req.GetIdempotencyKey() == "" {
-		return nil, status.Error(codes.InvalidArgument, "idempotency_key is required")
-	}
-	if req.GetAmountCents() < 0 {
-		return nil, status.Error(codes.InvalidArgument, "amount_cents must be non-negative")
-	}
-
-	// Fast path: this key was already processed -> return the original result. This
-	// is the common retry case (the saga re-calls after a timeout).
-	if existing, err := s.q.GetPaymentByIdempotencyKey(ctx, req.GetIdempotencyKey()); err == nil {
-		return &paymentv1.CreatePaymentResponse{PaymentId: uuidStr(existing.ID), Status: existing.Status}, nil
-	} else if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, s.internal(ctx, "lookup payment by key", err)
-	}
-
-	// Claim the key by inserting a PENDING row BEFORE charging. The UNIQUE
-	// constraint means a concurrent request with the same key loses here and reads
-	// the winner's row instead of charging a second time.
-	pending, err := s.q.CreatePayment(ctx, db.CreatePaymentParams{
-		OrderID:        pgtype.UUID{Bytes: orderID, Valid: true},
-		AmountCents:    req.GetAmountCents(),
-		Currency:       currencyOrDefault(req.GetCurrency()),
-		Status:         statusPending,
-		Provider:       provider.NameMock,
-		IdempotencyKey: req.GetIdempotencyKey(),
-	})
-	if err != nil {
-		if isUniqueViolation(err) {
-			existing, gerr := s.q.GetPaymentByIdempotencyKey(ctx, req.GetIdempotencyKey())
-			if gerr == nil {
-				return &paymentv1.CreatePaymentResponse{PaymentId: uuidStr(existing.ID), Status: existing.Status}, nil
-			}
-		}
-		return nil, s.internal(ctx, "claim payment", err)
-	}
-
-	// We own this key: charge exactly once.
-	ref, chargeErr := s.provider.Charge(ctx, req.GetAmountCents(), pending.Currency, req.GetOrderId())
-	newStatus := statusSucceeded
-	var providerRef *string
-	switch {
-	case chargeErr == nil:
-		providerRef = &ref
-	case errors.Is(chargeErr, provider.ErrDeclined):
-		newStatus = statusFailed // a normal decline — the saga compensates
-	default:
-		// Unexpected provider/infra error: leave the row pending and surface it.
-		return nil, s.internal(ctx, "charge", chargeErr)
-	}
-
-	updated, err := s.q.UpdatePaymentResult(ctx, db.UpdatePaymentResultParams{
-		ID:          pending.ID,
-		Status:      newStatus,
-		ProviderRef: providerRef,
-	})
-	if err != nil {
-		return nil, s.internal(ctx, "update payment result", err)
-	}
-
-	s.log.InfoContext(ctx, "processed payment", "payment_id", uuidStr(updated.ID), "status", updated.Status)
-	return &paymentv1.CreatePaymentResponse{PaymentId: uuidStr(updated.ID), Status: updated.Status}, nil
-}
-
 // InitializePayment starts an asynchronous charge with the redirect-based PSP. It
-// claims the idempotency key with a PENDING row (exactly like CreatePayment), asks
+// claims the idempotency key with a PENDING row, asks
 // the provider for an authorization URL, and saves the provider reference so a
 // later webhook can find this payment. The terminal status arrives via the webhook,
 // NOT here — this returns 'pending'.

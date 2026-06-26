@@ -3,13 +3,10 @@ syntax = "proto3";
 package payment.v1;
 
 // PaymentService processes charges. It runs in mock mode by default (a
-// deterministic MockProvider); the real adapter is Paystack (NGN). Both
-// CreatePayment and InitializePayment are idempotent on idempotency_key — the
-// Order saga may retry, and a retry must never charge twice.
+// deterministic MockProvider); the real adapter is Paystack (NGN).
+// InitializePayment is idempotent on idempotency_key — the Order saga may retry,
+// and a retry must never charge twice.
 service PaymentService {
-  // CreatePayment is the legacy SYNCHRONOUS charge (MockProvider). Kept while the
-  // saga migrates to the async flow below; retired once it does.
-  rpc CreatePayment(CreatePaymentRequest) returns (CreatePaymentResponse);
   // InitializePayment starts an ASYNCHRONOUS charge with a redirect-based PSP
   // (Paystack): it returns an authorization_url to send the customer to and a
   // payment in 'pending'. The real outcome arrives later via webhook.
@@ -26,17 +23,6 @@ message Payment {
   string provider = 6;     // mock | paystack
   string provider_ref = 7; // the provider's charge reference
   int64 created_at = 8;
-}
-
-message CreatePaymentRequest {
-  string order_id = 1;
-  int64 amount_cents = 2;
-  string currency = 3;
-  string idempotency_key = 4;
-}
-message CreatePaymentResponse {
-  string payment_id = 1;
-  string status = 2; // succeeded | failed (terminal after processing)
 }
 
 message InitializePaymentRequest {

@@ -6,17 +6,12 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 )
-
-// ErrDeclined is a normal business outcome (the charge was refused), not a fault.
-// The saga compensates on it (release stock, cancel order).
-var ErrDeclined = errors.New("payment: declined by provider")
 
 // Name constants stored on the payment row.
 const (
@@ -31,16 +26,6 @@ const (
 	StatusSucceeded = "succeeded"
 	StatusFailed    = "failed"
 )
-
-// Provider charges an amount and returns the provider's reference for the charge.
-// ref is a caller-supplied correlation id (we pass the order id).
-//
-// This is the SYNCHRONOUS model: the result is known when Charge returns. It fits
-// the MockProvider but not a real redirect-based PSP — see AsyncProvider, which
-// the service is migrating to.
-type Provider interface {
-	Charge(ctx context.Context, amountCents int64, currency, ref string) (providerRef string, err error)
-}
 
 // AsyncProvider is the redirect+webhook model that real PSPs (Paystack,
 // Flutterwave, …) use: Initialize creates a transaction the customer authorizes
@@ -57,28 +42,14 @@ type AsyncProvider interface {
 	Verify(ctx context.Context, providerRef string) (statusValue string, err error)
 }
 
-// Mock is a deterministic provider for local/dev and tests. It implements BOTH
-// Provider (legacy sync) and AsyncProvider (the new model) so the service can
-// migrate one step at a time while staying runnable offline.
+// Mock is a deterministic AsyncProvider for local/dev and tests — it lets the saga
+// run and the decline path stay testable, offline, without real money.
 type Mock struct{}
 
 func NewMock() Mock { return Mock{} }
 
-// Compile-time checks: Mock bridges both models.
-var (
-	_ Provider      = Mock{}
-	_ AsyncProvider = Mock{}
-)
-
-// Charge succeeds for every amount EXCEPT those where amountCents % 100 == 13
-// (e.g. a total ending in .13). That one rule lets a test — or the UI — force a
-// decline on demand and exercise the compensation path, with zero randomness.
-func (Mock) Charge(_ context.Context, amountCents int64, _ string, _ string) (string, error) {
-	if amountCents%100 == 13 {
-		return "", ErrDeclined
-	}
-	return "mock_" + uuid.NewString(), nil
-}
+// Compile-time check.
+var _ AsyncProvider = Mock{}
 
 // mockRefPrefix tags references Mock.Initialize mints. The amount is encoded into
 // the reference so Verify can re-apply the deterministic %100==13 decline rule

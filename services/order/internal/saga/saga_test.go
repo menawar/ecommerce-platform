@@ -94,9 +94,6 @@ func (f *fakePayment) InitializePayment(_ context.Context, in *paymentv1.Initial
 		AuthorizationUrl: "https://pay.test/" + in.GetOrderId(),
 	}, nil
 }
-func (f *fakePayment) CreatePayment(context.Context, *paymentv1.CreatePaymentRequest, ...grpc.CallOption) (*paymentv1.CreatePaymentResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
 func (f *fakePayment) GetPayment(context.Context, *paymentv1.GetPaymentRequest, ...grpc.CallOption) (*paymentv1.GetPaymentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }

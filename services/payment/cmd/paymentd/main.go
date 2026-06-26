@@ -111,10 +111,9 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryRecovery(log)),
 	)
-	// The legacy sync path stays on Mock (the saga still calls CreatePayment until
-	// it migrates); the async path uses the selected provider (mock|paystack).
+	// The payment provider (mock|paystack) drives the async charge + webhook flow.
 	asyncName, asyncProv := buildAsyncProvider(cfg, log)
-	paymentSrv := server.NewServer(pool, provider.NewMock(), log).WithAsync(asyncName, asyncProv)
+	paymentSrv := server.NewServer(pool, log).WithAsync(asyncName, asyncProv)
 	paymentv1.RegisterPaymentServiceServer(grpcServer, paymentSrv)
 	reflection.Register(grpcServer)
 

@@ -44,7 +44,7 @@ func newAsyncServer(t *testing.T) (*server.Server, *pgxpool.Pool) {
 			t.Skipf("skipping (paymentdb not migrated for outbox; run `make payment-migrate-up`): %v", err)
 		}
 	}
-	srv := server.NewServer(pool, provider.NewMock(), slog.New(slog.NewTextHandler(io.Discard, nil))).
+	srv := server.NewServer(pool, slog.New(slog.NewTextHandler(io.Discard, nil))).
 		WithAsync(provider.NameMock, provider.NewMock())
 	return srv, pool
 }
