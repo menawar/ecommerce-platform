@@ -1,5 +1,6 @@
 # Compiled binaries / build output
 /bin/
+/healthcheck
 *.exe
 *.test
 *.out
@@ -15,3 +16,6 @@ go.work.sum
 .DS_Store
 .idea/
 .vscode/
+
+# Stray design export kept locally for reference, not part of the app
+web/E-commerce platform frontend design (2)/
