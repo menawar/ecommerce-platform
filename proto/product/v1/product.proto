@@ -7,6 +7,7 @@ package product.v1;
 // never read its tables directly.
 service ProductService {
   rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
+  rpc UpdateProduct(UpdateProductRequest) returns (UpdateProductResponse);
   rpc GetProduct(GetProductRequest) returns (GetProductResponse);
   rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
 
@@ -66,6 +67,23 @@ message CreateProductRequest {
   string image_url = 8;         // optional; stored as-is
 }
 message CreateProductResponse {
+  Product product = 1;
+}
+
+// Full-replace update of a product's mutable fields plus an absolute stock level.
+// sku is intentionally absent — it's the immutable identifier. quantity is the new
+// absolute inventory level; setting it below the currently reserved units fails.
+message UpdateProductRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int64 price_cents = 4;
+  string currency = 5;      // defaults to NGN if empty
+  string category_id = 6;   // optional; empty = uncategorized
+  string image_url = 7;     // optional
+  int32 quantity = 8;       // absolute new stock level; negative = leave unchanged
+}
+message UpdateProductResponse {
   Product product = 1;
 }
 

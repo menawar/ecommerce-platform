@@ -412,6 +412,33 @@ func (q *Queries) ReserveInventory(ctx context.Context, arg ReserveInventoryPara
 	return result.RowsAffected(), nil
 }
 
+const setInventoryQuantity = `-- name: SetInventoryQuantity :one
+UPDATE inventory
+SET quantity = $2, version = version + 1
+WHERE product_id = $1
+RETURNING product_id, quantity, reserved, version
+`
+
+type SetInventoryQuantityParams struct {
+	ProductID pgtype.UUID
+	Quantity  int32
+}
+
+// Absolute restock. The inventory_reserved_le_quantity CHECK rejects a level below
+// the currently reserved units; version is bumped so this composes with the
+// reserve optimistic-lock. Returns the row so the caller can recompute available.
+func (q *Queries) SetInventoryQuantity(ctx context.Context, arg SetInventoryQuantityParams) (Inventory, error) {
+	row := q.db.QueryRow(ctx, setInventoryQuantity, arg.ProductID, arg.Quantity)
+	var i Inventory
+	err := row.Scan(
+		&i.ProductID,
+		&i.Quantity,
+		&i.Reserved,
+		&i.Version,
+	)
+	return i, err
+}
+
 const setReservationStatus = `-- name: SetReservationStatus :exec
 UPDATE stock_reservations SET status = $2 WHERE id = $1
 `
@@ -424,4 +451,47 @@ type SetReservationStatusParams struct {
 func (q *Queries) SetReservationStatus(ctx context.Context, arg SetReservationStatusParams) error {
 	_, err := q.db.Exec(ctx, setReservationStatus, arg.ID, arg.Status)
 	return err
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET name = $2, description = $3, price_cents = $4, currency = $5, category_id = $6, image_url = $7
+WHERE id = $1
+RETURNING id, sku, name, description, price_cents, currency, category_id, created_at, image_url
+`
+
+type UpdateProductParams struct {
+	ID          pgtype.UUID
+	Name        string
+	Description string
+	PriceCents  int64
+	Currency    string
+	CategoryID  pgtype.UUID
+	ImageUrl    string
+}
+
+// Full-replace of the mutable catalog fields (sku is immutable, so it's not here).
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, updateProduct,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.PriceCents,
+		arg.Currency,
+		arg.CategoryID,
+		arg.ImageUrl,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Sku,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Currency,
+		&i.CategoryID,
+		&i.CreatedAt,
+		&i.ImageUrl,
+	)
+	return i, err
 }

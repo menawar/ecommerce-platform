@@ -119,3 +119,23 @@ export async function createProduct(input: CreateProductInput): Promise<Product>
     body: JSON.stringify(input),
   });
 }
+
+// UpdateProductInput full-replaces the mutable fields. quantity is optional: omit
+// it to leave stock untouched (the gateway forwards that as "leave unchanged"), or
+// set it to an absolute new level.
+export type UpdateProductInput = {
+  name: string;
+  description: string;
+  price_cents: number;
+  currency: string;
+  category_id: string;
+  image_url: string;
+  quantity?: number;
+};
+
+export async function updateProduct(id: string, input: UpdateProductInput): Promise<Product> {
+  return gatewayFetch<Product>(`/products/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}

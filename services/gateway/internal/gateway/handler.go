@@ -108,6 +108,7 @@ func (h *Handler) Router() http.Handler {
 		ar.Use(h.requireAuth)
 		ar.Use(h.requireAdmin)
 		ar.Post("/products", h.createProduct)
+		ar.Patch("/products/{id}", h.updateProduct)
 	})
 
 	return r

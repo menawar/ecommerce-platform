@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { listProducts, GatewayError } from "@/lib/gateway";
@@ -79,6 +80,7 @@ export default async function AdminProductsPage() {
                   <th style={{ padding: "8px 6px" }}>SKU</th>
                   <th style={{ padding: "8px 6px", textAlign: "right" }}>Price</th>
                   <th style={{ padding: "8px 6px", textAlign: "right" }}>Stock</th>
+                  <th style={{ padding: "8px 6px", textAlign: "right" }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -90,6 +92,14 @@ export default async function AdminProductsPage() {
                       {formatPrice(p.price_cents, p.currency)}
                     </td>
                     <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.available}</td>
+                    <td style={{ padding: "8px 6px", textAlign: "right" }}>
+                      <Link
+                        href={`/admin/products/${p.id}/edit`}
+                        style={{ color: "var(--plt-terracotta)", textDecoration: "none", fontWeight: 600 }}
+                      >
+                        Edit
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

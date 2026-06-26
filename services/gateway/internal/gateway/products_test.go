@@ -25,6 +25,7 @@ type fakeProductClient struct {
 	listFn   func(*productv1.ListProductsRequest) (*productv1.ListProductsResponse, error)
 	getFn    func(*productv1.GetProductRequest) (*productv1.GetProductResponse, error)
 	createFn func(*productv1.CreateProductRequest) (*productv1.CreateProductResponse, error)
+	updateFn func(*productv1.UpdateProductRequest) (*productv1.UpdateProductResponse, error)
 }
 
 var _ productv1.ProductServiceClient = (*fakeProductClient)(nil)
@@ -38,6 +39,12 @@ func (f *fakeProductClient) GetProduct(_ context.Context, in *productv1.GetProdu
 func (f *fakeProductClient) CreateProduct(_ context.Context, in *productv1.CreateProductRequest, _ ...grpc.CallOption) (*productv1.CreateProductResponse, error) {
 	if f.createFn != nil {
 		return f.createFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeProductClient) UpdateProduct(_ context.Context, in *productv1.UpdateProductRequest, _ ...grpc.CallOption) (*productv1.UpdateProductResponse, error) {
+	if f.updateFn != nil {
+		return f.updateFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "unused")
 }
@@ -174,6 +181,60 @@ func TestCreateProduct_AdminGate(t *testing.T) {
 	}
 	if status, _ := post(""); status != http.StatusUnauthorized {
 		t.Errorf("anonymous: status = %d, want 401", status)
+	}
+}
+
+// TestUpdateProduct_AdminGate checks PATCH /products/{id}: an admin updates the
+// product (200, id + fields forwarded), a customer is forbidden (403).
+func TestUpdateProduct_AdminGate(t *testing.T) {
+	var gotReq *productv1.UpdateProductRequest
+	pc := &fakeProductClient{
+		updateFn: func(in *productv1.UpdateProductRequest) (*productv1.UpdateProductResponse, error) {
+			gotReq = in
+			return &productv1.UpdateProductResponse{
+				Product: &productv1.Product{Id: in.GetId(), Name: in.GetName(), PriceCents: in.GetPriceCents(), Available: in.GetQuantity()},
+			}, nil
+		},
+	}
+	uc := &fakeUserClient{
+		validateFn: func(in *userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error) {
+			role := "customer"
+			if in.GetToken() == "admin-token" {
+				role = "admin"
+			}
+			return &userv1.ValidateTokenResponse{Valid: true, UserId: "u1", Role: role}, nil
+		},
+	}
+	h := gateway.NewHandler(uc, pc, &fakeCartClient{}, &fakeOrderClient{}, testMetrics(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ts := httptest.NewServer(h.Router())
+	t.Cleanup(ts.Close)
+
+	const body = `{"name":"Renamed","price_cents":2500,"quantity":12}`
+	patch := func(token string) int {
+		req, err := http.NewRequest(http.MethodPatch, ts.URL+"/products/p1", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("PATCH: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	if got := patch("admin-token"); got != http.StatusOK {
+		t.Errorf("admin: status = %d, want 200", got)
+	}
+	if gotReq.GetId() != "p1" || gotReq.GetName() != "Renamed" || gotReq.GetPriceCents() != 2500 || gotReq.GetQuantity() != 12 {
+		t.Errorf("forwarded update request = %+v", gotReq)
+	}
+	if got := patch("customer-token"); got != http.StatusForbidden {
+		t.Errorf("customer: status = %d, want 403", got)
 	}
 }
 

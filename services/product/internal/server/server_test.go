@@ -203,3 +203,66 @@ func TestListProducts_Sort(t *testing.T) {
 		t.Fatalf("unknown sort should not error: %v", err)
 	}
 }
+
+func TestUpdateProduct(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+
+	created, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
+		Sku: "EDIT-1", Name: "Before", PriceCents: 100, InitialQuantity: 10,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id := created.GetProduct().GetId()
+
+	// Happy path: change fields and restock to an absolute level.
+	upd, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: id, Name: "After", Description: "new", PriceCents: 250, Quantity: 20,
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if p := upd.GetProduct(); p.GetName() != "After" || p.GetPriceCents() != 250 || p.GetAvailable() != 20 {
+		t.Errorf("updated product = %+v", p)
+	}
+	// Change is persisted (read back through a separate RPC).
+	got, err := client.GetProduct(ctx, &productv1.GetProductRequest{ProductId: id})
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.GetProduct().GetName() != "After" || got.GetProduct().GetAvailable() != 20 {
+		t.Errorf("persisted = %+v", got.GetProduct())
+	}
+
+	// quantity < 0 leaves inventory untouched while still updating fields.
+	kept, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: id, Name: "Kept", PriceCents: 250, Quantity: -1,
+	})
+	if err != nil {
+		t.Fatalf("update (leave stock): %v", err)
+	}
+	if p := kept.GetProduct(); p.GetName() != "Kept" || p.GetAvailable() != 20 {
+		t.Errorf("leave-stock update = %+v, want name Kept, available 20", p)
+	}
+
+	// Unknown id -> NotFound.
+	if _, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: uuid.NewString(), Name: "x", PriceCents: 1, Quantity: 1,
+	}); status.Code(err) != codes.NotFound {
+		t.Errorf("unknown id: want NotFound, got %v", err)
+	}
+
+	// Reserve 15 of 20, then setting stock below the reserved units must fail.
+	if _, err := client.ReserveStock(ctx, &productv1.ReserveStockRequest{
+		ReservationId: uuid.NewString(),
+		Items:         []*productv1.ReserveItem{{ProductId: id, Quantity: 15}},
+	}); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if _, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: id, Name: "After", PriceCents: 250, Quantity: 10,
+	}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("set below reserved: want FailedPrecondition, got %v", err)
+	}
+}
