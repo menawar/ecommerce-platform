@@ -20,6 +20,14 @@ UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING *;
 -- name: SetOrderPaymentAndStatus :one
 UPDATE orders SET payment_id = $2, status = $3, updated_at = now() WHERE id = $1 RETURNING *;
 
+-- name: MarkOrderPaymentPending :one
+-- The async "start" half records the initialized payment and its authorization URL
+-- as the order enters PAYMENT_PENDING, awaiting the webhook-driven resume.
+UPDATE orders
+SET status = 'PAYMENT_PENDING', payment_id = $2, authorization_url = $3, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: CreateOrderItem :exec
 INSERT INTO order_items (order_id, product_id, name, price_cents, quantity)
 VALUES ($1, $2, $3, $4, $5);

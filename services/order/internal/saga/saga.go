@@ -22,6 +22,7 @@ import (
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	paymentv1 "github.com/menawar/ecommerce-platform/proto/payment/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
+	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/order/internal/db"
 	"github.com/menawar/ecommerce-platform/services/order/internal/order"
 )
@@ -39,6 +40,7 @@ type Saga struct {
 	carts    cartv1.CartServiceClient
 	products productv1.ProductServiceClient
 	payments paymentv1.PaymentServiceClient
+	users    userv1.UserServiceClient
 	log      *slog.Logger
 }
 
@@ -47,15 +49,19 @@ func New(
 	carts cartv1.CartServiceClient,
 	products productv1.ProductServiceClient,
 	payments paymentv1.PaymentServiceClient,
+	users userv1.UserServiceClient,
 	log *slog.Logger,
 ) *Saga {
-	return &Saga{pool: pool, q: db.New(pool), carts: carts, products: products, payments: payments, log: log}
+	return &Saga{pool: pool, q: db.New(pool), carts: carts, products: products, payments: payments, users: users, log: log}
 }
 
-// Result is what PlaceOrder reports back.
+// Result is what PlaceOrder reports back. In the async flow PlaceOrder returns at
+// PAYMENT_PENDING with an AuthorizationURL; the terminal status arrives later via
+// the payment.* event consumer.
 type Result struct {
-	OrderID string
-	Status  order.Status
+	OrderID          string
+	Status           order.Status
+	AuthorizationURL string
 }
 
 // lineItem is a priced cart line, snapshotted from the Product service.
@@ -157,52 +163,56 @@ func (s *Saga) PlaceOrder(ctx context.Context, userID, idempotencyKey string) (*
 		return nil, s.internal(ctx, "set STOCK_RESERVED", err)
 	}
 
-	// 6. Take payment (idempotent on the same key).
-	if err := s.setStatus(ctx, orderID, order.StatusPaymentPending, "", nil); err != nil {
-		return nil, s.internal(ctx, "set PAYMENT_PENDING", err)
+	// 6. Resolve the customer's email authoritatively from the User service — the
+	// PSP needs it to start the charge and address the receipt. (We never trust a
+	// request-supplied email for this.)
+	usr, err := s.users.GetUser(ctx, &userv1.GetUserRequest{UserId: userID})
+	if err != nil {
+		// Can't initialize a charge without an email; nothing is committed, so
+		// COMPENSATE: release the reservation and cancel.
+		s.log.ErrorContext(ctx, "resolve user email", "err", err, "order_id", orderID)
+		if _, rerr := s.products.ReleaseStock(ctx, &productv1.ReleaseStockRequest{ReservationId: orderID.String()}); rerr != nil {
+			s.log.ErrorContext(ctx, "release stock during compensation", "err", rerr, "order_id", orderID)
+		}
+		return s.cancel(ctx, orderID, ev), nil
 	}
-	pay, err := s.payments.CreatePayment(ctx, &paymentv1.CreatePaymentRequest{
+
+	// 7. Initialize payment with the PSP (idempotent on the same key). This does NOT
+	// charge — it returns a hosted-checkout URL. The terminal outcome arrives later
+	// via the payment.succeeded/payment.failed event, handled by the resume consumer.
+	pay, err := s.payments.InitializePayment(ctx, &paymentv1.InitializePaymentRequest{
 		OrderId:        orderID.String(),
 		AmountCents:    total,
 		Currency:       "NGN",
 		IdempotencyKey: idempotencyKey,
+		Email:          usr.GetEmail(),
 	})
-	if err != nil || pay.GetStatus() != "succeeded" {
-		// 7b. Declined or payment error -> COMPENSATE: release the reservation, cancel.
+	if err != nil {
+		// Couldn't even start the charge -> COMPENSATE: release the reservation, cancel.
 		if _, rerr := s.products.ReleaseStock(ctx, &productv1.ReleaseStockRequest{ReservationId: orderID.String()}); rerr != nil {
 			s.log.ErrorContext(ctx, "release stock during compensation", "err", rerr, "order_id", orderID)
 		}
-		_ = s.setStatus(ctx, orderID, order.StatusPaymentFailed, "", nil)
 		return s.cancel(ctx, orderID, ev), nil
 	}
 
-	// 7a. Payment succeeded -> commit the reservation into a real decrement.
-	if _, cerr := s.products.CommitStock(ctx, &productv1.CommitStockRequest{ReservationId: orderID.String()}); cerr != nil {
-		// Payment took, but commit failed: log loudly. The order is paid; a real
-		// system reconciles the commit. We proceed to mark it paid/confirmed.
-		s.log.ErrorContext(ctx, "commit stock after payment", "err", cerr, "order_id", orderID)
-	}
-
+	// 8. Record the initialized payment + its authorization URL as the order enters
+	// PAYMENT_PENDING. The saga PAUSES here: the customer authorizes at the PSP, and
+	// the webhook-driven consumer (payment.* events) resumes it to CONFIRMED/CANCELLED.
 	paymentID, _ := uuid.Parse(pay.GetPaymentId())
-	paidEv := ev
-	paidEv.Status = string(order.StatusPaid)
-	if err := s.markPaid(ctx, orderID, paymentID, paidEv); err != nil {
-		return nil, s.internal(ctx, "mark PAID", err)
+	if _, err := s.q.MarkOrderPaymentPending(ctx, db.MarkOrderPaymentPendingParams{
+		ID:               pgUUID(orderID),
+		PaymentID:        pgtype.UUID{Bytes: paymentID, Valid: true},
+		AuthorizationUrl: pay.GetAuthorizationUrl(),
+	}); err != nil {
+		return nil, s.internal(ctx, "mark PAYMENT_PENDING", err)
 	}
 
-	// Clear the cart (best-effort; the order is already paid).
-	if _, cerr := s.carts.ClearCart(ctx, &cartv1.ClearCartRequest{UserId: userID}); cerr != nil {
-		s.log.ErrorContext(ctx, "clear cart after order", "err", cerr, "user_id", userID)
-	}
-
-	confirmEv := ev
-	confirmEv.Status = string(order.StatusConfirmed)
-	if err := s.setStatus(ctx, orderID, order.StatusConfirmed, "order.confirmed", &confirmEv); err != nil {
-		return nil, s.internal(ctx, "set CONFIRMED", err)
-	}
-
-	s.log.InfoContext(ctx, "order confirmed", "order_id", orderID, "total_cents", total)
-	return &Result{OrderID: orderID.String(), Status: order.StatusConfirmed}, nil
+	s.log.InfoContext(ctx, "order awaiting payment", "order_id", orderID, "total_cents", total)
+	return &Result{
+		OrderID:          orderID.String(),
+		Status:           order.StatusPaymentPending,
+		AuthorizationURL: pay.GetAuthorizationUrl(),
+	}, nil
 }
 
 // Cancel handles an explicit CancelOrder request. A PAID/CONFIRMED order can't be
@@ -237,6 +247,100 @@ func (s *Saga) Cancel(ctx context.Context, orderID string) (order.Status, error)
 		return "", s.internal(ctx, "set CANCELLED", err)
 	}
 	return order.StatusCancelled, nil
+}
+
+// paymentEventData mirrors the payment service's payment.succeeded/payment.failed
+// payload. We only need the order id to correlate; the topic carries the outcome.
+type paymentEventData struct {
+	OrderID string `json:"order_id"`
+}
+
+// HandlePaymentEvent is the order service's consumer callback for the EVENTS
+// stream. It resumes the matching order when its payment settles; every other
+// topic (order.*, user.*) is ignored. It MUST be idempotent — see Resume.
+func (s *Saga) HandlePaymentEvent(ctx context.Context, env events.Envelope) error {
+	var paid bool
+	switch env.Topic {
+	case "payment.succeeded":
+		paid = true
+	case "payment.failed":
+		paid = false
+	default:
+		return nil // not a payment outcome — nothing to do
+	}
+	data, err := events.DataAs[paymentEventData](env)
+	if err != nil {
+		return fmt.Errorf("decode payment event: %w", err)
+	}
+	if data.OrderID == "" {
+		return nil // can't correlate without an order id
+	}
+	return s.Resume(ctx, data.OrderID, paid)
+}
+
+// Resume continues a PAYMENT_PENDING order once its payment settles. On success it
+// commits the reservation, marks the order PAID (+order.paid), clears the cart, and
+// CONFIRMS it (+order.confirmed); on failure it COMPENSATES — releases the
+// reservation and CANCELS (+order.cancelled).
+//
+// It is idempotent for at-least-once delivery: an order already terminal is a
+// no-op, a duplicate success re-runs the (idempotent) commit/confirm steps, and a
+// "failed" arriving after PAID is ignored (a paid order is never unpaid).
+func (s *Saga) Resume(ctx context.Context, orderID string, paid bool) error {
+	oid, err := uuid.Parse(orderID)
+	if err != nil {
+		return status.Error(codes.InvalidArgument, "order_id must be a UUID")
+	}
+	o, err := s.q.GetOrder(ctx, pgUUID(oid))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return status.Error(codes.NotFound, "order not found")
+		}
+		return s.internal(ctx, "get order", err)
+	}
+
+	st := order.Status(o.Status)
+	if st == order.StatusConfirmed || st == order.StatusCancelled {
+		return nil // already settled — idempotent
+	}
+	ev := orderEvent{OrderID: orderID, UserID: uuidStr(o.UserID), TotalCents: o.TotalCents}
+
+	if !paid {
+		if st == order.StatusPaid {
+			return nil // a 'failed' after we recorded PAID — can't unpay; ignore
+		}
+		// Declined -> COMPENSATE: release the reservation, cancel.
+		if _, rerr := s.products.ReleaseStock(ctx, &productv1.ReleaseStockRequest{ReservationId: orderID}); rerr != nil {
+			s.log.ErrorContext(ctx, "release stock during compensation", "err", rerr, "order_id", orderID)
+		}
+		s.cancel(ctx, oid, ev)
+		return nil
+	}
+
+	// Succeeded -> commit the reservation into a real decrement (idempotent on the
+	// reservation id, so a redelivered event is safe).
+	if _, cerr := s.products.CommitStock(ctx, &productv1.CommitStockRequest{ReservationId: orderID}); cerr != nil {
+		s.log.ErrorContext(ctx, "commit stock after payment", "err", cerr, "order_id", orderID)
+	}
+
+	paidEv := ev
+	paidEv.Status = string(order.StatusPaid)
+	if err := s.markPaid(ctx, oid, uuid.UUID(o.PaymentID.Bytes), paidEv); err != nil {
+		return s.internal(ctx, "mark PAID", err)
+	}
+
+	// Clear the cart (best-effort; the order is already paid).
+	if _, cerr := s.carts.ClearCart(ctx, &cartv1.ClearCartRequest{UserId: uuidStr(o.UserID)}); cerr != nil {
+		s.log.ErrorContext(ctx, "clear cart after order", "err", cerr, "user_id", uuidStr(o.UserID))
+	}
+
+	confirmEv := ev
+	confirmEv.Status = string(order.StatusConfirmed)
+	if err := s.setStatus(ctx, oid, order.StatusConfirmed, "order.confirmed", &confirmEv); err != nil {
+		return s.internal(ctx, "set CONFIRMED", err)
+	}
+	s.log.InfoContext(ctx, "order confirmed", "order_id", orderID, "total_cents", o.TotalCents)
+	return nil
 }
 
 // cancel sets CANCELLED and writes order.cancelled in one tx.

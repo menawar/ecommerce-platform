@@ -14,10 +14,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/menawar/ecommerce-platform/pkg/events"
 	"github.com/menawar/ecommerce-platform/pkg/postgres"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	paymentv1 "github.com/menawar/ecommerce-platform/proto/payment/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
+	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/order/internal/db"
 	"github.com/menawar/ecommerce-platform/services/order/internal/order"
 	"github.com/menawar/ecommerce-platform/services/order/internal/saga"
@@ -48,8 +50,8 @@ func (f *fakeCart) RemoveItem(context.Context, *cartv1.RemoveItemRequest, ...grp
 }
 
 type fakeProduct struct {
-	products       map[string]*productv1.Product
-	reserveSuccess bool
+	products                      map[string]*productv1.Product
+	reserveSuccess                bool
 	reserved, committed, released bool
 }
 
@@ -79,18 +81,39 @@ func (f *fakeProduct) ListProducts(context.Context, *productv1.ListProductsReque
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-type fakePayment struct{ calls int }
+type fakePayment struct{ initCalls int }
 
-// CreatePayment mirrors the real MockProvider rule: amount % 100 == 13 -> failed.
-func (f *fakePayment) CreatePayment(_ context.Context, in *paymentv1.CreatePaymentRequest, _ ...grpc.CallOption) (*paymentv1.CreatePaymentResponse, error) {
-	f.calls++
-	st := "succeeded"
-	if in.GetAmountCents()%100 == 13 {
-		st = "failed"
-	}
-	return &paymentv1.CreatePaymentResponse{PaymentId: uuid.NewString(), Status: st}, nil
+// InitializePayment models the async PSP: it never decides the outcome — it just
+// starts the charge and returns 'pending' + a hosted-checkout URL. The success/
+// decline is delivered later via a payment.* event (see resume()).
+func (f *fakePayment) InitializePayment(_ context.Context, in *paymentv1.InitializePaymentRequest, _ ...grpc.CallOption) (*paymentv1.InitializePaymentResponse, error) {
+	f.initCalls++
+	return &paymentv1.InitializePaymentResponse{
+		PaymentId:        uuid.NewString(),
+		Status:           "pending",
+		AuthorizationUrl: "https://pay.test/" + in.GetOrderId(),
+	}, nil
+}
+func (f *fakePayment) CreatePayment(context.Context, *paymentv1.CreatePaymentRequest, ...grpc.CallOption) (*paymentv1.CreatePaymentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
 }
 func (f *fakePayment) GetPayment(context.Context, *paymentv1.GetPaymentRequest, ...grpc.CallOption) (*paymentv1.GetPaymentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+
+// fakeUser resolves a customer's email for the payment-initialization step.
+type fakeUser struct{}
+
+func (fakeUser) GetUser(_ context.Context, in *userv1.GetUserRequest, _ ...grpc.CallOption) (*userv1.GetUserResponse, error) {
+	return &userv1.GetUserResponse{UserId: in.GetUserId(), Email: "buyer@example.com"}, nil
+}
+func (fakeUser) Register(context.Context, *userv1.RegisterRequest, ...grpc.CallOption) (*userv1.RegisterResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) Login(context.Context, *userv1.LoginRequest, ...grpc.CallOption) (*userv1.LoginResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) ValidateToken(context.Context, *userv1.ValidateTokenRequest, ...grpc.CallOption) (*userv1.ValidateTokenResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
@@ -152,32 +175,61 @@ func contains(haystack []string, needle string) bool {
 	return false
 }
 
-// TestSaga_HappyPath: stock available + payment succeeds -> CONFIRMED, stock
-// committed, cart cleared, order.paid + order.confirmed in the outbox.
+// resume delivers a payment outcome through the saga's real consumer entrypoint
+// (HandlePaymentEvent), exercising topic dispatch + envelope decoding, just as the
+// NATS consumer does in production.
+func resume(t *testing.T, s *saga.Saga, orderID string, paid bool) {
+	t.Helper()
+	topic := "payment.succeeded"
+	if !paid {
+		topic = "payment.failed"
+	}
+	env, err := events.New(topic, map[string]string{"order_id": orderID})
+	if err != nil {
+		t.Fatalf("build event: %v", err)
+	}
+	if err := s.HandlePaymentEvent(context.Background(), env); err != nil {
+		t.Fatalf("HandlePaymentEvent(%s): %v", topic, err)
+	}
+}
+
+// TestSaga_HappyPath: PlaceOrder reserves stock and pauses at PAYMENT_PENDING with
+// an authorization URL; the payment.succeeded event then drives commit + clear +
+// CONFIRMED, emitting order.paid + order.confirmed.
 func TestSaga_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
-	pid, ci, prod := cartItem(2500) // total 2500, not %100==13
+	pid, ci, prod := cartItem(2500)
 	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
 	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
 	payment := &fakePayment{}
-	s := saga.New(pool, cart, product, payment, discard())
+	s := saga.New(pool, cart, product, payment, fakeUser{}, discard())
 
+	// Phase 1: start. The saga pauses awaiting the customer's payment.
 	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
-	if res.Status != order.StatusConfirmed {
-		t.Fatalf("status = %s, want CONFIRMED", res.Status)
+	if res.Status != order.StatusPaymentPending {
+		t.Fatalf("status = %s, want PAYMENT_PENDING", res.Status)
 	}
-	if !product.reserved || !product.committed || !cart.cleared {
-		t.Errorf("expected reserve+commit+clear; reserved=%v committed=%v cleared=%v", product.reserved, product.committed, cart.cleared)
+	if res.AuthorizationURL == "" {
+		t.Error("expected an authorization_url to redirect the customer to")
+	}
+	if !product.reserved || product.committed || cart.cleared {
+		t.Errorf("after start want reserve-only; reserved=%v committed=%v cleared=%v", product.reserved, product.committed, cart.cleared)
+	}
+
+	// Phase 2: payment succeeds -> resume to CONFIRMED.
+	resume(t, s, res.OrderID, true)
+	if orderStatus(t, pool, res.OrderID) != "CONFIRMED" {
+		t.Error("db order not CONFIRMED after payment.succeeded")
+	}
+	if !product.committed || !cart.cleared {
+		t.Errorf("after resume want commit+clear; committed=%v cleared=%v", product.committed, cart.cleared)
 	}
 	if product.released {
 		t.Error("ReleaseStock should NOT be called on the happy path")
-	}
-	if orderStatus(t, pool, res.OrderID) != "CONFIRMED" {
-		t.Error("db order not CONFIRMED")
 	}
 	topics := outboxTopics(t, pool)
 	if !contains(topics, "order.paid") || !contains(topics, "order.confirmed") {
@@ -185,22 +237,29 @@ func TestSaga_HappyPath(t *testing.T) {
 	}
 }
 
-// TestSaga_PaymentDeclined is the MANDATORY compensation test: a declined charge
-// must RELEASE the reservation and end CANCELLED — no stock leak, no commit.
+// TestSaga_PaymentDeclined is the MANDATORY compensation test, now async: the order
+// reserves stock and waits, then a payment.failed event must RELEASE the
+// reservation and end CANCELLED — no stock leak, no commit.
 func TestSaga_PaymentDeclined(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
-	pid, ci, prod := cartItem(1313) // total 1313 -> %100==13 -> declined
+	pid, ci, prod := cartItem(1313)
 	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
 	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
-	s := saga.New(pool, cart, product, &fakePayment{}, discard())
+	s := saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
 
 	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
-	if res.Status != order.StatusCancelled {
-		t.Fatalf("status = %s, want CANCELLED", res.Status)
+	if res.Status != order.StatusPaymentPending {
+		t.Fatalf("status = %s, want PAYMENT_PENDING", res.Status)
+	}
+
+	// Payment declines -> resume must compensate.
+	resume(t, s, res.OrderID, false)
+	if orderStatus(t, pool, res.OrderID) != "CANCELLED" {
+		t.Error("db order not CANCELLED after payment.failed")
 	}
 	if !product.reserved || !product.released {
 		t.Errorf("expected reserve THEN release; reserved=%v released=%v", product.reserved, product.released)
@@ -211,12 +270,41 @@ func TestSaga_PaymentDeclined(t *testing.T) {
 	if cart.cleared {
 		t.Error("cart must NOT be cleared on a cancelled order")
 	}
-	if orderStatus(t, pool, res.OrderID) != "CANCELLED" {
-		t.Error("db order not CANCELLED")
-	}
 	topics := outboxTopics(t, pool)
 	if !contains(topics, "order.cancelled") || contains(topics, "order.paid") {
 		t.Errorf("outbox topics = %v, want order.cancelled (no order.paid)", topics)
+	}
+}
+
+// TestSaga_ResumeIdempotent: a redelivered payment.succeeded (at-least-once) must
+// not double-confirm or re-clear — the second resume is a no-op.
+func TestSaga_ResumeIdempotent(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	pid, ci, prod := cartItem(2500)
+	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
+	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
+	s := saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
+
+	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	resume(t, s, res.OrderID, true)
+	resume(t, s, res.OrderID, true) // duplicate delivery
+
+	if orderStatus(t, pool, res.OrderID) != "CONFIRMED" {
+		t.Error("order not CONFIRMED")
+	}
+	// Exactly one order.confirmed despite two deliveries.
+	var confirmed int
+	for _, tp := range outboxTopics(t, pool) {
+		if tp == "order.confirmed" {
+			confirmed++
+		}
+	}
+	if confirmed != 1 {
+		t.Errorf("order.confirmed emitted %d times, want 1", confirmed)
 	}
 }
 
@@ -228,7 +316,7 @@ func TestSaga_InsufficientStock(t *testing.T) {
 	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
 	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: false}
 	payment := &fakePayment{}
-	s := saga.New(pool, cart, product, payment, discard())
+	s := saga.New(pool, cart, product, payment, fakeUser{}, discard())
 
 	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
 	if err != nil {
@@ -237,8 +325,8 @@ func TestSaga_InsufficientStock(t *testing.T) {
 	if res.Status != order.StatusCancelled {
 		t.Errorf("status = %s, want CANCELLED", res.Status)
 	}
-	if payment.calls != 0 {
-		t.Error("payment should not be attempted when stock can't be reserved")
+	if payment.initCalls != 0 {
+		t.Error("payment should not be initialized when stock can't be reserved")
 	}
 	if product.released {
 		t.Error("nothing was reserved, so ReleaseStock should not be called")
@@ -253,7 +341,7 @@ func TestSaga_Idempotent(t *testing.T) {
 	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
 	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
 	payment := &fakePayment{}
-	s := saga.New(pool, cart, product, payment, discard())
+	s := saga.New(pool, cart, product, payment, fakeUser{}, discard())
 
 	key := uuid.NewString()
 	user := uuid.NewString()
@@ -268,15 +356,15 @@ func TestSaga_Idempotent(t *testing.T) {
 	if first.OrderID != second.OrderID {
 		t.Errorf("replay made a new order: %s vs %s", first.OrderID, second.OrderID)
 	}
-	if payment.calls != 1 {
-		t.Errorf("payment called %d times, want 1 (replay must not re-charge)", payment.calls)
+	if payment.initCalls != 1 {
+		t.Errorf("payment initialized %d times, want 1 (replay must not re-initialize)", payment.initCalls)
 	}
 }
 
 func TestSaga_EmptyCart(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
-	s := saga.New(pool, &fakeCart{}, &fakeProduct{products: map[string]*productv1.Product{}}, &fakePayment{}, discard())
+	s := saga.New(pool, &fakeCart{}, &fakeProduct{products: map[string]*productv1.Product{}}, &fakePayment{}, fakeUser{}, discard())
 
 	if _, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString()); status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("empty cart: want FailedPrecondition, got %v", err)

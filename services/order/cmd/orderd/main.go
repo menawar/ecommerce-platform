@@ -33,6 +33,7 @@ import (
 	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
 	paymentv1 "github.com/menawar/ecommerce-platform/proto/payment/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
+	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/order/internal/outboxstore"
 	"github.com/menawar/ecommerce-platform/services/order/internal/saga"
 	"github.com/menawar/ecommerce-platform/services/order/internal/server"
@@ -45,6 +46,7 @@ type config struct {
 	cartAddr     string
 	productAddr  string
 	paymentAddr  string
+	userAddr     string
 	natsURL      string
 	otelEndpoint string
 }
@@ -58,6 +60,7 @@ func main() {
 		cartAddr:     env("CART_GRPC_ADDR", "localhost:50053"),
 		productAddr:  env("PRODUCT_GRPC_ADDR", "localhost:50052"),
 		paymentAddr:  env("PAYMENT_GRPC_ADDR", "localhost:50054"),
+		userAddr:     env("USER_GRPC_ADDR", "localhost:50051"),
 		natsURL:      env("NATS_URL", "nats://localhost:4222"),
 		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
 	}
@@ -96,11 +99,17 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		return fmt.Errorf("payment client: %w", err)
 	}
 	defer func() { _ = paymentConn.Close() }()
+	userConn, err := dial(cfg.userAddr)
+	if err != nil {
+		return fmt.Errorf("user client: %w", err)
+	}
+	defer func() { _ = userConn.Close() }()
 
 	sg := saga.New(pool,
 		cartv1.NewCartServiceClient(cartConn),
 		productv1.NewProductServiceClient(productConn),
 		paymentv1.NewPaymentServiceClient(paymentConn),
+		userv1.NewUserServiceClient(userConn),
 		log,
 	)
 
@@ -135,6 +144,15 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	log.Info("connected to nats jetstream")
 
 	poller := outbox.NewPoller(outboxstore.New(pool), events.NewNATSPublisher(js), log, outbox.WithInterval(time.Second))
+
+	// Resume consumer: the saga's "start" half leaves orders at PAYMENT_PENDING;
+	// this durable consumer drives them to CONFIRMED/CANCELLED when the payment
+	// service emits payment.succeeded/payment.failed. The handler is idempotent.
+	resumeConsumer, err := events.Consume(ctx, js, events.StreamName, "order-saga", log, sg.HandlePaymentEvent)
+	if err != nil {
+		return fmt.Errorf("start payment-event consumer: %w", err)
+	}
+	defer resumeConsumer.Stop()
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())

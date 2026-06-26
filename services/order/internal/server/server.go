@@ -42,7 +42,11 @@ func (s *Server) PlaceOrder(ctx context.Context, req *orderv1.PlaceOrderRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &orderv1.PlaceOrderResponse{OrderId: res.OrderID, Status: string(res.Status)}, nil
+	return &orderv1.PlaceOrderResponse{
+		OrderId:          res.OrderID,
+		Status:           string(res.Status),
+		AuthorizationUrl: res.AuthorizationURL,
+	}, nil
 }
 
 func (s *Server) GetOrder(ctx context.Context, req *orderv1.GetOrderRequest) (*orderv1.GetOrderResponse, error) {
