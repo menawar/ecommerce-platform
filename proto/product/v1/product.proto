@@ -52,6 +52,7 @@ message Product {
   string category_id = 7; // empty when uncategorized
   int32 available = 8;
   int64 created_at = 9; // unix seconds
+  string image_url = 10; // optional catalog image; empty = none (renders a placeholder)
 }
 
 message CreateProductRequest {
@@ -62,6 +63,7 @@ message CreateProductRequest {
   string currency = 5;          // defaults to NGN if empty
   string category_id = 6;       // optional
   int32 initial_quantity = 7;   // seeds the inventory row
+  string image_url = 8;         // optional; stored as-is
 }
 message CreateProductResponse {
   Product product = 1;

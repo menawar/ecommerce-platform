@@ -114,7 +114,7 @@ func TestCreateProduct_AdminGate(t *testing.T) {
 		createFn: func(in *productv1.CreateProductRequest) (*productv1.CreateProductResponse, error) {
 			gotReq = in
 			return &productv1.CreateProductResponse{
-				Product: &productv1.Product{Id: "p9", Sku: in.GetSku(), Name: in.GetName(), PriceCents: in.GetPriceCents(), Available: in.GetInitialQuantity()},
+				Product: &productv1.Product{Id: "p9", Sku: in.GetSku(), Name: in.GetName(), PriceCents: in.GetPriceCents(), Available: in.GetInitialQuantity(), ImageUrl: in.GetImageUrl()},
 			}, nil
 		},
 	}
@@ -131,9 +131,10 @@ func TestCreateProduct_AdminGate(t *testing.T) {
 	ts := httptest.NewServer(h.Router())
 	t.Cleanup(ts.Close)
 
-	const body = `{"sku":"NEW-1","name":"New Thing","price_cents":1500,"initial_quantity":7}`
+	const imageURL = "https://cdn.example.com/new.png"
+	const body = `{"sku":"NEW-1","name":"New Thing","price_cents":1500,"initial_quantity":7,"image_url":"` + imageURL + `"}`
 
-	post := func(token string) int {
+	post := func(token string) (int, []byte) {
 		req, err := http.NewRequest(http.MethodPost, ts.URL+"/products", strings.NewReader(body))
 		if err != nil {
 			t.Fatalf("new request: %v", err)
@@ -147,22 +148,32 @@ func TestCreateProduct_AdminGate(t *testing.T) {
 			t.Fatalf("POST: %v", err)
 		}
 		defer func() { _ = resp.Body.Close() }()
-		return resp.StatusCode
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, b
 	}
 
-	if got := post("admin-token"); got != http.StatusCreated {
-		t.Errorf("admin: status = %d, want 201", got)
+	status, respBody := post("admin-token")
+	if status != http.StatusCreated {
+		t.Errorf("admin: status = %d, want 201", status)
 	}
 	// The admin request reached the service with the body forwarded intact.
-	if gotReq.GetSku() != "NEW-1" || gotReq.GetName() != "New Thing" || gotReq.GetPriceCents() != 1500 || gotReq.GetInitialQuantity() != 7 {
+	if gotReq.GetSku() != "NEW-1" || gotReq.GetName() != "New Thing" || gotReq.GetPriceCents() != 1500 || gotReq.GetInitialQuantity() != 7 || gotReq.GetImageUrl() != imageURL {
 		t.Errorf("forwarded create request = %+v", gotReq)
 	}
-
-	if got := post("customer-token"); got != http.StatusForbidden {
-		t.Errorf("customer: status = %d, want 403", got)
+	// image_url is part of the returned DTO contract.
+	var dto map[string]any
+	if err := json.Unmarshal(respBody, &dto); err != nil {
+		t.Fatalf("decode response: %v", err)
 	}
-	if got := post(""); got != http.StatusUnauthorized {
-		t.Errorf("anonymous: status = %d, want 401", got)
+	if dto["image_url"] != imageURL {
+		t.Errorf("response image_url = %v, want %q", dto["image_url"], imageURL)
+	}
+
+	if status, _ := post("customer-token"); status != http.StatusForbidden {
+		t.Errorf("customer: status = %d, want 403", status)
+	}
+	if status, _ := post(""); status != http.StatusUnauthorized {
+		t.Errorf("anonymous: status = %d, want 401", status)
 	}
 }
 

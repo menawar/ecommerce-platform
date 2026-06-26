@@ -344,6 +344,7 @@ type Product struct {
 	CategoryId    string                 `protobuf:"bytes,7,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"` // empty when uncategorized
 	Available     int32                  `protobuf:"varint,8,opt,name=available,proto3" json:"available,omitempty"`
 	CreatedAt     int64                  `protobuf:"varint,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // unix seconds
+	ImageUrl      string                 `protobuf:"bytes,10,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`    // optional catalog image; empty = none (renders a placeholder)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,6 +442,13 @@ func (x *Product) GetCreatedAt() int64 {
 	return 0
 }
 
+func (x *Product) GetImageUrl() string {
+	if x != nil {
+		return x.ImageUrl
+	}
+	return ""
+}
+
 type CreateProductRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Sku             string                 `protobuf:"bytes,1,opt,name=sku,proto3" json:"sku,omitempty"`
@@ -450,6 +458,7 @@ type CreateProductRequest struct {
 	Currency        string                 `protobuf:"bytes,5,opt,name=currency,proto3" json:"currency,omitempty"`                                       // defaults to NGN if empty
 	CategoryId      string                 `protobuf:"bytes,6,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`                 // optional
 	InitialQuantity int32                  `protobuf:"varint,7,opt,name=initial_quantity,json=initialQuantity,proto3" json:"initial_quantity,omitempty"` // seeds the inventory row
+	ImageUrl        string                 `protobuf:"bytes,8,opt,name=image_url,json=imageUrl,proto3" json:"image_url,omitempty"`                       // optional; stored as-is
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -531,6 +540,13 @@ func (x *CreateProductRequest) GetInitialQuantity() int32 {
 		return x.InitialQuantity
 	}
 	return 0
+}
+
+func (x *CreateProductRequest) GetImageUrl() string {
+	if x != nil {
+		return x.ImageUrl
+	}
+	return ""
 }
 
 type CreateProductResponse struct {
@@ -805,7 +821,7 @@ const file_product_v1_product_proto_rawDesc = "" +
 	"\x14ReleaseStockResponse\";\n" +
 	"\x12CommitStockRequest\x12%\n" +
 	"\x0ereservation_id\x18\x01 \x01(\tR\rreservationId\"\x15\n" +
-	"\x13CommitStockResponse\"\xfc\x01\n" +
+	"\x13CommitStockResponse\"\x99\x02\n" +
 	"\aProduct\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03sku\x18\x02 \x01(\tR\x03sku\x12\x12\n" +
@@ -818,7 +834,9 @@ const file_product_v1_product_proto_rawDesc = "" +
 	"categoryId\x12\x1c\n" +
 	"\tavailable\x18\b \x01(\x05R\tavailable\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\t \x01(\x03R\tcreatedAt\"\xe7\x01\n" +
+	"created_at\x18\t \x01(\x03R\tcreatedAt\x12\x1b\n" +
+	"\timage_url\x18\n" +
+	" \x01(\tR\bimageUrl\"\x84\x02\n" +
 	"\x14CreateProductRequest\x12\x10\n" +
 	"\x03sku\x18\x01 \x01(\tR\x03sku\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -828,7 +846,8 @@ const file_product_v1_product_proto_rawDesc = "" +
 	"\bcurrency\x18\x05 \x01(\tR\bcurrency\x12\x1f\n" +
 	"\vcategory_id\x18\x06 \x01(\tR\n" +
 	"categoryId\x12)\n" +
-	"\x10initial_quantity\x18\a \x01(\x05R\x0finitialQuantity\"F\n" +
+	"\x10initial_quantity\x18\a \x01(\x05R\x0finitialQuantity\x12\x1b\n" +
+	"\timage_url\x18\b \x01(\tR\bimageUrl\"F\n" +
 	"\x15CreateProductResponse\x12-\n" +
 	"\aproduct\x18\x01 \x01(\v2\x13.product.v1.ProductR\aproduct\"2\n" +
 	"\x11GetProductRequest\x12\x1d\n" +

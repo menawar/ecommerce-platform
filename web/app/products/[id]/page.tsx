@@ -77,18 +77,30 @@ export default async function ProductDetail({
             ))}
           </div>
 
-          {/* Main image */}
-          <div className="plt-img-placeholder-lg" style={{ flex: 1 }}>
-            <span
-              style={{
-                fontFamily: "monospace",
-                fontSize: 12,
-                color: "var(--plt-text-muted)",
-              }}
-            >
-              {product.sku}
-            </span>
-          </div>
+          {/* Main image — falls back to a SKU placeholder when none is set.
+              Plain <img> for now; remote CDN images move to next/image with
+              configured domains in 8.2b. */}
+          {product.image_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={product.image_url}
+              alt={product.name}
+              className="plt-img-placeholder-lg"
+              style={{ flex: 1, objectFit: "cover" }}
+            />
+          ) : (
+            <div className="plt-img-placeholder-lg" style={{ flex: 1 }}>
+              <span
+                style={{
+                  fontFamily: "monospace",
+                  fontSize: 12,
+                  color: "var(--plt-text-muted)",
+                }}
+              >
+                {product.sku}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* ── Right: Product info ──────────────────────────────────────── */}
