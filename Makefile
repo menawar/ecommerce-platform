@@ -31,7 +31,7 @@ NOTIFICATION_MIGRATIONS := services/notification/migrations
 
 .PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy lint \
 	product-migrate-up product-migrate-down product-migrate-create product-sqlc \
-	user-migrate-up user-migrate-down user-migrate-create user-sqlc \
+	user-migrate-up user-migrate-down user-migrate-create user-make-admin user-sqlc \
 	payment-migrate-up payment-migrate-down payment-sqlc \
 	order-migrate-up order-migrate-down order-sqlc \
 	notification-migrate-up notification-migrate-down notification-sqlc
@@ -97,6 +97,11 @@ user-migrate-down: ## Roll back the last userdb migration
 
 user-migrate-create: ## Create a new userdb migration: make user-migrate-create NAME=add_x
 	$(MIGRATE) create -ext sql -dir $(USER_MIGRATIONS) -seq $(NAME)
+
+user-make-admin: ## Promote a registered user to admin: make user-make-admin EMAIL=you@example.com
+	@test -n "$(EMAIL)" || { echo "EMAIL is required: make user-make-admin EMAIL=you@example.com"; exit 1; }
+	psql "$(USER_DB_URL)" -v email="$(EMAIL)" \
+		-c "UPDATE users SET role='admin', updated_at=now() WHERE email = :'email';"
 
 ## ---- Code generation ----
 product-sqlc: ## Regenerate product sqlc code from queries.sql

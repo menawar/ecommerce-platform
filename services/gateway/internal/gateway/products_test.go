@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -14,14 +15,16 @@ import (
 	"google.golang.org/grpc/status"
 
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
+	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/gateway/internal/gateway"
 )
 
 // fakeProductClient stubs ProductServiceClient. Only List/Get are exercised by the
 // gateway's public routes; the saga RPCs are present to satisfy the interface.
 type fakeProductClient struct {
-	listFn func(*productv1.ListProductsRequest) (*productv1.ListProductsResponse, error)
-	getFn  func(*productv1.GetProductRequest) (*productv1.GetProductResponse, error)
+	listFn   func(*productv1.ListProductsRequest) (*productv1.ListProductsResponse, error)
+	getFn    func(*productv1.GetProductRequest) (*productv1.GetProductResponse, error)
+	createFn func(*productv1.CreateProductRequest) (*productv1.CreateProductResponse, error)
 }
 
 var _ productv1.ProductServiceClient = (*fakeProductClient)(nil)
@@ -32,7 +35,10 @@ func (f *fakeProductClient) ListProducts(_ context.Context, in *productv1.ListPr
 func (f *fakeProductClient) GetProduct(_ context.Context, in *productv1.GetProductRequest, _ ...grpc.CallOption) (*productv1.GetProductResponse, error) {
 	return f.getFn(in)
 }
-func (f *fakeProductClient) CreateProduct(context.Context, *productv1.CreateProductRequest, ...grpc.CallOption) (*productv1.CreateProductResponse, error) {
+func (f *fakeProductClient) CreateProduct(_ context.Context, in *productv1.CreateProductRequest, _ ...grpc.CallOption) (*productv1.CreateProductResponse, error) {
+	if f.createFn != nil {
+		return f.createFn(in)
+	}
 	return nil, status.Error(codes.Unimplemented, "unused")
 }
 func (f *fakeProductClient) ReserveStock(context.Context, *productv1.ReserveStockRequest, ...grpc.CallOption) (*productv1.ReserveStockResponse, error) {
@@ -94,6 +100,69 @@ func TestListProducts_ForwardsParamsAndShapesJSON(t *testing.T) {
 	p := body.Products[0]
 	if p["id"] != "p1" || p["price_cents"].(float64) != 1999 || p["available"].(float64) != 5 {
 		t.Errorf("product DTO = %+v", p)
+	}
+}
+
+// TestCreateProduct_AdminGate exercises the role gate on POST /products: an admin
+// token creates the product (201, request forwarded), a customer token is
+// forbidden (403), and an unauthenticated request is rejected before the role
+// check (401). The fake user client maps the bearer token to a role so the same
+// server serves all three cases.
+func TestCreateProduct_AdminGate(t *testing.T) {
+	var gotReq *productv1.CreateProductRequest
+	pc := &fakeProductClient{
+		createFn: func(in *productv1.CreateProductRequest) (*productv1.CreateProductResponse, error) {
+			gotReq = in
+			return &productv1.CreateProductResponse{
+				Product: &productv1.Product{Id: "p9", Sku: in.GetSku(), Name: in.GetName(), PriceCents: in.GetPriceCents(), Available: in.GetInitialQuantity()},
+			}, nil
+		},
+	}
+	uc := &fakeUserClient{
+		validateFn: func(in *userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error) {
+			role := "customer"
+			if in.GetToken() == "admin-token" {
+				role = "admin"
+			}
+			return &userv1.ValidateTokenResponse{Valid: true, UserId: "u1", Role: role}, nil
+		},
+	}
+	h := gateway.NewHandler(uc, pc, &fakeCartClient{}, &fakeOrderClient{}, testMetrics(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ts := httptest.NewServer(h.Router())
+	t.Cleanup(ts.Close)
+
+	const body = `{"sku":"NEW-1","name":"New Thing","price_cents":1500,"initial_quantity":7}`
+
+	post := func(token string) int {
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/products", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	if got := post("admin-token"); got != http.StatusCreated {
+		t.Errorf("admin: status = %d, want 201", got)
+	}
+	// The admin request reached the service with the body forwarded intact.
+	if gotReq.GetSku() != "NEW-1" || gotReq.GetName() != "New Thing" || gotReq.GetPriceCents() != 1500 || gotReq.GetInitialQuantity() != 7 {
+		t.Errorf("forwarded create request = %+v", gotReq)
+	}
+
+	if got := post("customer-token"); got != http.StatusForbidden {
+		t.Errorf("customer: status = %d, want 403", got)
+	}
+	if got := post(""); got != http.StatusUnauthorized {
+		t.Errorf("anonymous: status = %d, want 401", got)
 	}
 }
 

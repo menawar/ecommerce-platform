@@ -79,6 +79,46 @@ func (h *Handler) getProduct(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toProductDTO(resp.GetProduct()))
 }
 
+// createProductRequest is the admin JSON body for POST /products. The field
+// names are the snake_case REST contract; the gateway forwards them verbatim to
+// the Product service, which owns all validation — required sku/name, non-negative
+// money, unique sku — so a bad request flows back as 400/409 via writeGRPCError.
+type createProductRequest struct {
+	SKU             string `json:"sku"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	PriceCents      int64  `json:"price_cents"`
+	Currency        string `json:"currency"`         // defaults to NGN in the service when empty
+	CategoryID      string `json:"category_id"`      // optional; empty = uncategorized
+	InitialQuantity int32  `json:"initial_quantity"` // seeds the inventory row
+}
+
+// createProduct: POST /products (admin only). It decodes the body, calls the
+// Product service's CreateProduct RPC, and returns the created product as 201.
+// Kept deliberately thin — no business rules here, just protocol translation.
+func (h *Handler) createProduct(w http.ResponseWriter, r *http.Request) {
+	var req createProductRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := h.products.CreateProduct(r.Context(), &productv1.CreateProductRequest{
+		Sku:             req.SKU,
+		Name:            req.Name,
+		Description:     req.Description,
+		PriceCents:      req.PriceCents,
+		Currency:        req.Currency,
+		CategoryId:      req.CategoryID,
+		InitialQuantity: req.InitialQuantity,
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toProductDTO(resp.GetProduct()))
+}
+
 func atoiOrZero(s string) int {
 	n, _ := strconv.Atoi(s) // err -> 0, which the service treats as "use default"
 	return n
