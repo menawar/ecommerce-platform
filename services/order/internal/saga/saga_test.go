@@ -48,8 +48,8 @@ func (f *fakeCart) RemoveItem(context.Context, *cartv1.RemoveItemRequest, ...grp
 }
 
 type fakeProduct struct {
-	products       map[string]*productv1.Product
-	reserveSuccess bool
+	products                      map[string]*productv1.Product
+	reserveSuccess                bool
 	reserved, committed, released bool
 }
 
@@ -73,6 +73,9 @@ func (f *fakeProduct) ReleaseStock(context.Context, *productv1.ReleaseStockReque
 	return &productv1.ReleaseStockResponse{}, nil
 }
 func (f *fakeProduct) CreateProduct(context.Context, *productv1.CreateProductRequest, ...grpc.CallOption) (*productv1.CreateProductResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeProduct) UpdateProduct(context.Context, *productv1.UpdateProductRequest, ...grpc.CallOption) (*productv1.UpdateProductResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
 func (f *fakeProduct) ListProducts(context.Context, *productv1.ListProductsRequest, ...grpc.CallOption) (*productv1.ListProductsResponse, error) {
