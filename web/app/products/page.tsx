@@ -312,7 +312,7 @@ export default async function ProductsPage({
                   style={
                     p.image_url
                       ? {
-                          backgroundImage: `url(${p.image_url})`,
+                          backgroundImage: `url("${p.image_url}")`,
                           backgroundSize: "cover",
                           backgroundPosition: "center",
                         }
