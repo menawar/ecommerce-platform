@@ -171,6 +171,19 @@ func (h *Handler) updateProduct(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toProductDTO(resp.GetProduct()))
 }
 
+// deleteProduct: DELETE /products/{id} (admin only). Soft-deletes (archives) the
+// product. Returns 204 on success; NotFound flows back as 404 via writeGRPCError.
+func (h *Handler) deleteProduct(w http.ResponseWriter, r *http.Request) {
+	_, err := h.products.DeleteProduct(r.Context(), &productv1.DeleteProductRequest{
+		Id: chi.URLParam(r, "id"),
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func atoiOrZero(s string) int {
 	n, _ := strconv.Atoi(s) // err -> 0, which the service treats as "use default"
 	return n

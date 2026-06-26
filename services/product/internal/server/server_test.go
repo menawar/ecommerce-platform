@@ -204,6 +204,52 @@ func TestListProducts_Sort(t *testing.T) {
 	}
 }
 
+func TestDeleteProduct_Archives(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+
+	created, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
+		Sku: "DEL-1", Name: "Doomed", PriceCents: 100, InitialQuantity: 5,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id := created.GetProduct().GetId()
+
+	// Visible before deletion.
+	before, err := client.ListProducts(ctx, &productv1.ListProductsRequest{})
+	if err != nil {
+		t.Fatalf("list before: %v", err)
+	}
+	if before.GetTotal() != 1 {
+		t.Fatalf("total before = %d, want 1", before.GetTotal())
+	}
+
+	if _, err := client.DeleteProduct(ctx, &productv1.DeleteProductRequest{Id: id}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Gone from the catalog and not fetchable.
+	after, err := client.ListProducts(ctx, &productv1.ListProductsRequest{})
+	if err != nil {
+		t.Fatalf("list after: %v", err)
+	}
+	if after.GetTotal() != 0 {
+		t.Errorf("total after = %d, want 0 (archived)", after.GetTotal())
+	}
+	if _, err := client.GetProduct(ctx, &productv1.GetProductRequest{ProductId: id}); status.Code(err) != codes.NotFound {
+		t.Errorf("get archived: want NotFound, got %v", err)
+	}
+
+	// Re-deleting (or an unknown id) is NotFound.
+	if _, err := client.DeleteProduct(ctx, &productv1.DeleteProductRequest{Id: id}); status.Code(err) != codes.NotFound {
+		t.Errorf("re-delete: want NotFound, got %v", err)
+	}
+	if _, err := client.DeleteProduct(ctx, &productv1.DeleteProductRequest{Id: uuid.NewString()}); status.Code(err) != codes.NotFound {
+		t.Errorf("delete unknown: want NotFound, got %v", err)
+	}
+}
+
 func TestUpdateProduct(t *testing.T) {
 	ctx := context.Background()
 	client := newTestClient(t)

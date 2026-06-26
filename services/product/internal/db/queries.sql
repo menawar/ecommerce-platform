@@ -25,6 +25,14 @@ SET name = $2, description = $3, price_cents = $4, currency = $5, category_id = 
 WHERE id = $1
 RETURNING *;
 
+-- name: ArchiveProduct :one
+-- Soft delete: mark the product archived. The "AND archived_at IS NULL" makes a
+-- repeat (or unknown id) return no row, so the caller maps it to NotFound.
+UPDATE products
+SET archived_at = now()
+WHERE id = $1 AND archived_at IS NULL
+RETURNING id;
+
 -- name: SetInventoryQuantity :one
 -- Absolute restock. The inventory_reserved_le_quantity CHECK rejects a level below
 -- the currently reserved units; version is bumped so this composes with the
@@ -39,7 +47,8 @@ RETURNING *;
 -- report the overall total. ILIKE is case-insensitive LIKE; the value is a bound
 -- parameter (never string-concatenated), so it's injection-safe.
 SELECT count(*) FROM products
-WHERE (sqlc.narg('category_id')::uuid IS NULL OR category_id = sqlc.narg('category_id'))
+WHERE archived_at IS NULL
+  AND (sqlc.narg('category_id')::uuid IS NULL OR category_id = sqlc.narg('category_id'))
   AND (sqlc.narg('search')::text IS NULL OR name ILIKE '%' || sqlc.narg('search') || '%');
 
 -- name: CreateInventory :one
@@ -52,17 +61,20 @@ SELECT * FROM inventory
 WHERE product_id = $1;
 
 -- name: GetProductWithInventory :one
--- Product detail joined with live stock; available = quantity - reserved.
+-- Product detail joined with live stock; available = quantity - reserved. Archived
+-- products are treated as gone (NotFound) — this also stops the saga selling an
+-- archived item that's still sitting in a cart.
 SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE p.id = $1;
+WHERE p.id = $1 AND p.archived_at IS NULL;
 
 -- name: ListProductsWithInventory :many
 SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE (sqlc.narg('category_id')::uuid IS NULL OR p.category_id = sqlc.narg('category_id'))
+WHERE p.archived_at IS NULL
+  AND (sqlc.narg('category_id')::uuid IS NULL OR p.category_id = sqlc.narg('category_id'))
   AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
 -- Each CASE is active for only one sort value; the others evaluate to NULL (no
 -- ordering effect). created_at DESC is the default and a stable final tiebreak.

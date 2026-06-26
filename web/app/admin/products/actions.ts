@@ -3,12 +3,46 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { createProduct, GatewayError } from "@/lib/gateway";
+import { createProduct, deleteProduct, GatewayError } from "@/lib/gateway";
 import { getMe } from "@/lib/session";
 import { parsePriceToCents } from "@/lib/money";
 import { uploadImage, deleteImage, UploadError } from "@/lib/storage";
 
 export type CreateProductState = { error: string } | null;
+
+// deleteProductAction archives a product. It's a plain form action (no inline
+// error state); a 404 means it's already gone, which is fine. The gateway's
+// requireAdmin is the real gate; the getMe check just redirects an expired session.
+export async function deleteProductAction(formData: FormData): Promise<void> {
+  try {
+    const me = await getMe();
+    if (me.role !== "admin") return;
+  } catch (err) {
+    if (err instanceof GatewayError && err.status === 401) redirect("/login");
+    throw err;
+  }
+
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+
+  try {
+    await deleteProduct(id);
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      if (err.status === 401) redirect("/login");
+      if (err.status === 404) {
+        // Already archived/removed — nothing to do.
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
+}
 
 // createProductAction handles the admin create-product form. It validates input,
 // converts the price to integer cents, and POSTs to the gateway. The gateway is

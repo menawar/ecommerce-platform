@@ -184,6 +184,24 @@ func (s *Server) UpdateProduct(ctx context.Context, req *productv1.UpdateProduct
 	}, nil
 }
 
+// DeleteProduct soft-deletes (archives) a product: it leaves the catalog but its
+// rows stay so order/reservation history keeps referencing them. An already-archived
+// or unknown id is a NotFound (ArchiveProduct returns no row in that case).
+func (s *Server) DeleteProduct(ctx context.Context, req *productv1.DeleteProductRequest) (*productv1.DeleteProductResponse, error) {
+	id, err := parseRequiredUUID(req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid id")
+	}
+	if _, err := s.q.ArchiveProduct(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "product not found")
+		}
+		return nil, s.internal(ctx, "archive product", err)
+	}
+	s.log.InfoContext(ctx, "archived product", "product_id", uuidString(id))
+	return &productv1.DeleteProductResponse{}, nil
+}
+
 func (s *Server) GetProduct(ctx context.Context, req *productv1.GetProductRequest) (*productv1.GetProductResponse, error) {
 	id, err := parseRequiredUUID(req.GetProductId())
 	if err != nil {
