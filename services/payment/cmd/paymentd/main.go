@@ -60,9 +60,17 @@ func main() {
 		paymentProvider: env("PAYMENT_PROVIDER", provider.NameMock),
 		paystackSecret:  os.Getenv("PAYSTACK_SECRET_KEY"),
 		paystackBaseURL: os.Getenv("PAYSTACK_BASE_URL"),
-		// Default the webhook secret to a dev value so the endpoint works locally
-		// with the mock provider; production sets it to the Paystack secret key.
-		webhookSecret: env("PAYSTACK_WEBHOOK_SECRET", "dev-webhook-secret"),
+		webhookSecret:   os.Getenv("PAYSTACK_WEBHOOK_SECRET"),
+	}
+	// Resolve the webhook signing secret. Paystack signs webhooks with the account
+	// secret key, so default to that when running against Paystack; fall back to a
+	// dev value only for the mock provider (whose simulator signs with the same).
+	if cfg.webhookSecret == "" {
+		if cfg.paymentProvider == provider.NamePaystack && cfg.paystackSecret != "" {
+			cfg.webhookSecret = cfg.paystackSecret
+		} else {
+			cfg.webhookSecret = "dev-webhook-secret"
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
