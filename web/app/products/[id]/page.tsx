@@ -78,8 +78,9 @@ export default async function ProductDetail({
           </div>
 
           {/* Main image — falls back to a SKU placeholder when none is set.
-              Plain <img> for now; remote CDN images move to next/image with
-              configured domains in 8.2b. */}
+              Plain <img> by choice: next/image optimization needs remotePatterns
+              config + explicit sizing in this flex layout, deferred to a later
+              polish step. Images are served from object storage (MinIO/S3/R2). */}
           {product.image_url ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img

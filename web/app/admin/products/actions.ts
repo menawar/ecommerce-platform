@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createProduct, GatewayError } from "@/lib/gateway";
 import { getMe } from "@/lib/session";
 import { parsePriceToCents } from "@/lib/money";
+import { uploadImage, UploadError } from "@/lib/storage";
 
 export type CreateProductState = { error: string } | null;
 
@@ -31,7 +32,6 @@ export async function createProductAction(
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim();
   const currency = String(formData.get("currency") ?? "").trim() || "NGN";
-  const imageURL = String(formData.get("image_url") ?? "").trim();
   const priceCents = parsePriceToCents(String(formData.get("price") ?? ""));
   const quantity = Number(formData.get("initial_quantity") ?? 0);
 
@@ -39,6 +39,19 @@ export async function createProductAction(
   if (priceCents === null) return { error: "Enter a valid, non-negative price." };
   if (!Number.isInteger(quantity) || quantity < 0) {
     return { error: "Enter a valid, non-negative stock quantity." };
+  }
+
+  // Optional image: upload to object storage and store the resulting public URL.
+  // A 0-byte entry means "no file chosen" (browsers submit an empty File then).
+  let imageURL = "";
+  const file = formData.get("image");
+  if (file instanceof File && file.size > 0) {
+    try {
+      imageURL = await uploadImage(file);
+    } catch (err) {
+      if (err instanceof UploadError) return { error: err.message };
+      throw err;
+    }
   }
 
   try {
