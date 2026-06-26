@@ -31,6 +31,7 @@ type Product struct {
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
 	ImageUrl    string
+	ArchivedAt  pgtype.Timestamptz
 }
 
 type ReservationItem struct {
