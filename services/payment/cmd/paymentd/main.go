@@ -21,10 +21,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	"github.com/menawar/ecommerce-platform/pkg/events"
 	"github.com/menawar/ecommerce-platform/pkg/grpcmw"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
+	"github.com/menawar/ecommerce-platform/pkg/outbox"
 	"github.com/menawar/ecommerce-platform/pkg/postgres"
 	paymentv1 "github.com/menawar/ecommerce-platform/proto/payment/v1"
+	"github.com/menawar/ecommerce-platform/services/payment/internal/outboxstore"
 	"github.com/menawar/ecommerce-platform/services/payment/internal/provider"
 	"github.com/menawar/ecommerce-platform/services/payment/internal/server"
 )
@@ -33,6 +36,7 @@ type config struct {
 	grpcAddr     string
 	httpAddr     string
 	dbURL        string
+	natsURL      string
 	otelEndpoint string
 }
 
@@ -42,6 +46,7 @@ func main() {
 		grpcAddr:     env("PAYMENT_GRPC_ADDR", ":50054"),
 		httpAddr:     env("PAYMENT_HTTP_ADDR", ":2115"),
 		dbURL:        env("PAYMENT_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/paymentdb?sslmode=disable"),
+		natsURL:      env("NATS_URL", "nats://localhost:4222"),
 		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
 	}
 
@@ -74,6 +79,17 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		}()
 		log.Info("opentelemetry tracing enabled", "endpoint", cfg.otelEndpoint)
 	}
+
+	// Connect to NATS JetStream and ensure the shared EVENTS stream exists. The
+	// outbox poller drains payment.* events (webhook-driven, added next step) to NATS.
+	nc, js, err := events.Connect(ctx, cfg.natsURL, events.StreamName, events.StreamSubjects())
+	if err != nil {
+		return fmt.Errorf("connect nats: %w", err)
+	}
+	defer nc.Close()
+	log.Info("connected to nats jetstream")
+
+	poller := outbox.NewPoller(outboxstore.New(pool), events.NewNATSPublisher(js), log, outbox.WithInterval(time.Second))
 
 	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "payment")
 	grpcServer := grpc.NewServer(
@@ -110,6 +126,11 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 			return fmt.Errorf("http serve: %w", err)
 		}
 		return nil
+	})
+	// The outbox poller runs as its own goroutine, alongside the servers.
+	g.Go(func() error {
+		log.Info("outbox poller started")
+		return poller.Run(ctx)
 	})
 	g.Go(func() error {
 		<-ctx.Done()
