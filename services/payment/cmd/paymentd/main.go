@@ -38,6 +38,14 @@ type config struct {
 	dbURL        string
 	natsURL      string
 	otelEndpoint string
+
+	// Async payment provider. paymentProvider selects mock|paystack. The Paystack
+	// secret key authenticates API calls; webhookSecret verifies inbound webhook
+	// signatures (Paystack signs with the secret key, so it defaults to it).
+	paymentProvider string
+	paystackSecret  string
+	paystackBaseURL string
+	webhookSecret   string
 }
 
 func main() {
@@ -48,6 +56,13 @@ func main() {
 		dbURL:        env("PAYMENT_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/paymentdb?sslmode=disable"),
 		natsURL:      env("NATS_URL", "nats://localhost:4222"),
 		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
+
+		paymentProvider: env("PAYMENT_PROVIDER", provider.NameMock),
+		paystackSecret:  os.Getenv("PAYSTACK_SECRET_KEY"),
+		paystackBaseURL: os.Getenv("PAYSTACK_BASE_URL"),
+		// Default the webhook secret to a dev value so the endpoint works locally
+		// with the mock provider; production sets it to the Paystack secret key.
+		webhookSecret: env("PAYSTACK_WEBHOOK_SECRET", "dev-webhook-secret"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -96,8 +111,11 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryRecovery(log)),
 	)
-	// Mock provider by default; a real Stripe adapter would be selected here by config.
-	paymentv1.RegisterPaymentServiceServer(grpcServer, server.NewServer(pool, provider.NewMock(), log))
+	// The legacy sync path stays on Mock (the saga still calls CreatePayment until
+	// it migrates); the async path uses the selected provider (mock|paystack).
+	asyncName, asyncProv := buildAsyncProvider(cfg, log)
+	paymentSrv := server.NewServer(pool, provider.NewMock(), log).WithAsync(asyncName, asyncProv)
+	paymentv1.RegisterPaymentServiceServer(grpcServer, paymentSrv)
 	reflection.Register(grpcServer)
 
 	mux := http.NewServeMux()
@@ -106,6 +124,9 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	// Paystack posts payment outcomes here; the handler verifies the HMAC signature
+	// and finalizes the payment (emitting payment.succeeded/failed via the outbox).
+	mux.HandleFunc("POST /webhooks/paystack", paymentSrv.PaystackWebhookHandler(cfg.webhookSecret))
 	httpServer := &http.Server{Addr: cfg.httpAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -141,6 +162,25 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		return httpServer.Shutdown(shutdownCtx)
 	})
 	return g.Wait()
+}
+
+// buildAsyncProvider selects the async (redirect+webhook) provider from config.
+// Default is the deterministic Mock so the stack runs offline; "paystack" requires
+// a secret key and falls back to Mock (with a warning) if it's missing.
+func buildAsyncProvider(cfg config, log *slog.Logger) (string, provider.AsyncProvider) {
+	if cfg.paymentProvider == provider.NamePaystack {
+		if cfg.paystackSecret == "" {
+			log.Warn("PAYMENT_PROVIDER=paystack but PAYSTACK_SECRET_KEY is empty; falling back to mock")
+			return provider.NameMock, provider.NewMock()
+		}
+		var opts []provider.PaystackOption
+		if cfg.paystackBaseURL != "" {
+			opts = append(opts, provider.WithPaystackBaseURL(cfg.paystackBaseURL))
+		}
+		log.Info("using paystack payment provider")
+		return provider.NamePaystack, provider.NewPaystack(cfg.paystackSecret, opts...)
+	}
+	return provider.NameMock, provider.NewMock()
 }
 
 func env(key, def string) string {
