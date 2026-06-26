@@ -149,6 +149,7 @@ func (s *Server) ListProducts(ctx context.Context, req *productv1.ListProductsRe
 	rows, err := s.q.ListProductsWithInventory(ctx, db.ListProductsWithInventoryParams{
 		CategoryID: categoryID,
 		Search:     search,
+		Sort:       normalizeSort(req.GetSort()),
 		Limit:      size,
 		Offset:     (page - 1) * size,
 	})
@@ -166,6 +167,18 @@ func (s *Server) ListProducts(ctx context.Context, req *productv1.ListProductsRe
 		products = append(products, rowFromList(r))
 	}
 	return &productv1.ListProductsResponse{Products: products, Total: total}, nil
+}
+
+// normalizeSort allow-lists the sort keys the query understands. Anything else
+// (empty, unknown, a typo) collapses to "" — the query's default newest-first
+// ordering — so a bad value never errors, it just falls back.
+func normalizeSort(sort string) string {
+	switch sort {
+	case "price_asc", "price_desc":
+		return sort
+	default:
+		return ""
+	}
 }
 
 func (s *Server) internal(ctx context.Context, msg string, err error) error {

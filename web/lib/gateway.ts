@@ -81,12 +81,14 @@ export async function listProducts(params: {
   pageSize?: number;
   q?: string;
   categoryId?: string;
+  sort?: string;
 }): Promise<ProductList> {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("page_size", String(params.pageSize));
   if (params.q) qs.set("q", params.q);
   if (params.categoryId) qs.set("category_id", params.categoryId);
+  if (params.sort) qs.set("sort", params.sort);
   const suffix = qs.toString() ? `?${qs}` : "";
   return gatewayFetch<ProductList>(`/products${suffix}`);
 }

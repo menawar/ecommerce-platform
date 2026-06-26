@@ -52,6 +52,7 @@ func (h *Handler) listProducts(w http.ResponseWriter, r *http.Request) {
 		PageSize:   int32(atoiOrZero(qs.Get("page_size"))),
 		CategoryId: qs.Get("category_id"),
 		Search:     qs.Get("q"),
+		Sort:       qs.Get("sort"),
 	})
 	if err != nil {
 		h.writeGRPCError(w, r, err)

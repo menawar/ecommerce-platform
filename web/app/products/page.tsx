@@ -2,14 +2,17 @@ import Link from "next/link";
 import { listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../error-panel";
+import { SortSelect } from "./sort-select";
 
 const PAGE_SIZE = 12;
 
+// value = the backend sort key (server normalizes "featured"/unknown -> newest
+// first). "Top rated" is intentionally absent: there's no ratings data yet, so it
+// would be another dropdown that does nothing.
 const SORT_OPTIONS = [
-  "Featured",
-  "Price: Low to High",
-  "Price: High to Low",
-  "Top rated",
+  { value: "featured", label: "Featured" },
+  { value: "price_asc", label: "Price: Low to High" },
+  { value: "price_desc", label: "Price: High to Low" },
 ];
 
 // A Server Component: it runs on the server, awaits the gateway call directly, and
@@ -22,7 +25,7 @@ export default async function ProductsPage({
   const sp = await searchParams;
   const q = sp.q ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
-  const sort = sp.sort ?? "Featured";
+  const sort = sp.sort ?? "featured";
 
   // Catch the gateway error HERE rather than letting it throw to error.tsx: a
   // Server Component can render the requestId into HTML directly, whereas the
@@ -31,7 +34,7 @@ export default async function ProductsPage({
   // rethrow it and let the error boundary catch it.
   let products, total;
   try {
-    ({ products, total } = await listProducts({ q, page, pageSize: PAGE_SIZE }));
+    ({ products, total } = await listProducts({ q, page, sort, pageSize: PAGE_SIZE }));
   } catch (err) {
     if (err instanceof GatewayError) {
       return (
@@ -103,6 +106,10 @@ export default async function ProductsPage({
               borderBottom: "1px solid var(--plt-border-heavy)",
             }}
           >
+            {/* Carry the active sort through a search so the two filters compose. */}
+            {sort && sort !== "featured" && (
+              <input type="hidden" name="sort" value={sort} />
+            )}
             <input
               type="search"
               name="q"
@@ -229,9 +236,9 @@ export default async function ProductsPage({
               Sort by
               <form action="/products" style={{ display: "inline" }}>
                 {q && <input type="hidden" name="q" value={q} />}
-                <select
-                  name="sort"
-                  defaultValue={sort}
+                <SortSelect
+                  options={SORT_OPTIONS}
+                  value={sort}
                   style={{
                     border: "1px solid var(--plt-border-mid)",
                     borderRadius: "var(--plt-radius-sm)",
@@ -241,13 +248,7 @@ export default async function ProductsPage({
                     background: "var(--plt-card)",
                     cursor: "pointer",
                   }}
-                >
-                  {SORT_OPTIONS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                />
               </form>
             </div>
           </div>
@@ -393,13 +394,13 @@ export default async function ProductsPage({
               fontSize: 13,
             }}
           >
-            <PageLink q={q} page={page - 1} disabled={page <= 1}>
+            <PageLink q={q} sort={sort} page={page - 1} disabled={page <= 1}>
               ← Prev
             </PageLink>
             <span style={{ color: "var(--plt-text-secondary)" }}>
               Page {page} of {totalPages} · {total} items
             </span>
-            <PageLink q={q} page={page + 1} disabled={page >= totalPages}>
+            <PageLink q={q} sort={sort} page={page + 1} disabled={page >= totalPages}>
               Next →
             </PageLink>
           </nav>
@@ -411,11 +412,13 @@ export default async function ProductsPage({
 
 function PageLink({
   q,
+  sort,
   page,
   disabled,
   children,
 }: {
   q: string;
+  sort: string;
   page: number;
   disabled: boolean;
   children: React.ReactNode;
@@ -426,6 +429,8 @@ function PageLink({
     );
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
+  // Keep the active sort across pages; "featured" is the default, so omit it.
+  if (sort && sort !== "featured") qs.set("sort", sort);
   qs.set("page", String(page));
   return (
     <Link

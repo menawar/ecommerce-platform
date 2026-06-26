@@ -269,7 +269,10 @@ FROM products p
 JOIN inventory i ON i.product_id = p.id
 WHERE ($3::uuid IS NULL OR p.category_id = $3)
   AND ($4::text IS NULL OR p.name ILIKE '%' || $4 || '%')
-ORDER BY p.created_at DESC
+ORDER BY
+  CASE WHEN $5::text = 'price_asc'  THEN p.price_cents END ASC,
+  CASE WHEN $5::text = 'price_desc' THEN p.price_cents END DESC,
+  p.created_at DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -278,6 +281,7 @@ type ListProductsWithInventoryParams struct {
 	Offset     int32
 	CategoryID pgtype.UUID
 	Search     *string
+	Sort       string
 }
 
 type ListProductsWithInventoryRow struct {
@@ -295,12 +299,15 @@ type ListProductsWithInventoryRow struct {
 	Available   int32
 }
 
+// Each CASE is active for only one sort value; the others evaluate to NULL (no
+// ordering effect). created_at DESC is the default and a stable final tiebreak.
 func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProductsWithInventoryParams) ([]ListProductsWithInventoryRow, error) {
 	rows, err := q.db.Query(ctx, listProductsWithInventory,
 		arg.Limit,
 		arg.Offset,
 		arg.CategoryID,
 		arg.Search,
+		arg.Sort,
 	)
 	if err != nil {
 		return nil, err
