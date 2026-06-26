@@ -63,6 +63,10 @@ infra-ps: ## Show infra container status
 # Bring up the whole stack: infra + apps. The order is guaranteed by depends_on.
 up: ## Bring everything up (infra + apps), wait for healthy
 	docker compose -f $(INFRA) -f docker-compose.yml up -d --wait
+	# Create the MinIO product-images bucket. It's a one-shot behind the "init"
+	# compose profile (so it isn't part of the --wait set above, which would fail
+	# on its clean exit) — run it explicitly, same as infra-up. Idempotent.
+	docker compose -f $(INFRA) -f docker-compose.yml run --rm createbuckets
 
 down: ## Bring everything down (keep volumes)
 	docker compose -f $(INFRA) -f docker-compose.yml down
