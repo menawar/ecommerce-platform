@@ -77,6 +77,7 @@ func (s *Server) CreateProduct(ctx context.Context, req *productv1.CreateProduct
 		PriceCents:  req.GetPriceCents(),
 		Currency:    currency,
 		CategoryID:  categoryID,
+		ImageUrl:    req.GetImageUrl(),
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -223,6 +224,7 @@ func productFromModel(p db.Product, available int32) *productv1.Product {
 		CategoryId:  uuidString(p.CategoryID),
 		Available:   available,
 		CreatedAt:   tsUnix(p.CreatedAt),
+		ImageUrl:    p.ImageUrl,
 	}
 }
 
@@ -237,6 +239,7 @@ func rowFromDetail(r db.GetProductWithInventoryRow) *productv1.Product {
 		CategoryId:  uuidString(r.CategoryID),
 		Available:   r.Available,
 		CreatedAt:   tsUnix(r.CreatedAt),
+		ImageUrl:    r.ImageUrl,
 	}
 }
 
@@ -251,5 +254,6 @@ func rowFromList(r db.ListProductsWithInventoryRow) *productv1.Product {
 		CategoryId:  uuidString(r.CategoryID),
 		Available:   r.Available,
 		CreatedAt:   tsUnix(r.CreatedAt),
+		ImageUrl:    r.ImageUrl,
 	}
 }

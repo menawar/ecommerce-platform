@@ -23,6 +23,7 @@ type productDTO struct {
 	CategoryID  string `json:"category_id"`
 	Available   int32  `json:"available"`
 	CreatedAt   int64  `json:"created_at"`
+	ImageURL    string `json:"image_url"`
 }
 
 func toProductDTO(p *productv1.Product) productDTO {
@@ -36,6 +37,7 @@ func toProductDTO(p *productv1.Product) productDTO {
 		CategoryID:  p.GetCategoryId(),
 		Available:   p.GetAvailable(),
 		CreatedAt:   p.GetCreatedAt(),
+		ImageURL:    p.GetImageUrl(),
 	}
 }
 
@@ -91,6 +93,7 @@ type createProductRequest struct {
 	Currency        string `json:"currency"`         // defaults to NGN in the service when empty
 	CategoryID      string `json:"category_id"`      // optional; empty = uncategorized
 	InitialQuantity int32  `json:"initial_quantity"` // seeds the inventory row
+	ImageURL        string `json:"image_url"`        // optional catalog image URL
 }
 
 // createProduct: POST /products (admin only). It decodes the body, calls the
@@ -111,6 +114,7 @@ func (h *Handler) createProduct(w http.ResponseWriter, r *http.Request) {
 		Currency:        req.Currency,
 		CategoryId:      req.CategoryID,
 		InitialQuantity: req.InitialQuantity,
+		ImageUrl:        req.ImageURL,
 	})
 	if err != nil {
 		h.writeGRPCError(w, r, err)

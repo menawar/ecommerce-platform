@@ -70,15 +70,16 @@ func TestCreateProduct_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	client := newTestClient(t)
 
+	const imageURL = "https://cdn.example.com/widget.png"
 	create, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
 		Sku: "WIDGET-1", Name: "Widget", Description: "A widget",
-		PriceCents: 1999, Currency: "NGN", InitialQuantity: 25,
+		PriceCents: 1999, Currency: "NGN", InitialQuantity: 25, ImageUrl: imageURL,
 	})
 	if err != nil {
 		t.Fatalf("CreateProduct: %v", err)
 	}
 	p := create.GetProduct()
-	if p.GetId() == "" || p.GetAvailable() != 25 || p.GetPriceCents() != 1999 {
+	if p.GetId() == "" || p.GetAvailable() != 25 || p.GetPriceCents() != 1999 || p.GetImageUrl() != imageURL {
 		t.Fatalf("created product = %+v", p)
 	}
 
@@ -86,7 +87,8 @@ func TestCreateProduct_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProduct: %v", err)
 	}
-	if got.GetProduct().GetSku() != "WIDGET-1" || got.GetProduct().GetAvailable() != 25 {
+	// image_url must survive the round-trip through the DB and the read path.
+	if got.GetProduct().GetSku() != "WIDGET-1" || got.GetProduct().GetAvailable() != 25 || got.GetProduct().GetImageUrl() != imageURL {
 		t.Errorf("got %+v", got.GetProduct())
 	}
 }

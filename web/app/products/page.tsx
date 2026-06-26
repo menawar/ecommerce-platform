@@ -307,22 +307,35 @@ export default async function ProductsPage({
                   transition: "box-shadow 0.2s",
                 }}
               >
-                <div className="plt-img-placeholder">
+                <div
+                  className="plt-img-placeholder"
+                  style={
+                    p.image_url
+                      ? {
+                          backgroundImage: `url("${p.image_url}")`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                        }
+                      : undefined
+                  }
+                >
                   {p.available > 0 && (
                     <span className="plt-badge plt-badge-dark">In stock</span>
                   )}
                   {p.available <= 0 && (
                     <span className="plt-badge plt-badge-red">Sold out</span>
                   )}
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: 10,
-                      color: "var(--plt-text-muted)",
-                    }}
-                  >
-                    {p.sku}
-                  </span>
+                  {!p.image_url && (
+                    <span
+                      style={{
+                        fontFamily: "monospace",
+                        fontSize: 10,
+                        color: "var(--plt-text-muted)",
+                      }}
+                    >
+                      {p.sku}
+                    </span>
+                  )}
                 </div>
                 <div
                   style={{

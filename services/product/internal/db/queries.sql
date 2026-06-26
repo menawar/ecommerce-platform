@@ -10,8 +10,8 @@ VALUES ($1, $2)
 RETURNING *;
 
 -- name: CreateProduct :one
-INSERT INTO products (sku, name, description, price_cents, currency, category_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO products (sku, name, description, price_cents, currency, category_id, image_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetProduct :one

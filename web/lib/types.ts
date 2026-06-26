@@ -12,6 +12,7 @@ export type Product = {
   category_id: string;
   available: number;
   created_at: number;
+  image_url: string;
 };
 
 export type ProductList = {

@@ -30,6 +30,7 @@ type Product struct {
 	Currency    string
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
+	ImageUrl    string
 }
 
 type ReservationItem struct {

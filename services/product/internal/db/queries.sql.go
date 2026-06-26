@@ -101,9 +101,9 @@ func (q *Queries) CreateInventory(ctx context.Context, arg CreateInventoryParams
 }
 
 const createProduct = `-- name: CreateProduct :one
-INSERT INTO products (sku, name, description, price_cents, currency, category_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, sku, name, description, price_cents, currency, category_id, created_at
+INSERT INTO products (sku, name, description, price_cents, currency, category_id, image_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, sku, name, description, price_cents, currency, category_id, created_at, image_url
 `
 
 type CreateProductParams struct {
@@ -113,6 +113,7 @@ type CreateProductParams struct {
 	PriceCents  int64
 	Currency    string
 	CategoryID  pgtype.UUID
+	ImageUrl    string
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -123,6 +124,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.PriceCents,
 		arg.Currency,
 		arg.CategoryID,
+		arg.ImageUrl,
 	)
 	var i Product
 	err := row.Scan(
@@ -134,6 +136,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.Currency,
 		&i.CategoryID,
 		&i.CreatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -156,7 +159,7 @@ func (q *Queries) GetInventory(ctx context.Context, productID pgtype.UUID) (Inve
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, sku, name, description, price_cents, currency, category_id, created_at FROM products
+SELECT id, sku, name, description, price_cents, currency, category_id, created_at, image_url FROM products
 WHERE id = $1
 `
 
@@ -172,12 +175,13 @@ func (q *Queries) GetProduct(ctx context.Context, id pgtype.UUID) (Product, erro
 		&i.Currency,
 		&i.CategoryID,
 		&i.CreatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }
 
 const getProductWithInventory = `-- name: GetProductWithInventory :one
-SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, p.image_url, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
 WHERE p.id = $1
@@ -192,6 +196,7 @@ type GetProductWithInventoryRow struct {
 	Currency    string
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
+	ImageUrl    string
 	Quantity    int32
 	Reserved    int32
 	Available   int32
@@ -210,6 +215,7 @@ func (q *Queries) GetProductWithInventory(ctx context.Context, id pgtype.UUID) (
 		&i.Currency,
 		&i.CategoryID,
 		&i.CreatedAt,
+		&i.ImageUrl,
 		&i.Quantity,
 		&i.Reserved,
 		&i.Available,
@@ -258,7 +264,7 @@ func (q *Queries) InsertReservationItem(ctx context.Context, arg InsertReservati
 }
 
 const listProductsWithInventory = `-- name: ListProductsWithInventory :many
-SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, p.image_url, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
 WHERE ($3::uuid IS NULL OR p.category_id = $3)
@@ -283,6 +289,7 @@ type ListProductsWithInventoryRow struct {
 	Currency    string
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
+	ImageUrl    string
 	Quantity    int32
 	Reserved    int32
 	Available   int32
@@ -311,6 +318,7 @@ func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProduct
 			&i.Currency,
 			&i.CategoryID,
 			&i.CreatedAt,
+			&i.ImageUrl,
 			&i.Quantity,
 			&i.Reserved,
 			&i.Available,
