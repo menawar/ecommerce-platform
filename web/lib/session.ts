@@ -58,3 +58,15 @@ export async function getMe(): Promise<{ user_id: string; role: string }> {
 export async function isLoggedIn(): Promise<boolean> {
   return Boolean((await cookies()).get(SESSION_COOKIE)?.value);
 }
+
+// currentRole returns the caller's role, or null when not logged in or the token
+// is invalid/expired. Unlike getMe it never throws — it's for UI decisions (e.g.
+// whether to show the Admin link), so a 401 just means "no role", not an error.
+export async function currentRole(): Promise<string | null> {
+  if (!(await isLoggedIn())) return null;
+  try {
+    return (await getMe()).role;
+  } catch {
+    return null;
+  }
+}
