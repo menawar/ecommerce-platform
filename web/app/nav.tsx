@@ -9,6 +9,8 @@ import { logoutAction } from "@/app/(auth)/actions";
 export async function Nav() {
   const loggedIn = await isLoggedIn();
   // Role drives the Admin link; currentRole never throws (null when anon/expired).
+  // This is one extra gateway round-trip per render for logged-in users — cheap
+  // enough here; not worth threading role down through the layout to avoid.
   const isAdmin = loggedIn && (await currentRole()) === "admin";
 
   // Try to get cart count when logged in

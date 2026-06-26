@@ -29,9 +29,9 @@ export default async function AdminProductsPage() {
     );
   }
 
-  let products;
+  let products, total;
   try {
-    ({ products } = await listProducts({ pageSize: PAGE_SIZE }));
+    ({ products, total } = await listProducts({ pageSize: PAGE_SIZE }));
   } catch (err) {
     if (err instanceof GatewayError) {
       return (
@@ -60,8 +60,13 @@ export default async function AdminProductsPage() {
         {/* Existing catalog */}
         <section style={{ flex: 1, minWidth: 320 }}>
           <h2 style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>
-            Catalog ({products.length})
+            Catalog ({total})
           </h2>
+          {total > PAGE_SIZE && (
+            <p style={{ fontSize: 12, color: "var(--plt-text-secondary)", marginBottom: 10 }}>
+              Showing the first {PAGE_SIZE}. Full admin pagination lands with edit/delete.
+            </p>
+          )}
           {products.length === 0 ? (
             <p style={{ fontSize: 14, color: "var(--plt-text-secondary)" }}>
               No products yet — create the first one.
