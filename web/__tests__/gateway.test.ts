@@ -4,10 +4,11 @@ import { describe, it, expect, vi } from "vitest";
 // environment. Mock it to a no-op so we can test the module's exported logic.
 vi.mock("server-only", () => ({}));
 
-// next/headers is called at runtime by gatewayFetch (to read the cookie).
-// We stub it so the module loads without a Next.js runtime.
+// next/headers is called at runtime by gatewayFetch (to read the cookie and the
+// forwarded client IP). We stub both so the module loads without a Next.js runtime.
 vi.mock("next/headers", () => ({
   cookies: vi.fn(() => Promise.resolve({ get: () => undefined })),
+  headers: vi.fn(() => Promise.resolve({ get: () => null })),
 }));
 
 import { GatewayError, gatewayFetch } from "@/lib/gateway";
