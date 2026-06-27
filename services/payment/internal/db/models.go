@@ -8,6 +8,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Outbox struct {
+	ID          pgtype.UUID
+	Topic       string
+	Payload     []byte
+	CreatedAt   pgtype.Timestamptz
+	PublishedAt pgtype.Timestamptz
+}
+
 type Payment struct {
 	ID             pgtype.UUID
 	OrderID        pgtype.UUID

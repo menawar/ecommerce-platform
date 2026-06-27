@@ -36,7 +36,10 @@ message PlaceOrderRequest {
 }
 message PlaceOrderResponse {
   string order_id = 1;
-  string status = 2; // CONFIRMED | CANCELLED (terminal after the saga runs)
+  string status = 2; // PAYMENT_PENDING (terminal status arrives once payment settles)
+  // authorization_url is where the customer must go to authorize payment (the PSP
+  // hosted page). Empty when the order failed before payment (e.g. out of stock).
+  string authorization_url = 3;
 }
 
 message GetOrderRequest {

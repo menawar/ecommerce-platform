@@ -46,7 +46,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 // none of which call out to Cart/Product/Payment.
 func newClient(t *testing.T, pool *pgxpool.Pool) orderv1.OrderServiceClient {
 	t.Helper()
-	sg := saga.New(pool, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	sg := saga.New(pool, nil, nil, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	srv := server.NewServer(pool, sg, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	lis := bufconn.Listen(1 << 20)
 	gs := grpc.NewServer()

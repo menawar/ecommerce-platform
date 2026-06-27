@@ -15,6 +15,10 @@ service UserService {
   // an access token and extract the caller's identity. Keeping validation here
   // (not in the Gateway) means only the User service needs the signing secret.
   rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  // GetUser returns a user's profile by id, for server-to-server use (e.g. the
+  // Order saga resolving the customer's email for a payment receipt). It never
+  // exposes the password hash.
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
 }
 
 message RegisterRequest {
@@ -38,6 +42,16 @@ message LoginResponse {
   string access_token = 1;  // short-lived JWT (TTL 15m)
   string refresh_token = 2; // long-lived token to mint new access tokens (TTL 7d)
   int64 expires_at = 3;     // access_token expiry, unix seconds
+}
+
+message GetUserRequest {
+  string user_id = 1;
+}
+message GetUserResponse {
+  string user_id = 1;
+  string email = 2;
+  string full_name = 3;
+  string role = 4;
 }
 
 message ValidateTokenRequest {

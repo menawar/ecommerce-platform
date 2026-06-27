@@ -242,11 +242,14 @@ func (x *PlaceOrderRequest) GetIdempotencyKey() string {
 }
 
 type PlaceOrderResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
-	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // CONFIRMED | CANCELLED (terminal after the saga runs)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	OrderId string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	Status  string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"` // PAYMENT_PENDING (terminal status arrives once payment settles)
+	// authorization_url is where the customer must go to authorize payment (the PSP
+	// hosted page). Empty when the order failed before payment (e.g. out of stock).
+	AuthorizationUrl string `protobuf:"bytes,3,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PlaceOrderResponse) Reset() {
@@ -289,6 +292,13 @@ func (x *PlaceOrderResponse) GetOrderId() string {
 func (x *PlaceOrderResponse) GetStatus() string {
 	if x != nil {
 		return x.Status
+	}
+	return ""
+}
+
+func (x *PlaceOrderResponse) GetAuthorizationUrl() string {
+	if x != nil {
+		return x.AuthorizationUrl
 	}
 	return ""
 }
@@ -599,10 +609,11 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\x03R\tcreatedAt\"U\n" +
 	"\x11PlaceOrderRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12'\n" +
-	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"G\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\"t\n" +
 	"\x12PlaceOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x16\n" +
-	"\x06status\x18\x02 \x01(\tR\x06status\",\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\x12+\n" +
+	"\x11authorization_url\x18\x03 \x01(\tR\x10authorizationUrl\",\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\"9\n" +
 	"\x10GetOrderResponse\x12%\n" +

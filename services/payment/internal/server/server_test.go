@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -22,19 +21,9 @@ import (
 	"github.com/menawar/ecommerce-platform/services/payment/internal/server"
 )
 
-// countingProvider wraps a Provider and counts Charge calls, so a test can prove
-// an idempotent retry charges AT MOST ONCE.
-type countingProvider struct {
-	inner provider.Provider
-	calls int32
-}
-
-func (c *countingProvider) Charge(ctx context.Context, amount int64, currency, ref string) (string, error) {
-	atomic.AddInt32(&c.calls, 1)
-	return c.inner.Charge(ctx, amount, currency, ref)
-}
-
-func newClient(t *testing.T, prov provider.Provider) paymentv1.PaymentServiceClient {
+// newClient spins up the PaymentService over an in-memory bufconn, backed by a
+// real paymentdb (skips if unavailable) and the Mock async provider.
+func newClient(t *testing.T) paymentv1.PaymentServiceClient {
 	t.Helper()
 	url := os.Getenv("PAYMENT_DB_URL")
 	if url == "" {
@@ -49,7 +38,8 @@ func newClient(t *testing.T, prov provider.Provider) paymentv1.PaymentServiceCli
 		t.Fatalf("truncate: %v", err)
 	}
 
-	srv := server.NewServer(pool, prov, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	srv := server.NewServer(pool, slog.New(slog.NewTextHandler(io.Discard, nil))).
+		WithAsync(provider.NameMock, provider.NewMock())
 	lis := bufconn.Listen(1 << 20)
 	gs := grpc.NewServer()
 	paymentv1.RegisterPaymentServiceServer(gs, srv)
@@ -66,82 +56,55 @@ func newClient(t *testing.T, prov provider.Provider) paymentv1.PaymentServiceCli
 	return paymentv1.NewPaymentServiceClient(conn)
 }
 
-func req(amount int64, key string) *paymentv1.CreatePaymentRequest {
-	return &paymentv1.CreatePaymentRequest{OrderId: uuid.NewString(), AmountCents: amount, Currency: "NGN", IdempotencyKey: key}
-}
-
-func TestCreatePayment_SucceedsAndDeclines(t *testing.T) {
-	ctx := context.Background()
-	c := newClient(t, provider.NewMock())
-
-	ok, err := c.CreatePayment(ctx, req(2500, uuid.NewString()))
-	if err != nil {
-		t.Fatalf("CreatePayment: %v", err)
-	}
-	if ok.GetStatus() != "succeeded" || ok.GetPaymentId() == "" {
-		t.Errorf("ok payment = %+v, want succeeded", ok)
-	}
-
-	// amount % 100 == 13 -> declined.
-	dec, err := c.CreatePayment(ctx, req(1313, uuid.NewString()))
-	if err != nil {
-		t.Fatalf("CreatePayment(declined): %v", err)
-	}
-	if dec.GetStatus() != "failed" {
-		t.Errorf("declined payment status = %q, want failed", dec.GetStatus())
+func initReq(amount int64, key string) *paymentv1.InitializePaymentRequest {
+	return &paymentv1.InitializePaymentRequest{
+		OrderId: uuid.NewString(), AmountCents: amount, Currency: "NGN",
+		IdempotencyKey: key, Email: "buyer@example.com",
 	}
 }
 
-// TestCreatePayment_Idempotent is the key test: the same idempotency_key, twice,
-// returns the SAME payment and charges the provider exactly once.
-func TestCreatePayment_Idempotent(t *testing.T) {
-	ctx := context.Background()
-	cp := &countingProvider{inner: provider.NewMock()}
-	c := newClient(t, cp)
-
-	key := uuid.NewString()
-	r := req(2500, key)
-
-	first, err := c.CreatePayment(ctx, r)
+// TestInitializePaymentOverGRPC checks the happy response shape end-to-end through
+// the gRPC layer (idempotency itself is covered in server_async_test.go).
+func TestInitializePaymentOverGRPC(t *testing.T) {
+	c := newClient(t)
+	resp, err := c.InitializePayment(context.Background(), initReq(2500, uuid.NewString()))
 	if err != nil {
-		t.Fatalf("first: %v", err)
+		t.Fatalf("InitializePayment: %v", err)
 	}
-	second, err := c.CreatePayment(ctx, r)
-	if err != nil {
-		t.Fatalf("retry: %v", err)
-	}
-
-	if first.GetPaymentId() != second.GetPaymentId() {
-		t.Errorf("payment ids differ: %s vs %s — retry created a second payment", first.GetPaymentId(), second.GetPaymentId())
-	}
-	if n := atomic.LoadInt32(&cp.calls); n != 1 {
-		t.Errorf("provider charged %d times, want exactly 1", n)
+	if resp.GetStatus() != "pending" || resp.GetAuthorizationUrl() == "" || resp.GetPaymentId() == "" {
+		t.Errorf("want pending + authorization_url + id, got %+v", resp)
 	}
 }
 
-func TestCreatePayment_Validation(t *testing.T) {
+func TestInitializePayment_Validation(t *testing.T) {
 	ctx := context.Background()
-	c := newClient(t, provider.NewMock())
+	c := newClient(t)
 
-	if _, err := c.CreatePayment(ctx, &paymentv1.CreatePaymentRequest{OrderId: "nope", AmountCents: 1, IdempotencyKey: "k"}); status.Code(err) != codes.InvalidArgument {
+	if _, err := c.InitializePayment(ctx, &paymentv1.InitializePaymentRequest{OrderId: "nope", IdempotencyKey: "k", Email: "e@x.com"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("bad order_id: want InvalidArgument, got %v", err)
 	}
-	if _, err := c.CreatePayment(ctx, &paymentv1.CreatePaymentRequest{OrderId: uuid.NewString(), AmountCents: 1, IdempotencyKey: ""}); status.Code(err) != codes.InvalidArgument {
+	if _, err := c.InitializePayment(ctx, &paymentv1.InitializePaymentRequest{OrderId: uuid.NewString(), IdempotencyKey: "", Email: "e@x.com"}); status.Code(err) != codes.InvalidArgument {
 		t.Errorf("empty key: want InvalidArgument, got %v", err)
+	}
+	if _, err := c.InitializePayment(ctx, &paymentv1.InitializePaymentRequest{OrderId: uuid.NewString(), IdempotencyKey: "k2", Email: ""}); status.Code(err) != codes.InvalidArgument {
+		t.Errorf("empty email: want InvalidArgument, got %v", err)
 	}
 }
 
 func TestGetPayment(t *testing.T) {
 	ctx := context.Background()
-	c := newClient(t, provider.NewMock())
+	c := newClient(t)
 
-	created, _ := c.CreatePayment(ctx, req(2500, uuid.NewString()))
+	created, err := c.InitializePayment(ctx, initReq(2500, uuid.NewString()))
+	if err != nil {
+		t.Fatalf("InitializePayment: %v", err)
+	}
 	got, err := c.GetPayment(ctx, &paymentv1.GetPaymentRequest{PaymentId: created.GetPaymentId()})
 	if err != nil {
 		t.Fatalf("GetPayment: %v", err)
 	}
-	if got.GetPayment().GetStatus() != "succeeded" || got.GetPayment().GetProviderRef() == "" {
-		t.Errorf("payment = %+v", got.GetPayment())
+	if got.GetPayment().GetStatus() != "pending" || got.GetPayment().GetProviderRef() == "" {
+		t.Errorf("payment = %+v, want pending with a provider_ref", got.GetPayment())
 	}
 
 	if _, err := c.GetPayment(ctx, &paymentv1.GetPaymentRequest{PaymentId: uuid.NewString()}); status.Code(err) != codes.NotFound {

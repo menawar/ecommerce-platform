@@ -13,7 +13,7 @@ import (
 const StreamName = "EVENTS"
 
 // StreamSubjects returns the subjects the EVENTS stream captures.
-func StreamSubjects() []string { return []string{"order.*", "user.*"} }
+func StreamSubjects() []string { return []string{"order.*", "user.*", "payment.*"} }
 
 // Publisher delivers an event payload to a topic. NATSPublisher implements it (and
 // outbox.Publisher, which has the same shape) so the order outbox poller can push

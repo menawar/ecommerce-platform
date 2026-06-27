@@ -73,6 +73,7 @@ services:
       PAYMENT_GRPC_ADDR: ":50054"
       PAYMENT_HTTP_ADDR: ":2115"
       PAYMENT_DB_URL: "postgres://ecommerce:ecommerce@postgres:5432/paymentdb?sslmode=disable"
+      NATS_URL: "nats://nats:4222"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
       test: ["CMD", "/healthcheck", "http://localhost:2115/healthz"]
@@ -81,6 +82,8 @@ services:
       retries: 5
     depends_on:
       postgres:
+        condition: service_healthy
+      nats:
         condition: service_healthy
     networks:
       - ecommerce
@@ -96,6 +99,7 @@ services:
       CART_GRPC_ADDR: "cart:50053"
       PRODUCT_GRPC_ADDR: "product:50052"
       PAYMENT_GRPC_ADDR: "payment:50054"
+      USER_GRPC_ADDR: "user:50051"
       NATS_URL: "nats://nats:4222"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
@@ -107,6 +111,8 @@ services:
       postgres:
         condition: service_healthy
       nats:
+        condition: service_healthy
+      user:
         condition: service_healthy
       cart:
         condition: service_healthy

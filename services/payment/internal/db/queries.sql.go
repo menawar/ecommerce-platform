@@ -92,6 +92,83 @@ func (q *Queries) GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey
 	return i, err
 }
 
+const getPaymentByProviderRef = `-- name: GetPaymentByProviderRef :one
+SELECT id, order_id, amount_cents, currency, status, provider, provider_ref, idempotency_key, created_at FROM payments WHERE provider_ref = $1
+`
+
+func (q *Queries) GetPaymentByProviderRef(ctx context.Context, providerRef *string) (Payment, error) {
+	row := q.db.QueryRow(ctx, getPaymentByProviderRef, providerRef)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.AmountCents,
+		&i.Currency,
+		&i.Status,
+		&i.Provider,
+		&i.ProviderRef,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertOutbox = `-- name: InsertOutbox :exec
+
+INSERT INTO outbox (topic, payload) VALUES ($1, $2)
+`
+
+type InsertOutboxParams struct {
+	Topic   string
+	Payload []byte
+}
+
+// Outbox: events written in the same tx as a payment status change, drained to
+// NATS by the shared poller (see pkg/outbox).
+func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) error {
+	_, err := q.db.Exec(ctx, insertOutbox, arg.Topic, arg.Payload)
+	return err
+}
+
+const listUnpublishedOutbox = `-- name: ListUnpublishedOutbox :many
+SELECT id, topic, payload, created_at, published_at FROM outbox WHERE published_at IS NULL ORDER BY created_at LIMIT $1
+`
+
+func (q *Queries) ListUnpublishedOutbox(ctx context.Context, limit int32) ([]Outbox, error) {
+	rows, err := q.db.Query(ctx, listUnpublishedOutbox, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Outbox
+	for rows.Next() {
+		var i Outbox
+		if err := rows.Scan(
+			&i.ID,
+			&i.Topic,
+			&i.Payload,
+			&i.CreatedAt,
+			&i.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markOutboxPublished = `-- name: MarkOutboxPublished :exec
+UPDATE outbox SET published_at = now() WHERE id = $1
+`
+
+func (q *Queries) MarkOutboxPublished(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markOutboxPublished, id)
+	return err
+}
+
 const updatePaymentResult = `-- name: UpdatePaymentResult :one
 UPDATE payments
 SET status = $2, provider_ref = $3

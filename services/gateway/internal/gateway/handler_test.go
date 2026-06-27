@@ -41,6 +41,9 @@ func (f *fakeUserClient) Login(_ context.Context, in *userv1.LoginRequest, _ ...
 func (f *fakeUserClient) ValidateToken(_ context.Context, in *userv1.ValidateTokenRequest, _ ...grpc.CallOption) (*userv1.ValidateTokenResponse, error) {
 	return f.validateFn(in)
 }
+func (f *fakeUserClient) GetUser(_ context.Context, _ *userv1.GetUserRequest, _ ...grpc.CallOption) (*userv1.GetUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 
 // testMetrics returns an HTTPMetrics instance backed by a fresh, per-test
 // Prometheus registry — isolating each test's counters from the global default

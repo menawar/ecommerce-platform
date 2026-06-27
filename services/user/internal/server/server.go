@@ -160,6 +160,27 @@ func (s *Server) ValidateToken(ctx context.Context, req *userv1.ValidateTokenReq
 	}, nil
 }
 
+// GetUser returns a user's profile by id for server-to-server callers. It never
+// includes the password hash.
+func (s *Server) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+	if _, err := uuid.Parse(req.GetUserId()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+	u, err := s.repo.GetByID(ctx, req.GetUserId())
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, s.internal(ctx, "get user", err)
+	}
+	return &userv1.GetUserResponse{
+		UserId:   u.ID,
+		Email:    u.Email,
+		FullName: u.FullName,
+		Role:     u.Role,
+	}, nil
+}
+
 type userRegistered struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`

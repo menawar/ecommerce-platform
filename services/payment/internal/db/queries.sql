@@ -14,3 +14,18 @@ UPDATE payments
 SET status = $2, provider_ref = $3
 WHERE id = $1
 RETURNING *;
+
+-- name: GetPaymentByProviderRef :one
+SELECT * FROM payments WHERE provider_ref = $1;
+
+-- Outbox: events written in the same tx as a payment status change, drained to
+-- NATS by the shared poller (see pkg/outbox).
+
+-- name: InsertOutbox :exec
+INSERT INTO outbox (topic, payload) VALUES ($1, $2);
+
+-- name: ListUnpublishedOutbox :many
+SELECT * FROM outbox WHERE published_at IS NULL ORDER BY created_at LIMIT $1;
+
+-- name: MarkOutboxPublished :exec
+UPDATE outbox SET published_at = now() WHERE id = $1;

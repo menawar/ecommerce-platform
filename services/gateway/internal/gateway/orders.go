@@ -62,7 +62,11 @@ func (h *Handler) placeOrder(w http.ResponseWriter, r *http.Request) {
 		h.writeGRPCError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"order_id": resp.GetOrderId(), "status": resp.GetStatus()})
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"order_id":          resp.GetOrderId(),
+		"status":            resp.GetStatus(),
+		"authorization_url": resp.GetAuthorizationUrl(),
+	})
 }
 
 func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {

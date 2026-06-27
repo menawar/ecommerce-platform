@@ -19,8 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PaymentService_CreatePayment_FullMethodName = "/payment.v1.PaymentService/CreatePayment"
-	PaymentService_GetPayment_FullMethodName    = "/payment.v1.PaymentService/GetPayment"
+	PaymentService_InitializePayment_FullMethodName = "/payment.v1.PaymentService/InitializePayment"
+	PaymentService_GetPayment_FullMethodName        = "/payment.v1.PaymentService/GetPayment"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
@@ -28,11 +28,14 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // PaymentService processes charges. It runs in mock mode by default (a
-// deterministic MockProvider); a real Stripe adapter is a later stretch goal.
-// CreatePayment is idempotent on idempotency_key — the Order saga may retry it,
-// and a retry must never charge twice.
+// deterministic MockProvider); the real adapter is Paystack (NGN). Both
+// CreatePayment and InitializePayment are idempotent on idempotency_key — the
+// Order saga may retry, and a retry must never charge twice.
 type PaymentServiceClient interface {
-	CreatePayment(ctx context.Context, in *CreatePaymentRequest, opts ...grpc.CallOption) (*CreatePaymentResponse, error)
+	// InitializePayment starts an ASYNCHRONOUS charge with a redirect-based PSP
+	// (Paystack): it returns an authorization_url to send the customer to and a
+	// payment in 'pending'. The real outcome arrives later via webhook.
+	InitializePayment(ctx context.Context, in *InitializePaymentRequest, opts ...grpc.CallOption) (*InitializePaymentResponse, error)
 	GetPayment(ctx context.Context, in *GetPaymentRequest, opts ...grpc.CallOption) (*GetPaymentResponse, error)
 }
 
@@ -44,10 +47,10 @@ func NewPaymentServiceClient(cc grpc.ClientConnInterface) PaymentServiceClient {
 	return &paymentServiceClient{cc}
 }
 
-func (c *paymentServiceClient) CreatePayment(ctx context.Context, in *CreatePaymentRequest, opts ...grpc.CallOption) (*CreatePaymentResponse, error) {
+func (c *paymentServiceClient) InitializePayment(ctx context.Context, in *InitializePaymentRequest, opts ...grpc.CallOption) (*InitializePaymentResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CreatePaymentResponse)
-	err := c.cc.Invoke(ctx, PaymentService_CreatePayment_FullMethodName, in, out, cOpts...)
+	out := new(InitializePaymentResponse)
+	err := c.cc.Invoke(ctx, PaymentService_InitializePayment_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -69,11 +72,14 @@ func (c *paymentServiceClient) GetPayment(ctx context.Context, in *GetPaymentReq
 // for forward compatibility.
 //
 // PaymentService processes charges. It runs in mock mode by default (a
-// deterministic MockProvider); a real Stripe adapter is a later stretch goal.
-// CreatePayment is idempotent on idempotency_key — the Order saga may retry it,
-// and a retry must never charge twice.
+// deterministic MockProvider); the real adapter is Paystack (NGN). Both
+// CreatePayment and InitializePayment are idempotent on idempotency_key — the
+// Order saga may retry, and a retry must never charge twice.
 type PaymentServiceServer interface {
-	CreatePayment(context.Context, *CreatePaymentRequest) (*CreatePaymentResponse, error)
+	// InitializePayment starts an ASYNCHRONOUS charge with a redirect-based PSP
+	// (Paystack): it returns an authorization_url to send the customer to and a
+	// payment in 'pending'. The real outcome arrives later via webhook.
+	InitializePayment(context.Context, *InitializePaymentRequest) (*InitializePaymentResponse, error)
 	GetPayment(context.Context, *GetPaymentRequest) (*GetPaymentResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
@@ -85,8 +91,8 @@ type PaymentServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedPaymentServiceServer struct{}
 
-func (UnimplementedPaymentServiceServer) CreatePayment(context.Context, *CreatePaymentRequest) (*CreatePaymentResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method CreatePayment not implemented")
+func (UnimplementedPaymentServiceServer) InitializePayment(context.Context, *InitializePaymentRequest) (*InitializePaymentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InitializePayment not implemented")
 }
 func (UnimplementedPaymentServiceServer) GetPayment(context.Context, *GetPaymentRequest) (*GetPaymentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPayment not implemented")
@@ -112,20 +118,20 @@ func RegisterPaymentServiceServer(s grpc.ServiceRegistrar, srv PaymentServiceSer
 	s.RegisterService(&PaymentService_ServiceDesc, srv)
 }
 
-func _PaymentService_CreatePayment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreatePaymentRequest)
+func _PaymentService_InitializePayment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InitializePaymentRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PaymentServiceServer).CreatePayment(ctx, in)
+		return srv.(PaymentServiceServer).InitializePayment(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PaymentService_CreatePayment_FullMethodName,
+		FullMethod: PaymentService_InitializePayment_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PaymentServiceServer).CreatePayment(ctx, req.(*CreatePaymentRequest))
+		return srv.(PaymentServiceServer).InitializePayment(ctx, req.(*InitializePaymentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -156,8 +162,8 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*PaymentServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "CreatePayment",
-			Handler:    _PaymentService_CreatePayment_Handler,
+			MethodName: "InitializePayment",
+			Handler:    _PaymentService_InitializePayment_Handler,
 		},
 		{
 			MethodName: "GetPayment",

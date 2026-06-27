@@ -9,16 +9,17 @@ import (
 )
 
 type Order struct {
-	ID             pgtype.UUID
-	UserID         pgtype.UUID
-	Status         string
-	TotalCents     int64
-	Currency       string
-	ReservationID  pgtype.UUID
-	PaymentID      pgtype.UUID
-	IdempotencyKey *string
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
+	ID               pgtype.UUID
+	UserID           pgtype.UUID
+	Status           string
+	TotalCents       int64
+	Currency         string
+	ReservationID    pgtype.UUID
+	PaymentID        pgtype.UUID
+	IdempotencyKey   *string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	AuthorizationUrl string
 }
 
 type OrderItem struct {
