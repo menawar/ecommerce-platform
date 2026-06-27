@@ -9,6 +9,28 @@ image:
 
 replicas: 1
 
+# In-cluster stateful infra, so a `kind`/`minikube` cluster is self-contained.
+# In PRODUCTION set `infra.enabled: false` and point config/secrets at managed
+# Postgres/Redis/NATS/MinIO (the apps don't care — they use the same hostnames).
+infra:
+  enabled: true
+  postgres:
+    image: postgres:16-alpine
+    user: ecommerce
+    password: ecommerce # LOCAL placeholder — matches the *_DB_URL secrets below
+    storage: 1Gi
+  redis:
+    image: redis:7-alpine
+    storage: 256Mi
+  nats:
+    image: nats:2.10-alpine
+    storage: 512Mi
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    rootUser: minioadmin
+    rootPassword: minioadmin
+    storage: 1Gi
+
 resources:
   requests:
     cpu: 25m

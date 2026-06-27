@@ -1,0 +1,52 @@
+{{- if .Values.infra.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels: {{- include "ecommerce.selectorLabels" (dict "name" "redis") | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "ecommerce.selectorLabels" (dict "name" "redis") | nindent 4 }}
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels: {{- include "ecommerce.labels" (dict "name" "redis" "root" $) | nindent 4 }}
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels: {{- include "ecommerce.selectorLabels" (dict "name" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ecommerce.selectorLabels" (dict "name" "redis") | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.infra.redis.image }}
+          args: ["redis-server", "--appendonly", "yes"] # persist to the PVC
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.infra.redis.storage }}
+{{- end }}

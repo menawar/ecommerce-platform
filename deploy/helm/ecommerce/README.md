@@ -4,10 +4,16 @@ Deploys the application tier — the API **gateway** plus the 7 services
 (user, product, cart, payment, order, notification) — as Kubernetes
 Deployments + Services rendered from a single template.
 
-This chart deploys **only the apps**. Its backing infra (Postgres, Redis, NATS,
-MinIO, Jaeger) must already be reachable at the hostnames in `values.yaml`
-(`postgres`, `redis`, `nats`, `jaeger`). In-cluster infra is a later increment;
-in production you point `config`/`secrets` at managed data stores.
+Backing infra (Postgres, Redis, NATS, MinIO) ships **in-cluster** behind
+`infra.enabled` (default `true`) as StatefulSets + PVCs, so a `kind`/`minikube`
+cluster is self-contained. In **production** set `infra.enabled=false` and point
+`config`/`secrets` at managed data stores — the apps use the same hostnames, so
+nothing else changes.
+
+> **Migrations** are not yet automated by this chart. After the DBs are up, run
+> them as a one-time step (port-forward the `postgres` service and use the
+> existing `make <svc>-migrate-up` targets). A migration Helm hook Job lands with
+> the CD increment (where the migrator image is built alongside the services).
 
 ## How it's wired
 
