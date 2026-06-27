@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/menawar/ecommerce-platform/pkg/httputil"
+	"github.com/menawar/ecommerce-platform/pkg/ratelimit"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
@@ -30,6 +31,7 @@ type Handler struct {
 	carts       cartv1.CartServiceClient
 	orders      orderv1.OrderServiceClient
 	httpMetrics *httputil.HTTPMetrics
+	limiter     *ratelimit.Limiter // nil = rate limiting disabled (e.g. in unit tests)
 	log         *slog.Logger
 }
 
@@ -42,6 +44,13 @@ func NewHandler(
 	log *slog.Logger,
 ) *Handler {
 	return &Handler{users: users, products: products, carts: carts, orders: orders, httpMetrics: httpMetrics, log: log}
+}
+
+// WithLimiter enables Redis-backed rate limiting. Kept separate from NewHandler so
+// the many unit tests that don't exercise limiting need no Redis.
+func (h *Handler) WithLimiter(l *ratelimit.Limiter) *Handler {
+	h.limiter = l
+	return h
 }
 
 // Router builds the middleware chain and routes. Middleware run top-to-bottom on
@@ -75,17 +84,23 @@ func (h *Handler) Router() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	r.Post("/auth/register", h.register)
-	r.Post("/auth/login", h.login)
-
-	// Catalog browsing is public — anyone can shop before logging in.
-	r.Get("/products", h.listProducts)
-	r.Get("/products/{id}", h.getProduct)
+	// Public routes — rate limited per CLIENT IP (the limiter runs before any auth,
+	// so there's no identity yet). These are the unauthenticated abuse targets:
+	// login/register brute force and catalog scraping.
+	r.Group(func(pub chi.Router) {
+		pub.Use(h.rateLimit)
+		pub.Post("/auth/register", h.register)
+		pub.Post("/auth/login", h.login)
+		// Catalog browsing is public — anyone can shop before logging in.
+		pub.Get("/products", h.listProducts)
+		pub.Get("/products/{id}", h.getProduct)
+	})
 
 	// Protected routes: a nested group with its own middleware. requireAuth runs
 	// only for routes inside this group, leaving /auth/*, /products, /healthz public.
 	r.Group(func(pr chi.Router) {
 		pr.Use(h.requireAuth)
+		pr.Use(h.rateLimit) // after requireAuth → keyed PER USER
 		pr.Get("/me", h.me)
 
 		// Cart is per-user: every handler reads the user_id from the validated
@@ -107,6 +122,7 @@ func (h *Handler) Router() http.Handler {
 	r.Group(func(ar chi.Router) {
 		ar.Use(h.requireAuth)
 		ar.Use(h.requireAdmin)
+		ar.Use(h.rateLimit) // keyed per (admin) user
 		ar.Post("/products", h.createProduct)
 		ar.Patch("/products/{id}", h.updateProduct)
 		ar.Delete("/products/{id}", h.deleteProduct)

@@ -157,6 +157,7 @@ services:
       PRODUCT_GRPC_ADDR: "product:50052"
       CART_GRPC_ADDR: "cart:50053"
       ORDER_GRPC_ADDR: "order:50055"
+      REDIS_URL: "redis://redis:6379/0"
       JWT_SECRET: "dev-insecure-secret"
       OTEL_ENDPOINT: "jaeger:4317"
     healthcheck:
@@ -172,6 +173,8 @@ services:
       cart:
         condition: service_healthy
       order:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - ecommerce

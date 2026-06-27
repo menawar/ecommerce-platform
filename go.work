@@ -12,7 +12,9 @@
 // Bumped from 1.23 -> 1.25 because google.golang.org/grpc (v1.81+) now requires
 // Go >= 1.25, and a workspace's go directive must be >= every module it uses.
 // We have Go 1.26 installed, so this costs us nothing.
-go 1.25.0
+// Pinned to 1.25.11+: it carries the stdlib fixes for GO-2026-5037/5039
+// (crypto/x509, net/textproto) that the CI govulncheck gate flags on older 1.25.
+go 1.25.11
 
 use (
 	./pkg

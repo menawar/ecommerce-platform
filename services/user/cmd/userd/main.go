@@ -62,12 +62,16 @@ func main() {
 		accessTTL:    15 * time.Minute,
 		refreshTTL:   7 * 24 * time.Hour,
 	}
-	if cfg.jwtSecret == "" {
-		// Fail soft in dev, but make the insecurity LOUD. Never let an unset
-		// secret pass silently — a predictable secret means forgeable tokens.
-		cfg.jwtSecret = "dev-insecure-secret-change-me"
+	secret, devFallback, err := resolveJWTSecret(cfg.jwtSecret, env("APP_ENV", "development"))
+	if err != nil {
+		// Fail CLOSED: a missing/weak secret in production means forgeable tokens.
+		log.Error("refusing to start", "err", err)
+		os.Exit(1)
+	}
+	if devFallback {
 		log.Warn("JWT_SECRET not set — using an insecure dev default; DO NOT use in production")
 	}
+	cfg.jwtSecret = secret
 
 	// Cancelled on SIGINT/SIGTERM; drives the whole shutdown (see hellod).
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -181,4 +185,24 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// devJWTSecret is the public fallback used ONLY outside production.
+const devJWTSecret = "dev-insecure-secret-change-me"
+
+// resolveJWTSecret decides the signing secret for the given environment. In
+// production it requires a strong, non-default secret and returns an error
+// otherwise (the caller fails closed). In any other environment a blank secret
+// falls back to the dev default (devFallback=true so the caller can warn).
+func resolveJWTSecret(secret, appEnv string) (resolved string, devFallback bool, err error) {
+	if appEnv == "production" {
+		if len(secret) < 32 || secret == devJWTSecret {
+			return "", false, errors.New("JWT_SECRET must be a strong value (>= 32 chars) in production")
+		}
+		return secret, false, nil
+	}
+	if secret == "" {
+		return devJWTSecret, true, nil
+	}
+	return secret, false, nil
 }
