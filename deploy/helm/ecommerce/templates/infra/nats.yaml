@@ -1,0 +1,60 @@
+{{- if .Values.infra.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  labels: {{- include "ecommerce.selectorLabels" (dict "name" "nats") | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "ecommerce.selectorLabels" (dict "name" "nats") | nindent 4 }}
+  ports:
+    - name: client
+      port: 4222
+      targetPort: client
+    - name: monitor
+      port: 8222
+      targetPort: monitor
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+  labels: {{- include "ecommerce.labels" (dict "name" "nats" "root" $) | nindent 4 }}
+spec:
+  serviceName: nats
+  replicas: 1
+  selector:
+    matchLabels: {{- include "ecommerce.selectorLabels" (dict "name" "nats") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ecommerce.selectorLabels" (dict "name" "nats") | nindent 8 }}
+    spec:
+      containers:
+        - name: nats
+          image: {{ .Values.infra.nats.image }}
+          # -js: JetStream (durable streams); -sd: store dir on the PVC so streams
+          # survive a restart; -m: HTTP monitoring (used by the readiness probe).
+          args: ["-js", "-m", "8222", "-sd", "/data"]
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitor
+              containerPort: 8222
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.infra.nats.storage }}
+{{- end }}

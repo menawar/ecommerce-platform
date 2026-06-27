@@ -1,0 +1,99 @@
+# Values for the ecommerce application chart. The infra it depends on (Postgres,
+# Redis, NATS, MinIO, Jaeger) is a later increment / managed services; this chart
+# assumes those are reachable at the hostnames in `config` below.
+
+image:
+  registry: ghcr.io/menawar
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+# In-cluster stateful infra, so a `kind`/`minikube` cluster is self-contained.
+# In PRODUCTION set `infra.enabled: false` and point config/secrets at managed
+# Postgres/Redis/NATS/MinIO (the apps don't care — they use the same hostnames).
+infra:
+  enabled: true
+  postgres:
+    image: postgres:16-alpine
+    user: ecommerce
+    password: ecommerce # LOCAL placeholder — matches the *_DB_URL secrets below
+    storage: 1Gi
+  redis:
+    image: redis:7-alpine
+    storage: 256Mi
+  nats:
+    image: nats:2.10-alpine
+    storage: 512Mi
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    rootUser: minioadmin
+    rootPassword: minioadmin
+    storage: 1Gi
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: "1"
+    memory: 128Mi
+
+# Non-secret config shared by EVERY pod (mounted via envFrom). It holds the
+# service-to-service connect topology (`<name>:port`, resolved by Kubernetes DNS).
+# Each pod overrides ONLY its own bind address in `env` (a container env entry
+# beats envFrom), so e.g. the user pod binds USER_GRPC_ADDR=":50051" while everyone
+# else reads USER_GRPC_ADDR="user:50051" to reach it.
+config:
+  APP_ENV: production
+  NATS_URL: nats://nats:4222
+  REDIS_URL: redis://redis:6379/0
+  OTEL_ENDPOINT: jaeger:4317
+  USER_GRPC_ADDR: user:50051
+  PRODUCT_GRPC_ADDR: product:50052
+  CART_GRPC_ADDR: cart:50053
+  PAYMENT_GRPC_ADDR: payment:50054
+  ORDER_GRPC_ADDR: order:50055
+  # mock keeps a bare `helm install` working; set to "paystack" (+ the keys below)
+  # in production.
+  PAYMENT_PROVIDER: mock
+
+# Secret values. THESE ARE PLACEHOLDERS for local/kind only. In production DO NOT
+# commit real values — inject via `helm upgrade --set-string secrets.X=...` or an
+# external secret store (External Secrets Operator / sealed-secrets). The JWT
+# placeholder is intentionally >=32 chars so the user service's production
+# fail-closed check passes during local testing; REPLACE it before any real deploy.
+secrets:
+  JWT_SECRET: "LOCAL-DEV-ONLY-replace-me-with-a-real-32char-secret"
+  PAYSTACK_SECRET_KEY: ""
+  PAYSTACK_WEBHOOK_SECRET: ""
+  USER_DB_URL: postgres://ecommerce:ecommerce@postgres:5432/userdb?sslmode=disable
+  PRODUCT_DB_URL: postgres://ecommerce:ecommerce@postgres:5432/productdb?sslmode=disable
+  PAYMENT_DB_URL: postgres://ecommerce:ecommerce@postgres:5432/paymentdb?sslmode=disable
+  ORDER_DB_URL: postgres://ecommerce:ecommerce@postgres:5432/orderdb?sslmode=disable
+  NOTIFICATION_DB_URL: postgres://ecommerce:ecommerce@postgres:5432/notificationdb?sslmode=disable
+
+# One template renders each service. Omit grpcPort for an http-only workload
+# (gateway, notification). public: true marks the gateway (Ingress target — added
+# in a later increment).
+services:
+  user:
+    httpPort: 2112
+    grpcPort: 50051
+  product:
+    httpPort: 2113
+    grpcPort: 50052
+  cart:
+    httpPort: 2114
+    grpcPort: 50053
+  payment:
+    httpPort: 2115
+    grpcPort: 50054
+  order:
+    httpPort: 2116
+    grpcPort: 50055
+  notification:
+    httpPort: 2117
+  gateway:
+    httpPort: 8080
+    public: true

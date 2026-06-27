@@ -1,0 +1,74 @@
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "ecommerce.labels" (dict "name" $name "root" $) | nindent 4 }}
+spec:
+  replicas: {{ $.Values.replicas }}
+  selector:
+    matchLabels: {{- include "ecommerce.selectorLabels" (dict "name" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ecommerce.selectorLabels" (dict "name" $name) | nindent 8 }}
+    spec:
+      # Match the Dockerfiles' non-root UID; drop every Linux capability.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.registry }}/{{ $name }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            # The pod's OWN bind address — overrides the connect value of the same
+            # key supplied by the shared ConfigMap (container env beats envFrom).
+            - name: {{ $name | upper }}_HTTP_ADDR
+              value: ":{{ $svc.httpPort }}"
+            {{- if $svc.grpcPort }}
+            - name: {{ $name | upper }}_GRPC_ADDR
+              value: ":{{ $svc.grpcPort }}"
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "ecommerce.fullname" $ }}-config
+            - secretRef:
+                name: {{ include "ecommerce.fullname" $ }}-secrets
+          ports:
+            - name: http
+              containerPort: {{ $svc.httpPort }}
+            {{- if $svc.grpcPort }}
+            - name: grpc
+              containerPort: {{ $svc.grpcPort }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources: {{- toYaml $.Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      # scratch images have no writable filesystem; give a tmpfs /tmp so the
+      # read-only root above can't break anything that needs scratch space.
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

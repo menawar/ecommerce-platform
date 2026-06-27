@@ -1,0 +1,63 @@
+{{- if .Values.infra.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  labels: {{- include "ecommerce.selectorLabels" (dict "name" "minio") | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "ecommerce.selectorLabels" (dict "name" "minio") | nindent 4 }}
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: s3
+    - name: console
+      port: 9001
+      targetPort: console
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  labels: {{- include "ecommerce.labels" (dict "name" "minio" "root" $) | nindent 4 }}
+spec:
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels: {{- include "ecommerce.selectorLabels" (dict "name" "minio") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ecommerce.selectorLabels" (dict "name" "minio") | nindent 8 }}
+    spec:
+      containers:
+        - name: minio
+          image: {{ .Values.infra.minio.image }}
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              value: {{ .Values.infra.minio.rootUser | quote }}
+            - name: MINIO_ROOT_PASSWORD
+              value: {{ .Values.infra.minio.rootPassword | quote }}
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: s3
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.infra.minio.storage }}
+{{- end }}
