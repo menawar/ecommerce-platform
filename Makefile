@@ -17,6 +17,10 @@ SQLC    := $(shell go env GOPATH)/bin/sqlc
 # golangci-lint v2. Override if it's not on PATH (e.g. GOLANGCI=$(go env GOPATH)/bin/golangci-lint).
 GOLANGCI ?= golangci-lint
 
+# govulncheck (golang.org/x/vuln). Scans deps for known CVEs AND whether the
+# vulnerable symbols are actually reachable, so findings are low-noise.
+GOVULNCHECK ?= govulncheck
+
 # Per-service DB URLs. Host port 5433 maps to the postgres container's 5432.
 PRODUCT_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/productdb?sslmode=disable
 PRODUCT_MIGRATIONS := services/product/migrations
@@ -29,7 +33,7 @@ ORDER_MIGRATIONS   := services/order/migrations
 NOTIFICATION_DB_URL     ?= postgres://ecommerce:ecommerce@localhost:5433/notificationdb?sslmode=disable
 NOTIFICATION_MIGRATIONS := services/notification/migrations
 
-.PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy lint \
+.PHONY: help infra-up infra-down infra-logs infra-ps up down down-v build vet test tidy lint vuln \
 	product-migrate-up product-migrate-down product-migrate-create product-sqlc \
 	user-migrate-up user-migrate-down user-migrate-create user-make-admin user-sqlc \
 	payment-migrate-up payment-migrate-down payment-sqlc \
@@ -86,6 +90,9 @@ tidy: ## go mod tidy every module
 
 lint: ## golangci-lint every module (uses the root .golangci.yml)
 	@for d in $(MODULE_DIRS); do echo "lint $$d"; (cd $$d && $(GOLANGCI) run ./...) || exit 1; done
+
+vuln: ## govulncheck every module (known-CVE scan; needs network for the vuln DB)
+	@for d in $(MODULE_DIRS); do echo "vuln $$d"; (cd $$d && $(GOVULNCHECK) ./...) || exit 1; done
 
 ## ---- Database migrations ----
 product-migrate-up: ## Apply all productdb migrations
