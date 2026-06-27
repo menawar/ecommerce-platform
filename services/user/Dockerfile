@@ -39,4 +39,6 @@ COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=builder /bin/server /server
 COPY --from=builder /bin/healthcheck /healthcheck
 
+# Drop root: run as a non-root numeric UID (scratch has no /etc/passwd to name one).
+USER 65532:65532
 CMD ["/server"]
