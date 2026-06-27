@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ecommerce.fullname" . }}-config
+  labels:
+    app.kubernetes.io/part-of: ecommerce
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+data:
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
