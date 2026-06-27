@@ -101,6 +101,17 @@ func (h *Handler) Router() http.Handler {
 		pr.Get("/orders/{id}", h.getOrder)
 	})
 
+	// Admin-only routes: a separate group that layers a role gate on top of
+	// requireAuth. GET /products stays public (above); POST /products is admin —
+	// chi routes the two methods on the same path to their respective groups.
+	r.Group(func(ar chi.Router) {
+		ar.Use(h.requireAuth)
+		ar.Use(h.requireAdmin)
+		ar.Post("/products", h.createProduct)
+		ar.Patch("/products/{id}", h.updateProduct)
+		ar.Delete("/products/{id}", h.deleteProduct)
+	})
+
 	return r
 }
 

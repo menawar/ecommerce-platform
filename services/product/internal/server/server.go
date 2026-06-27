@@ -77,6 +77,7 @@ func (s *Server) CreateProduct(ctx context.Context, req *productv1.CreateProduct
 		PriceCents:  req.GetPriceCents(),
 		Currency:    currency,
 		CategoryID:  categoryID,
+		ImageUrl:    req.GetImageUrl(),
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -101,6 +102,104 @@ func (s *Server) CreateProduct(ctx context.Context, req *productv1.CreateProduct
 	return &productv1.CreateProductResponse{
 		Product: productFromModel(product, inv.Quantity-inv.Reserved),
 	}, nil
+}
+
+// UpdateProduct full-replaces a product's mutable fields and sets an absolute new
+// stock level, in ONE transaction so the catalog row and inventory never disagree.
+// sku is immutable (not in the request). Setting stock below the reserved units is
+// rejected by the DB CHECK and surfaced as FailedPrecondition.
+func (s *Server) UpdateProduct(ctx context.Context, req *productv1.UpdateProductRequest) (*productv1.UpdateProductResponse, error) {
+	id, err := parseRequiredUUID(req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid id")
+	}
+	if req.GetName() == "" {
+		return nil, status.Error(codes.InvalidArgument, "name is required")
+	}
+	if req.GetPriceCents() < 0 {
+		return nil, status.Error(codes.InvalidArgument, "price_cents must be non-negative")
+	}
+	// quantity < 0 is the "leave inventory unchanged" sentinel (so editing catalog
+	// fields needn't know — or disturb — the current stock level).
+	categoryID, err := parseOptionalUUID(req.GetCategoryId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid category_id")
+	}
+
+	currency := req.GetCurrency()
+	if currency == "" {
+		currency = "NGN"
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, s.internal(ctx, "begin tx", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := s.q.WithTx(tx)
+
+	product, err := qtx.UpdateProduct(ctx, db.UpdateProductParams{
+		ID:          id,
+		Name:        req.GetName(),
+		Description: req.GetDescription(),
+		PriceCents:  req.GetPriceCents(),
+		Currency:    currency,
+		CategoryID:  categoryID,
+		ImageUrl:    req.GetImageUrl(),
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "product not found")
+		}
+		return nil, s.internal(ctx, "update product", err)
+	}
+
+	// Touch inventory only when a non-negative quantity was supplied; otherwise read
+	// the current row so the response still reports the right available count.
+	var available int32
+	if q := req.GetQuantity(); q >= 0 {
+		inv, err := qtx.SetInventoryQuantity(ctx, db.SetInventoryQuantityParams{ProductID: id, Quantity: q})
+		if err != nil {
+			if isCheckViolation(err) {
+				return nil, status.Error(codes.FailedPrecondition, "cannot set stock below the currently reserved units")
+			}
+			return nil, s.internal(ctx, "set inventory quantity", err)
+		}
+		available = inv.Quantity - inv.Reserved
+	} else {
+		inv, err := qtx.GetInventory(ctx, id)
+		if err != nil {
+			return nil, s.internal(ctx, "get inventory", err)
+		}
+		available = inv.Quantity - inv.Reserved
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, s.internal(ctx, "commit tx", err)
+	}
+
+	s.log.InfoContext(ctx, "updated product", "product_id", uuidString(product.ID))
+	return &productv1.UpdateProductResponse{
+		Product: productFromModel(product, available),
+	}, nil
+}
+
+// DeleteProduct soft-deletes (archives) a product: it leaves the catalog but its
+// rows stay so order/reservation history keeps referencing them. An already-archived
+// or unknown id is a NotFound (ArchiveProduct returns no row in that case).
+func (s *Server) DeleteProduct(ctx context.Context, req *productv1.DeleteProductRequest) (*productv1.DeleteProductResponse, error) {
+	id, err := parseRequiredUUID(req.GetId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid id")
+	}
+	if _, err := s.q.ArchiveProduct(ctx, id); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "product not found")
+		}
+		return nil, s.internal(ctx, "archive product", err)
+	}
+	s.log.InfoContext(ctx, "archived product", "product_id", uuidString(id))
+	return &productv1.DeleteProductResponse{}, nil
 }
 
 func (s *Server) GetProduct(ctx context.Context, req *productv1.GetProductRequest) (*productv1.GetProductResponse, error) {
@@ -148,6 +247,7 @@ func (s *Server) ListProducts(ctx context.Context, req *productv1.ListProductsRe
 	rows, err := s.q.ListProductsWithInventory(ctx, db.ListProductsWithInventoryParams{
 		CategoryID: categoryID,
 		Search:     search,
+		Sort:       normalizeSort(req.GetSort()),
 		Limit:      size,
 		Offset:     (page - 1) * size,
 	})
@@ -167,6 +267,18 @@ func (s *Server) ListProducts(ctx context.Context, req *productv1.ListProductsRe
 	return &productv1.ListProductsResponse{Products: products, Total: total}, nil
 }
 
+// normalizeSort allow-lists the sort keys the query understands. Anything else
+// (empty, unknown, a typo) collapses to "" — the query's default newest-first
+// ordering — so a bad value never errors, it just falls back.
+func normalizeSort(sort string) string {
+	switch sort {
+	case "price_asc", "price_desc":
+		return sort
+	default:
+		return ""
+	}
+}
+
 func (s *Server) internal(ctx context.Context, msg string, err error) error {
 	s.log.ErrorContext(ctx, msg, "err", err)
 	return status.Error(codes.Internal, "internal error")
@@ -178,6 +290,13 @@ func (s *Server) internal(ctx context.Context, msg string, err error) error {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// isCheckViolation reports whether err is a Postgres CHECK-constraint violation
+// (SQLSTATE 23514) — e.g. setting inventory.quantity below reserved.
+func isCheckViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514"
 }
 
 // --- pgtype <-> proto mappers ---
@@ -223,6 +342,7 @@ func productFromModel(p db.Product, available int32) *productv1.Product {
 		CategoryId:  uuidString(p.CategoryID),
 		Available:   available,
 		CreatedAt:   tsUnix(p.CreatedAt),
+		ImageUrl:    p.ImageUrl,
 	}
 }
 
@@ -237,6 +357,7 @@ func rowFromDetail(r db.GetProductWithInventoryRow) *productv1.Product {
 		CategoryId:  uuidString(r.CategoryID),
 		Available:   r.Available,
 		CreatedAt:   tsUnix(r.CreatedAt),
+		ImageUrl:    r.ImageUrl,
 	}
 }
 
@@ -251,5 +372,6 @@ func rowFromList(r db.ListProductsWithInventoryRow) *productv1.Product {
 		CategoryId:  uuidString(r.CategoryID),
 		Available:   r.Available,
 		CreatedAt:   tsUnix(r.CreatedAt),
+		ImageUrl:    r.ImageUrl,
 	}
 }

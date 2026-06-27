@@ -10,20 +10,45 @@ VALUES ($1, $2)
 RETURNING *;
 
 -- name: CreateProduct :one
-INSERT INTO products (sku, name, description, price_cents, currency, category_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO products (sku, name, description, price_cents, currency, category_id, image_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 
 -- name: GetProduct :one
 SELECT * FROM products
 WHERE id = $1;
 
+-- name: UpdateProduct :one
+-- Full-replace of the mutable catalog fields (sku is immutable, so it's not here).
+UPDATE products
+SET name = $2, description = $3, price_cents = $4, currency = $5, category_id = $6, image_url = $7
+WHERE id = $1
+RETURNING *;
+
+-- name: ArchiveProduct :one
+-- Soft delete: mark the product archived. The "AND archived_at IS NULL" makes a
+-- repeat (or unknown id) return no row, so the caller maps it to NotFound.
+UPDATE products
+SET archived_at = now()
+WHERE id = $1 AND archived_at IS NULL
+RETURNING id;
+
+-- name: SetInventoryQuantity :one
+-- Absolute restock. The inventory_reserved_le_quantity CHECK rejects a level below
+-- the currently reserved units; version is bumped so this composes with the
+-- reserve optimistic-lock. Returns the row so the caller can recompute available.
+UPDATE inventory
+SET quantity = $2, version = version + 1
+WHERE product_id = $1
+RETURNING *;
+
 -- name: CountProducts :one
 -- Total matching the SAME filters as ListProductsWithInventory, so a page can
 -- report the overall total. ILIKE is case-insensitive LIKE; the value is a bound
 -- parameter (never string-concatenated), so it's injection-safe.
 SELECT count(*) FROM products
-WHERE (sqlc.narg('category_id')::uuid IS NULL OR category_id = sqlc.narg('category_id'))
+WHERE archived_at IS NULL
+  AND (sqlc.narg('category_id')::uuid IS NULL OR category_id = sqlc.narg('category_id'))
   AND (sqlc.narg('search')::text IS NULL OR name ILIKE '%' || sqlc.narg('search') || '%');
 
 -- name: CreateInventory :one
@@ -36,19 +61,27 @@ SELECT * FROM inventory
 WHERE product_id = $1;
 
 -- name: GetProductWithInventory :one
--- Product detail joined with live stock; available = quantity - reserved.
+-- Product detail joined with live stock; available = quantity - reserved. Archived
+-- products are treated as gone (NotFound) — this also stops the saga selling an
+-- archived item that's still sitting in a cart.
 SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE p.id = $1;
+WHERE p.id = $1 AND p.archived_at IS NULL;
 
 -- name: ListProductsWithInventory :many
 SELECT p.*, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE (sqlc.narg('category_id')::uuid IS NULL OR p.category_id = sqlc.narg('category_id'))
+WHERE p.archived_at IS NULL
+  AND (sqlc.narg('category_id')::uuid IS NULL OR p.category_id = sqlc.narg('category_id'))
   AND (sqlc.narg('search')::text IS NULL OR p.name ILIKE '%' || sqlc.narg('search') || '%')
-ORDER BY p.created_at DESC
+-- Each CASE is active for only one sort value; the others evaluate to NULL (no
+-- ordering effect). created_at DESC is the default and a stable final tiebreak.
+ORDER BY
+  CASE WHEN sqlc.arg('sort')::text = 'price_asc'  THEN p.price_cents END ASC,
+  CASE WHEN sqlc.arg('sort')::text = 'price_desc' THEN p.price_cents END DESC,
+  p.created_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: InsertReservation :exec

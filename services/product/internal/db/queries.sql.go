@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveProduct = `-- name: ArchiveProduct :one
+UPDATE products
+SET archived_at = now()
+WHERE id = $1 AND archived_at IS NULL
+RETURNING id
+`
+
+// Soft delete: mark the product archived. The "AND archived_at IS NULL" makes a
+// repeat (or unknown id) return no row, so the caller maps it to NotFound.
+func (q *Queries) ArchiveProduct(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, archiveProduct, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const commitInventory = `-- name: CommitInventory :exec
 UPDATE inventory
 SET quantity = quantity - $1,
@@ -32,7 +47,8 @@ func (q *Queries) CommitInventory(ctx context.Context, arg CommitInventoryParams
 
 const countProducts = `-- name: CountProducts :one
 SELECT count(*) FROM products
-WHERE ($1::uuid IS NULL OR category_id = $1)
+WHERE archived_at IS NULL
+  AND ($1::uuid IS NULL OR category_id = $1)
   AND ($2::text IS NULL OR name ILIKE '%' || $2 || '%')
 `
 
@@ -101,9 +117,9 @@ func (q *Queries) CreateInventory(ctx context.Context, arg CreateInventoryParams
 }
 
 const createProduct = `-- name: CreateProduct :one
-INSERT INTO products (sku, name, description, price_cents, currency, category_id)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, sku, name, description, price_cents, currency, category_id, created_at
+INSERT INTO products (sku, name, description, price_cents, currency, category_id, image_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, sku, name, description, price_cents, currency, category_id, created_at, image_url, archived_at
 `
 
 type CreateProductParams struct {
@@ -113,6 +129,7 @@ type CreateProductParams struct {
 	PriceCents  int64
 	Currency    string
 	CategoryID  pgtype.UUID
+	ImageUrl    string
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -123,6 +140,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.PriceCents,
 		arg.Currency,
 		arg.CategoryID,
+		arg.ImageUrl,
 	)
 	var i Product
 	err := row.Scan(
@@ -134,6 +152,8 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.Currency,
 		&i.CategoryID,
 		&i.CreatedAt,
+		&i.ImageUrl,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
@@ -156,7 +176,7 @@ func (q *Queries) GetInventory(ctx context.Context, productID pgtype.UUID) (Inve
 }
 
 const getProduct = `-- name: GetProduct :one
-SELECT id, sku, name, description, price_cents, currency, category_id, created_at FROM products
+SELECT id, sku, name, description, price_cents, currency, category_id, created_at, image_url, archived_at FROM products
 WHERE id = $1
 `
 
@@ -172,15 +192,17 @@ func (q *Queries) GetProduct(ctx context.Context, id pgtype.UUID) (Product, erro
 		&i.Currency,
 		&i.CategoryID,
 		&i.CreatedAt,
+		&i.ImageUrl,
+		&i.ArchivedAt,
 	)
 	return i, err
 }
 
 const getProductWithInventory = `-- name: GetProductWithInventory :one
-SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, p.image_url, p.archived_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE p.id = $1
+WHERE p.id = $1 AND p.archived_at IS NULL
 `
 
 type GetProductWithInventoryRow struct {
@@ -192,12 +214,16 @@ type GetProductWithInventoryRow struct {
 	Currency    string
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
+	ImageUrl    string
+	ArchivedAt  pgtype.Timestamptz
 	Quantity    int32
 	Reserved    int32
 	Available   int32
 }
 
-// Product detail joined with live stock; available = quantity - reserved.
+// Product detail joined with live stock; available = quantity - reserved. Archived
+// products are treated as gone (NotFound) — this also stops the saga selling an
+// archived item that's still sitting in a cart.
 func (q *Queries) GetProductWithInventory(ctx context.Context, id pgtype.UUID) (GetProductWithInventoryRow, error) {
 	row := q.db.QueryRow(ctx, getProductWithInventory, id)
 	var i GetProductWithInventoryRow
@@ -210,6 +236,8 @@ func (q *Queries) GetProductWithInventory(ctx context.Context, id pgtype.UUID) (
 		&i.Currency,
 		&i.CategoryID,
 		&i.CreatedAt,
+		&i.ImageUrl,
+		&i.ArchivedAt,
 		&i.Quantity,
 		&i.Reserved,
 		&i.Available,
@@ -258,12 +286,16 @@ func (q *Queries) InsertReservationItem(ctx context.Context, arg InsertReservati
 }
 
 const listProductsWithInventory = `-- name: ListProductsWithInventory :many
-SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
+SELECT p.id, p.sku, p.name, p.description, p.price_cents, p.currency, p.category_id, p.created_at, p.image_url, p.archived_at, i.quantity, i.reserved, (i.quantity - i.reserved)::int AS available
 FROM products p
 JOIN inventory i ON i.product_id = p.id
-WHERE ($3::uuid IS NULL OR p.category_id = $3)
+WHERE p.archived_at IS NULL
+  AND ($3::uuid IS NULL OR p.category_id = $3)
   AND ($4::text IS NULL OR p.name ILIKE '%' || $4 || '%')
-ORDER BY p.created_at DESC
+ORDER BY
+  CASE WHEN $5::text = 'price_asc'  THEN p.price_cents END ASC,
+  CASE WHEN $5::text = 'price_desc' THEN p.price_cents END DESC,
+  p.created_at DESC
 LIMIT $1 OFFSET $2
 `
 
@@ -272,6 +304,7 @@ type ListProductsWithInventoryParams struct {
 	Offset     int32
 	CategoryID pgtype.UUID
 	Search     *string
+	Sort       string
 }
 
 type ListProductsWithInventoryRow struct {
@@ -283,17 +316,22 @@ type ListProductsWithInventoryRow struct {
 	Currency    string
 	CategoryID  pgtype.UUID
 	CreatedAt   pgtype.Timestamptz
+	ImageUrl    string
+	ArchivedAt  pgtype.Timestamptz
 	Quantity    int32
 	Reserved    int32
 	Available   int32
 }
 
+// Each CASE is active for only one sort value; the others evaluate to NULL (no
+// ordering effect). created_at DESC is the default and a stable final tiebreak.
 func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProductsWithInventoryParams) ([]ListProductsWithInventoryRow, error) {
 	rows, err := q.db.Query(ctx, listProductsWithInventory,
 		arg.Limit,
 		arg.Offset,
 		arg.CategoryID,
 		arg.Search,
+		arg.Sort,
 	)
 	if err != nil {
 		return nil, err
@@ -311,6 +349,8 @@ func (q *Queries) ListProductsWithInventory(ctx context.Context, arg ListProduct
 			&i.Currency,
 			&i.CategoryID,
 			&i.CreatedAt,
+			&i.ImageUrl,
+			&i.ArchivedAt,
 			&i.Quantity,
 			&i.Reserved,
 			&i.Available,
@@ -397,6 +437,33 @@ func (q *Queries) ReserveInventory(ctx context.Context, arg ReserveInventoryPara
 	return result.RowsAffected(), nil
 }
 
+const setInventoryQuantity = `-- name: SetInventoryQuantity :one
+UPDATE inventory
+SET quantity = $2, version = version + 1
+WHERE product_id = $1
+RETURNING product_id, quantity, reserved, version
+`
+
+type SetInventoryQuantityParams struct {
+	ProductID pgtype.UUID
+	Quantity  int32
+}
+
+// Absolute restock. The inventory_reserved_le_quantity CHECK rejects a level below
+// the currently reserved units; version is bumped so this composes with the
+// reserve optimistic-lock. Returns the row so the caller can recompute available.
+func (q *Queries) SetInventoryQuantity(ctx context.Context, arg SetInventoryQuantityParams) (Inventory, error) {
+	row := q.db.QueryRow(ctx, setInventoryQuantity, arg.ProductID, arg.Quantity)
+	var i Inventory
+	err := row.Scan(
+		&i.ProductID,
+		&i.Quantity,
+		&i.Reserved,
+		&i.Version,
+	)
+	return i, err
+}
+
 const setReservationStatus = `-- name: SetReservationStatus :exec
 UPDATE stock_reservations SET status = $2 WHERE id = $1
 `
@@ -409,4 +476,48 @@ type SetReservationStatusParams struct {
 func (q *Queries) SetReservationStatus(ctx context.Context, arg SetReservationStatusParams) error {
 	_, err := q.db.Exec(ctx, setReservationStatus, arg.ID, arg.Status)
 	return err
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET name = $2, description = $3, price_cents = $4, currency = $5, category_id = $6, image_url = $7
+WHERE id = $1
+RETURNING id, sku, name, description, price_cents, currency, category_id, created_at, image_url, archived_at
+`
+
+type UpdateProductParams struct {
+	ID          pgtype.UUID
+	Name        string
+	Description string
+	PriceCents  int64
+	Currency    string
+	CategoryID  pgtype.UUID
+	ImageUrl    string
+}
+
+// Full-replace of the mutable catalog fields (sku is immutable, so it's not here).
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, updateProduct,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.PriceCents,
+		arg.Currency,
+		arg.CategoryID,
+		arg.ImageUrl,
+	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Sku,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.Currency,
+		&i.CategoryID,
+		&i.CreatedAt,
+		&i.ImageUrl,
+		&i.ArchivedAt,
+	)
+	return i, err
 }

@@ -81,16 +81,67 @@ export async function listProducts(params: {
   pageSize?: number;
   q?: string;
   categoryId?: string;
+  sort?: string;
 }): Promise<ProductList> {
   const qs = new URLSearchParams();
   if (params.page) qs.set("page", String(params.page));
   if (params.pageSize) qs.set("page_size", String(params.pageSize));
   if (params.q) qs.set("q", params.q);
   if (params.categoryId) qs.set("category_id", params.categoryId);
+  if (params.sort) qs.set("sort", params.sort);
   const suffix = qs.toString() ? `?${qs}` : "";
   return gatewayFetch<ProductList>(`/products${suffix}`);
 }
 
 export async function getProduct(id: string): Promise<Product> {
   return gatewayFetch<Product>(`/products/${encodeURIComponent(id)}`);
+}
+
+// CreateProductInput mirrors the gateway's createProductRequest (snake_case).
+// price_cents is integer minor units; the caller converts from major units.
+export type CreateProductInput = {
+  sku: string;
+  name: string;
+  description: string;
+  price_cents: number;
+  currency: string;
+  category_id: string;
+  initial_quantity: number;
+  image_url: string;
+};
+
+// createProduct POSTs to the admin-only route. The session cookie is forwarded as
+// a Bearer token by gatewayFetch; the gateway's requireAdmin enforces the gate,
+// so a non-admin caller gets a 403 GatewayError here.
+export async function createProduct(input: CreateProductInput): Promise<Product> {
+  return gatewayFetch<Product>("/products", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// UpdateProductInput full-replaces the mutable fields. quantity is optional: omit
+// it to leave stock untouched (the gateway forwards that as "leave unchanged"), or
+// set it to an absolute new level.
+export type UpdateProductInput = {
+  name: string;
+  description: string;
+  price_cents: number;
+  currency: string;
+  category_id: string;
+  image_url: string;
+  quantity?: number;
+};
+
+export async function updateProduct(id: string, input: UpdateProductInput): Promise<Product> {
+  return gatewayFetch<Product>(`/products/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+// deleteProduct soft-deletes (archives) a product. The gateway returns 204, which
+// gatewayFetch maps to undefined.
+export async function deleteProduct(id: string): Promise<void> {
+  await gatewayFetch<void>(`/products/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

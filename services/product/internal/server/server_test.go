@@ -70,15 +70,16 @@ func TestCreateProduct_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	client := newTestClient(t)
 
+	const imageURL = "https://cdn.example.com/widget.png"
 	create, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
 		Sku: "WIDGET-1", Name: "Widget", Description: "A widget",
-		PriceCents: 1999, Currency: "NGN", InitialQuantity: 25,
+		PriceCents: 1999, Currency: "NGN", InitialQuantity: 25, ImageUrl: imageURL,
 	})
 	if err != nil {
 		t.Fatalf("CreateProduct: %v", err)
 	}
 	p := create.GetProduct()
-	if p.GetId() == "" || p.GetAvailable() != 25 || p.GetPriceCents() != 1999 {
+	if p.GetId() == "" || p.GetAvailable() != 25 || p.GetPriceCents() != 1999 || p.GetImageUrl() != imageURL {
 		t.Fatalf("created product = %+v", p)
 	}
 
@@ -86,7 +87,8 @@ func TestCreateProduct_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProduct: %v", err)
 	}
-	if got.GetProduct().GetSku() != "WIDGET-1" || got.GetProduct().GetAvailable() != 25 {
+	// image_url must survive the round-trip through the DB and the read path.
+	if got.GetProduct().GetSku() != "WIDGET-1" || got.GetProduct().GetAvailable() != 25 || got.GetProduct().GetImageUrl() != imageURL {
 		t.Errorf("got %+v", got.GetProduct())
 	}
 }
@@ -155,5 +157,158 @@ func TestListProducts_Pagination(t *testing.T) {
 	}
 	if resp.GetTotal() != 3 {
 		t.Errorf("total = %d, want 3", resp.GetTotal())
+	}
+}
+
+func TestListProducts_Sort(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+
+	// Distinct prices so the ordering is deterministic regardless of insert order.
+	for sku, price := range map[string]int64{"cheap": 100, "mid": 500, "pricey": 900} {
+		if _, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
+			Sku: sku, Name: sku, PriceCents: price, InitialQuantity: 1,
+		}); err != nil {
+			t.Fatalf("create %s: %v", sku, err)
+		}
+	}
+
+	asc, err := client.ListProducts(ctx, &productv1.ListProductsRequest{Sort: "price_asc"})
+	if err != nil {
+		t.Fatalf("ListProducts price_asc: %v", err)
+	}
+	ap := asc.GetProducts()
+	if len(ap) != 3 {
+		t.Fatalf("price_asc returned %d products, want 3", len(ap))
+	}
+	for i := 1; i < len(ap); i++ {
+		if ap[i-1].GetPriceCents() > ap[i].GetPriceCents() {
+			t.Errorf("price_asc not ascending: %d before %d", ap[i-1].GetPriceCents(), ap[i].GetPriceCents())
+		}
+	}
+
+	desc, err := client.ListProducts(ctx, &productv1.ListProductsRequest{Sort: "price_desc"})
+	if err != nil {
+		t.Fatalf("ListProducts price_desc: %v", err)
+	}
+	dp := desc.GetProducts()
+	for i := 1; i < len(dp); i++ {
+		if dp[i-1].GetPriceCents() < dp[i].GetPriceCents() {
+			t.Errorf("price_desc not descending: %d before %d", dp[i-1].GetPriceCents(), dp[i].GetPriceCents())
+		}
+	}
+
+	// An unknown sort key must fall back to the default ordering, never error.
+	if _, err := client.ListProducts(ctx, &productv1.ListProductsRequest{Sort: "bogus"}); err != nil {
+		t.Fatalf("unknown sort should not error: %v", err)
+	}
+}
+
+func TestDeleteProduct_Archives(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+
+	created, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
+		Sku: "DEL-1", Name: "Doomed", PriceCents: 100, InitialQuantity: 5,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id := created.GetProduct().GetId()
+
+	// Visible before deletion.
+	before, err := client.ListProducts(ctx, &productv1.ListProductsRequest{})
+	if err != nil {
+		t.Fatalf("list before: %v", err)
+	}
+	if before.GetTotal() != 1 {
+		t.Fatalf("total before = %d, want 1", before.GetTotal())
+	}
+
+	if _, err := client.DeleteProduct(ctx, &productv1.DeleteProductRequest{Id: id}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	// Gone from the catalog and not fetchable.
+	after, err := client.ListProducts(ctx, &productv1.ListProductsRequest{})
+	if err != nil {
+		t.Fatalf("list after: %v", err)
+	}
+	if after.GetTotal() != 0 {
+		t.Errorf("total after = %d, want 0 (archived)", after.GetTotal())
+	}
+	if _, err := client.GetProduct(ctx, &productv1.GetProductRequest{ProductId: id}); status.Code(err) != codes.NotFound {
+		t.Errorf("get archived: want NotFound, got %v", err)
+	}
+
+	// Re-deleting (or an unknown id) is NotFound.
+	if _, err := client.DeleteProduct(ctx, &productv1.DeleteProductRequest{Id: id}); status.Code(err) != codes.NotFound {
+		t.Errorf("re-delete: want NotFound, got %v", err)
+	}
+	if _, err := client.DeleteProduct(ctx, &productv1.DeleteProductRequest{Id: uuid.NewString()}); status.Code(err) != codes.NotFound {
+		t.Errorf("delete unknown: want NotFound, got %v", err)
+	}
+}
+
+func TestUpdateProduct(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+
+	created, err := client.CreateProduct(ctx, &productv1.CreateProductRequest{
+		Sku: "EDIT-1", Name: "Before", PriceCents: 100, InitialQuantity: 10,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id := created.GetProduct().GetId()
+
+	// Happy path: change fields and restock to an absolute level.
+	upd, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: id, Name: "After", Description: "new", PriceCents: 250, Quantity: 20,
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if p := upd.GetProduct(); p.GetName() != "After" || p.GetPriceCents() != 250 || p.GetAvailable() != 20 {
+		t.Errorf("updated product = %+v", p)
+	}
+	// Change is persisted (read back through a separate RPC).
+	got, err := client.GetProduct(ctx, &productv1.GetProductRequest{ProductId: id})
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.GetProduct().GetName() != "After" || got.GetProduct().GetAvailable() != 20 {
+		t.Errorf("persisted = %+v", got.GetProduct())
+	}
+
+	// quantity < 0 leaves inventory untouched while still updating fields.
+	kept, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: id, Name: "Kept", PriceCents: 250, Quantity: -1,
+	})
+	if err != nil {
+		t.Fatalf("update (leave stock): %v", err)
+	}
+	if p := kept.GetProduct(); p.GetName() != "Kept" || p.GetAvailable() != 20 {
+		t.Errorf("leave-stock update = %+v, want name Kept, available 20", p)
+	}
+
+	// Unknown id -> NotFound.
+	if _, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: uuid.NewString(), Name: "x", PriceCents: 1, Quantity: 1,
+	}); status.Code(err) != codes.NotFound {
+		t.Errorf("unknown id: want NotFound, got %v", err)
+	}
+
+	// Reserve 15 of 20, then setting stock below the reserved units must fail.
+	if _, err := client.ReserveStock(ctx, &productv1.ReserveStockRequest{
+		ReservationId: uuid.NewString(),
+		Items:         []*productv1.ReserveItem{{ProductId: id, Quantity: 15}},
+	}); err != nil {
+		t.Fatalf("reserve: %v", err)
+	}
+	if _, err := client.UpdateProduct(ctx, &productv1.UpdateProductRequest{
+		Id: id, Name: "After", PriceCents: 250, Quantity: 10,
+	}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("set below reserved: want FailedPrecondition, got %v", err)
 	}
 }

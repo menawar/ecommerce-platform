@@ -65,6 +65,28 @@ func (h *Handler) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// requireAdmin gates a route behind the admin role. It is meant to be chained
+// AFTER requireAuth, which has already validated the token and stored the
+// Identity — so this middleware only inspects the role. Splitting "are you
+// authenticated" (requireAuth, 401) from "are you authorized" (requireAdmin, 403)
+// keeps each check single-purpose and lets routes opt into either or both.
+func (h *Handler) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := IdentityFrom(r.Context())
+		if !ok {
+			// No Identity means requireAuth didn't run ahead of us — a routing
+			// mistake. Fail closed (401) rather than silently allow the request.
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if id.Role != "admin" {
+			writeError(w, http.StatusForbidden, "admin role required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header.
 // The scheme match is case-insensitive per RFC 7235; the token must be non-empty.
 func bearerToken(r *http.Request) (string, bool) {

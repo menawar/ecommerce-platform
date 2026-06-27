@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { isLoggedIn } from "@/lib/session";
+import { isLoggedIn, currentRole } from "@/lib/session";
 import { logoutAction } from "@/app/(auth)/actions";
 
 // An async Server Component: it reads the session cookie on the server to decide
@@ -8,6 +8,10 @@ import { logoutAction } from "@/app/(auth)/actions";
 // (dynamic) — exactly what an auth-aware header needs.
 export async function Nav() {
   const loggedIn = await isLoggedIn();
+  // Role drives the Admin link; currentRole never throws (null when anon/expired).
+  // This is one extra gateway round-trip per render for logged-in users — cheap
+  // enough here; not worth threading role down through the layout to avoid.
+  const isAdmin = loggedIn && (await currentRole()) === "admin";
 
   // Try to get cart count when logged in
   let cartCount = 0;
@@ -272,6 +276,14 @@ export async function Nav() {
             >
               Account
             </Link>
+            {isAdmin && (
+              <Link
+                href="/admin/products"
+                style={{ color: "#ffd98a", textDecoration: "none", fontWeight: 700 }}
+              >
+                Admin
+              </Link>
+            )}
           </>
         )}
         {!loggedIn && (

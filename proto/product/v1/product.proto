@@ -7,6 +7,8 @@ package product.v1;
 // never read its tables directly.
 service ProductService {
   rpc CreateProduct(CreateProductRequest) returns (CreateProductResponse);
+  rpc UpdateProduct(UpdateProductRequest) returns (UpdateProductResponse);
+  rpc DeleteProduct(DeleteProductRequest) returns (DeleteProductResponse); // soft delete (archive)
   rpc GetProduct(GetProductRequest) returns (GetProductResponse);
   rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
 
@@ -52,6 +54,7 @@ message Product {
   string category_id = 7; // empty when uncategorized
   int32 available = 8;
   int64 created_at = 9; // unix seconds
+  string image_url = 10; // optional catalog image; empty = none (renders a placeholder)
 }
 
 message CreateProductRequest {
@@ -62,10 +65,35 @@ message CreateProductRequest {
   string currency = 5;          // defaults to NGN if empty
   string category_id = 6;       // optional
   int32 initial_quantity = 7;   // seeds the inventory row
+  string image_url = 8;         // optional; stored as-is
 }
 message CreateProductResponse {
   Product product = 1;
 }
+
+// Full-replace update of a product's mutable fields plus an absolute stock level.
+// sku is intentionally absent — it's the immutable identifier. quantity is the new
+// absolute inventory level; setting it below the currently reserved units fails.
+message UpdateProductRequest {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int64 price_cents = 4;
+  string currency = 5;      // defaults to NGN if empty
+  string category_id = 6;   // optional; empty = uncategorized
+  string image_url = 7;     // optional
+  int32 quantity = 8;       // absolute new stock level; negative = leave unchanged
+}
+message UpdateProductResponse {
+  Product product = 1;
+}
+
+// Soft delete: archives the product so it leaves the catalog while its rows (and
+// the order/reservation references to them) survive. Not reversible from the API.
+message DeleteProductRequest {
+  string id = 1;
+}
+message DeleteProductResponse {}
 
 message GetProductRequest {
   string product_id = 1;
@@ -79,6 +107,7 @@ message ListProductsRequest {
   int32 page_size = 2;   // defaults to 20, capped at 100
   string category_id = 3; // empty = all categories
   string search = 4;      // empty = no name filter; else case-insensitive substring
+  string sort = 5;        // "price_asc" | "price_desc"; anything else = newest first
 }
 message ListProductsResponse {
   repeated Product products = 1;

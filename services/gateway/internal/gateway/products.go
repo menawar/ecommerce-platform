@@ -23,6 +23,7 @@ type productDTO struct {
 	CategoryID  string `json:"category_id"`
 	Available   int32  `json:"available"`
 	CreatedAt   int64  `json:"created_at"`
+	ImageURL    string `json:"image_url"`
 }
 
 func toProductDTO(p *productv1.Product) productDTO {
@@ -36,6 +37,7 @@ func toProductDTO(p *productv1.Product) productDTO {
 		CategoryID:  p.GetCategoryId(),
 		Available:   p.GetAvailable(),
 		CreatedAt:   p.GetCreatedAt(),
+		ImageURL:    p.GetImageUrl(),
 	}
 }
 
@@ -50,6 +52,7 @@ func (h *Handler) listProducts(w http.ResponseWriter, r *http.Request) {
 		PageSize:   int32(atoiOrZero(qs.Get("page_size"))),
 		CategoryId: qs.Get("category_id"),
 		Search:     qs.Get("q"),
+		Sort:       qs.Get("sort"),
 	})
 	if err != nil {
 		h.writeGRPCError(w, r, err)
@@ -77,6 +80,108 @@ func (h *Handler) getProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toProductDTO(resp.GetProduct()))
+}
+
+// createProductRequest is the admin JSON body for POST /products. The field
+// names are the snake_case REST contract; the gateway forwards them verbatim to
+// the Product service, which owns all validation — required sku/name, non-negative
+// money, unique sku — so a bad request flows back as 400/409 via writeGRPCError.
+type createProductRequest struct {
+	SKU             string `json:"sku"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	PriceCents      int64  `json:"price_cents"`
+	Currency        string `json:"currency"`         // defaults to NGN in the service when empty
+	CategoryID      string `json:"category_id"`      // optional; empty = uncategorized
+	InitialQuantity int32  `json:"initial_quantity"` // seeds the inventory row
+	ImageURL        string `json:"image_url"`        // optional catalog image URL
+}
+
+// createProduct: POST /products (admin only). It decodes the body, calls the
+// Product service's CreateProduct RPC, and returns the created product as 201.
+// Kept deliberately thin — no business rules here, just protocol translation.
+func (h *Handler) createProduct(w http.ResponseWriter, r *http.Request) {
+	var req createProductRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := h.products.CreateProduct(r.Context(), &productv1.CreateProductRequest{
+		Sku:             req.SKU,
+		Name:            req.Name,
+		Description:     req.Description,
+		PriceCents:      req.PriceCents,
+		Currency:        req.Currency,
+		CategoryId:      req.CategoryID,
+		InitialQuantity: req.InitialQuantity,
+		ImageUrl:        req.ImageURL,
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toProductDTO(resp.GetProduct()))
+}
+
+// updateProductRequest is the admin JSON body for PATCH /products/{id}. It's a
+// full-replace of the mutable fields plus an absolute stock level; sku is omitted
+// (immutable). The Product service owns validation, so bad input flows back as
+// 400/404/422 via writeGRPCError.
+type updateProductRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	PriceCents  int64  `json:"price_cents"`
+	Currency    string `json:"currency"`
+	CategoryID  string `json:"category_id"`
+	ImageURL    string `json:"image_url"`
+	// Pointer so an omitted/null quantity is distinguishable from 0: nil means
+	// "leave stock unchanged" (forwarded as the service's negative sentinel), so a
+	// caller editing only catalog fields can't accidentally zero out inventory.
+	Quantity *int32 `json:"quantity"`
+}
+
+// updateProduct: PATCH /products/{id} (admin only). Decodes the body, forwards to
+// UpdateProduct, returns the updated product.
+func (h *Handler) updateProduct(w http.ResponseWriter, r *http.Request) {
+	var req updateProductRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	quantity := int32(-1) // default: leave inventory unchanged
+	if req.Quantity != nil {
+		quantity = *req.Quantity
+	}
+	resp, err := h.products.UpdateProduct(r.Context(), &productv1.UpdateProductRequest{
+		Id:          chi.URLParam(r, "id"),
+		Name:        req.Name,
+		Description: req.Description,
+		PriceCents:  req.PriceCents,
+		Currency:    req.Currency,
+		CategoryId:  req.CategoryID,
+		ImageUrl:    req.ImageURL,
+		Quantity:    quantity,
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toProductDTO(resp.GetProduct()))
+}
+
+// deleteProduct: DELETE /products/{id} (admin only). Soft-deletes (archives) the
+// product. Returns 204 on success; NotFound flows back as 404 via writeGRPCError.
+func (h *Handler) deleteProduct(w http.ResponseWriter, r *http.Request) {
+	_, err := h.products.DeleteProduct(r.Context(), &productv1.DeleteProductRequest{
+		Id: chi.URLParam(r, "id"),
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func atoiOrZero(s string) int {
