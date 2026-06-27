@@ -3,7 +3,7 @@
 // be bundled into the browser.
 import "server-only";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Product, ProductList } from "./types";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:8080";
@@ -35,6 +35,14 @@ export class GatewayError extends Error {
 export async function gatewayFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
 
+  // Forward the original client IP so the gateway's per-IP rate limiting keys on
+  // the real user, not on this BFF (every request reaches the gateway from here).
+  // We trust this value only because, in the intended deployment, a managed load
+  // balancer in front of Next sets it — Next must not be exposed directly, or a
+  // client could spoof X-Forwarded-For to evade per-IP limits.
+  const reqHeaders = await headers();
+  const clientIP = reqHeaders.get("x-forwarded-for") ?? reqHeaders.get("x-real-ip") ?? "";
+
   let res: Response;
   try {
     res = await fetch(`${GATEWAY_URL}${path}`, {
@@ -42,6 +50,7 @@ export async function gatewayFetch<T>(path: string, init: RequestInit = {}): Pro
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(clientIP ? { "X-Forwarded-For": clientIP } : {}),
         ...init.headers,
       },
       // Reads should reflect current data, not a cached snapshot. (Next 16 doesn't
