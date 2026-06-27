@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/sync/errgroup"
@@ -23,6 +25,7 @@ import (
 
 	"github.com/menawar/ecommerce-platform/pkg/httputil"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
+	"github.com/menawar/ecommerce-platform/pkg/ratelimit"
 	cartv1 "github.com/menawar/ecommerce-platform/proto/cart/v1"
 	orderv1 "github.com/menawar/ecommerce-platform/proto/order/v1"
 	productv1 "github.com/menawar/ecommerce-platform/proto/product/v1"
@@ -39,17 +42,37 @@ func main() {
 	orderAddr := env("ORDER_GRPC_ADDR", "localhost:50055")
 	otelEndpoint := env("OTEL_ENDPOINT", "localhost:4317")
 
+	limiter, closeLimiter := newLimiter(log)
+	defer closeLimiter()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, log, httpAddr, userAddr, productAddr, cartAddr, orderAddr, otelEndpoint); err != nil {
+	if err := run(ctx, log, httpAddr, userAddr, productAddr, cartAddr, orderAddr, otelEndpoint, limiter); err != nil {
 		log.Error("server exited with error", "err", err)
 		os.Exit(1)
 	}
 	log.Info("server stopped cleanly")
 }
 
-func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr, cartAddr, orderAddr, otelEndpoint string) error {
+// newLimiter builds the Redis-backed rate limiter from env. The Redis client is
+// lazy (no connection until first use), so this never blocks startup; if the URL
+// is malformed we disable limiting (nil) rather than refuse to boot. RATE_LIMIT_RPS
+// is the sustained per-key rate, RATE_LIMIT_BURST the bucket size.
+func newLimiter(log *slog.Logger) (*ratelimit.Limiter, func()) {
+	opts, err := redis.ParseURL(env("REDIS_URL", "redis://localhost:6379/0"))
+	if err != nil {
+		log.Warn("invalid REDIS_URL, rate limiting disabled", "err", err)
+		return nil, func() {}
+	}
+	client := redis.NewClient(opts)
+	rps := envFloat("RATE_LIMIT_RPS", 10)
+	burst := envInt("RATE_LIMIT_BURST", 20)
+	log.Info("rate limiting enabled", "rps", rps, "burst", burst)
+	return ratelimit.New(client, rps, burst), func() { _ = client.Close() }
+}
+
+func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr, cartAddr, orderAddr, otelEndpoint string, limiter *ratelimit.Limiter) error {
 	// Start the OTel tracer provider. InitTracer sets the global provider and
 	// propagator, which otelgrpc and otelhttp read automatically.
 	shutdownTracer, err := observability.InitTracer(ctx, "gateway", otelEndpoint)
@@ -111,7 +134,7 @@ func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr,
 		orderv1.NewOrderServiceClient(orderConn),
 		httpMetrics,
 		log,
-	)
+	).WithLimiter(limiter) // nil-safe: limiting is a no-op when disabled
 	httpServer := &http.Server{
 		Addr: httpAddr,
 		// otelhttp.NewHandler wraps the chi router to create a ROOT span for
@@ -147,6 +170,24 @@ func run(ctx context.Context, log *slog.Logger, httpAddr, userAddr, productAddr,
 func env(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func envFloat(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }
