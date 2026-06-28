@@ -91,6 +91,10 @@ func (h *Handler) Router() http.Handler {
 		pub.Use(h.rateLimit)
 		pub.Post("/auth/register", h.register)
 		pub.Post("/auth/login", h.login)
+		// Refresh + logout carry the refresh token in the body, not an access token,
+		// so they live with the public (IP-rate-limited) routes.
+		pub.Post("/auth/refresh", h.refresh)
+		pub.Post("/auth/logout", h.logout)
 		// Catalog browsing is public — anyone can shop before logging in.
 		pub.Get("/products", h.listProducts)
 		pub.Get("/products/{id}", h.getProduct)
@@ -232,4 +236,42 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		"refresh_token": resp.GetRefreshToken(),
 		"expires_at":    resp.GetExpiresAt(),
 	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// refresh exchanges a (rotating) refresh token for a fresh access+refresh pair.
+// No access token required — the refresh token is the credential.
+func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	resp, err := h.users.RefreshToken(r.Context(), &userv1.RefreshTokenRequest{RefreshToken: req.RefreshToken})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token":  resp.GetAccessToken(),
+		"refresh_token": resp.GetRefreshToken(),
+		"expires_at":    resp.GetExpiresAt(),
+	})
+}
+
+// logout revokes the refresh token server-side (idempotent).
+func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if _, err := h.users.Logout(r.Context(), &userv1.LogoutRequest{RefreshToken: req.RefreshToken}); err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -101,3 +101,63 @@ func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
+
+// --- RefreshTokenStore ---
+
+var _ RefreshTokenStore = (*Postgres)(nil)
+
+func (p *Postgres) Save(ctx context.Context, t RefreshToken) error {
+	jti, err := uuid.Parse(t.JTI)
+	if err != nil {
+		return fmt.Errorf("store: invalid jti %q: %w", t.JTI, err)
+	}
+	uid, err := uuid.Parse(t.UserID)
+	if err != nil {
+		return fmt.Errorf("store: invalid user id %q: %w", t.UserID, err)
+	}
+	return p.q.SaveRefreshToken(ctx, db.SaveRefreshTokenParams{
+		Jti:       pgtype.UUID{Bytes: jti, Valid: true},
+		UserID:    pgtype.UUID{Bytes: uid, Valid: true},
+		ExpiresAt: pgtype.Timestamptz{Time: t.ExpiresAt, Valid: true},
+	})
+}
+
+func (p *Postgres) Get(ctx context.Context, jti string) (RefreshToken, error) {
+	id, err := uuid.Parse(jti)
+	if err != nil {
+		return RefreshToken{}, ErrRefreshNotFound
+	}
+	row, err := p.q.GetRefreshToken(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return RefreshToken{}, ErrRefreshNotFound
+		}
+		return RefreshToken{}, fmt.Errorf("store: get refresh token: %w", err)
+	}
+	rt := RefreshToken{
+		JTI:       uuid.UUID(row.Jti.Bytes).String(),
+		UserID:    uuid.UUID(row.UserID.Bytes).String(),
+		ExpiresAt: row.ExpiresAt.Time,
+	}
+	if row.RevokedAt.Valid {
+		revoked := row.RevokedAt.Time
+		rt.RevokedAt = &revoked
+	}
+	return rt, nil
+}
+
+func (p *Postgres) Revoke(ctx context.Context, jti string) error {
+	id, err := uuid.Parse(jti)
+	if err != nil {
+		return ErrRefreshNotFound
+	}
+	return p.q.RevokeRefreshToken(ctx, pgtype.UUID{Bytes: id, Valid: true})
+}
+
+func (p *Postgres) RevokeAllForUser(ctx context.Context, userID string) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("store: invalid user id %q: %w", userID, err)
+	}
+	return p.q.RevokeAllUserRefreshTokens(ctx, pgtype.UUID{Bytes: uid, Valid: true})
+}

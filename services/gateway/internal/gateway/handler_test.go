@@ -28,6 +28,8 @@ type fakeUserClient struct {
 	registerFn func(*userv1.RegisterRequest) (*userv1.RegisterResponse, error)
 	loginFn    func(*userv1.LoginRequest) (*userv1.LoginResponse, error)
 	validateFn func(*userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error)
+	refreshFn  func(*userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error)
+	logoutFn   func(*userv1.LogoutRequest) (*userv1.LogoutResponse, error)
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)
@@ -43,6 +45,18 @@ func (f *fakeUserClient) ValidateToken(_ context.Context, in *userv1.ValidateTok
 }
 func (f *fakeUserClient) GetUser(_ context.Context, _ *userv1.GetUserRequest, _ ...grpc.CallOption) (*userv1.GetUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) RefreshToken(_ context.Context, in *userv1.RefreshTokenRequest, _ ...grpc.CallOption) (*userv1.RefreshTokenResponse, error) {
+	if f.refreshFn != nil {
+		return f.refreshFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) Logout(_ context.Context, in *userv1.LogoutRequest, _ ...grpc.CallOption) (*userv1.LogoutResponse, error) {
+	if f.logoutFn != nil {
+		return f.logoutFn(in)
+	}
+	return &userv1.LogoutResponse{}, nil
 }
 
 // testMetrics returns an HTTPMetrics instance backed by a fresh, per-test
@@ -181,5 +195,66 @@ func TestLogin_BadCredentialsMapsTo401(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestRefresh_Success(t *testing.T) {
+	fake := &fakeUserClient{
+		refreshFn: func(in *userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error) {
+			if in.GetRefreshToken() != "old-refresh" {
+				t.Errorf("forwarded refresh token = %q", in.GetRefreshToken())
+			}
+			return &userv1.RefreshTokenResponse{AccessToken: "new-access", RefreshToken: "new-refresh", ExpiresAt: 123}, nil
+		},
+	}
+	ts := newTestServer(t, fake)
+	defer ts.Close()
+
+	resp := postJSON(t, ts.URL+"/auth/refresh", `{"refresh_token":"old-refresh"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var body map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	if body["access_token"] != "new-access" || body["refresh_token"] != "new-refresh" {
+		t.Errorf("body = %v", body)
+	}
+}
+
+func TestRefresh_Unauthenticated(t *testing.T) {
+	fake := &fakeUserClient{
+		refreshFn: func(*userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error) {
+			return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+		},
+	}
+	ts := newTestServer(t, fake)
+	defer ts.Close()
+
+	resp := postJSON(t, ts.URL+"/auth/refresh", `{"refresh_token":"bad"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
+func TestLogout_NoContent(t *testing.T) {
+	called := false
+	fake := &fakeUserClient{
+		logoutFn: func(*userv1.LogoutRequest) (*userv1.LogoutResponse, error) {
+			called = true
+			return &userv1.LogoutResponse{}, nil
+		},
+	}
+	ts := newTestServer(t, fake)
+	defer ts.Close()
+
+	resp := postJSON(t, ts.URL+"/auth/logout", `{"refresh_token":"x"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("status = %d, want 204", resp.StatusCode)
+	}
+	if !called {
+		t.Error("gateway did not forward to user.Logout")
 	}
 }

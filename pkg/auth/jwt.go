@@ -15,16 +15,27 @@ import (
 // was rejected, while callers can still branch with errors.Is to return 401.
 var ErrInvalidToken = errors.New("auth: invalid token")
 
+// Token type constants carried in the "typ" claim, so an access token can't be
+// replayed where a refresh token is required (and vice versa).
+const (
+	TypeAccess  = "access"
+	TypeRefresh = "refresh"
+)
+
 // Claims is the trusted identity extracted from a validated token. It exposes
-// only what callers need (who, and what role) — not the raw JWT internals.
+// only what callers need (who, role, the token's jti, and its type) — not the
+// raw JWT internals.
 type Claims struct {
-	UserID string // the "sub" claim
-	Role   string // "customer" | "admin"
+	UserID  string // the "sub" claim
+	Role    string // "customer" | "admin"
+	TokenID string // the "jti" claim — the handle for server-side revocation
+	Type    string // "access" | "refresh"
 }
 
-// TokenIssuer mints signed access tokens.
+// TokenIssuer mints signed tokens. It returns the jti so the caller can persist
+// it (refresh tokens are tracked server-side for revocation).
 type TokenIssuer interface {
-	Issue(userID, role string) (token string, expiresAt time.Time, err error)
+	Issue(userID, role string) (token, jti string, expiresAt time.Time, err error)
 }
 
 // TokenValidator validates a token and returns its claims. The Gateway depends
@@ -47,6 +58,7 @@ var (
 // the standard fields AND the library's built-in exp/iat validation for free.
 type jwtClaims struct {
 	Role string `json:"role"`
+	Typ  string `json:"typ"` // "access" | "refresh"
 	jwt.RegisteredClaims
 }
 
@@ -58,36 +70,40 @@ type jwtClaims struct {
 type JWTManager struct {
 	secret []byte
 	ttl    time.Duration
+	typ    string // the token type this manager issues + accepts (access | refresh)
 }
 
 // NewJWTManager builds a manager. secret comes from the JWT_SECRET env var at
 // the edge of the program — this package never reads the environment itself
 // (pkg/ stays free of process concerns).
-func NewJWTManager(secret string, ttl time.Duration) *JWTManager {
-	return &JWTManager{secret: []byte(secret), ttl: ttl}
+func NewJWTManager(secret string, ttl time.Duration, typ string) *JWTManager {
+	return &JWTManager{secret: []byte(secret), ttl: ttl, typ: typ}
 }
 
-// Issue creates a signed token valid for the manager's TTL.
-func (m *JWTManager) Issue(userID, role string) (string, time.Time, error) {
+// Issue creates a signed token valid for the manager's TTL, tagged with its type.
+// It returns the token, its jti (so refresh tokens can be tracked), and expiry.
+func (m *JWTManager) Issue(userID, role string) (string, string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(m.ttl)
+	jti := uuid.NewString()
 
 	claims := jwtClaims{
 		Role: role,
+		Typ:  m.typ,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
-			ID:        uuid.NewString(), // jti: unique id, enables future revocation
+			ID:        jti, // jti: unique id, the handle for server-side revocation
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(m.secret)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("auth: sign token: %w", err)
+		return "", "", time.Time{}, fmt.Errorf("auth: sign token: %w", err)
 	}
-	return signed, expiresAt, nil
+	return signed, jti, expiresAt, nil
 }
 
 // Validate parses and verifies a token, returning its trusted claims.
@@ -110,5 +126,17 @@ func (m *JWTManager) Validate(tokenString string) (Claims, error) {
 		return Claims{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
 	}
 
-	return Claims{UserID: claims.Subject, Role: claims.Role}, nil
+	// Reject a token of the wrong type — the two managers share the secret, so the
+	// signature alone can't distinguish an access token from a refresh token; the
+	// "typ" claim is what stops one being used where the other is expected.
+	if claims.Typ != m.typ {
+		return Claims{}, fmt.Errorf("%w: wrong token type %q", ErrInvalidToken, claims.Typ)
+	}
+
+	return Claims{
+		UserID:  claims.Subject,
+		Role:    claims.Role,
+		TokenID: claims.ID,
+		Type:    claims.Typ,
+	}, nil
 }

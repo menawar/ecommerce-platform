@@ -19,6 +19,12 @@ service UserService {
   // Order saga resolving the customer's email for a payment receipt). It never
   // exposes the password hash.
   rpc GetUser(GetUserRequest) returns (GetUserResponse);
+  // RefreshToken rotates a refresh token: it validates + revokes the presented
+  // refresh token and mints a fresh access + refresh pair. Reuse of an
+  // already-revoked token revokes the whole session (theft detection).
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  // Logout revokes the presented refresh token, ending that session server-side.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
 }
 
 message RegisterRequest {
@@ -43,6 +49,20 @@ message LoginResponse {
   string refresh_token = 2; // long-lived token to mint new access tokens (TTL 7d)
   int64 expires_at = 3;     // access_token expiry, unix seconds
 }
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2; // a NEW refresh token (the old one is now revoked)
+  int64 expires_at = 3;     // access_token expiry, unix seconds
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+message LogoutResponse {}
 
 message GetUserRequest {
   string user_id = 1;

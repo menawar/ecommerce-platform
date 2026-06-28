@@ -43,6 +43,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 	return err
 }
 
+const getRefreshToken = `-- name: GetRefreshToken :one
+SELECT jti, user_id, expires_at, revoked_at, created_at FROM refresh_tokens WHERE jti = $1
+`
+
+func (q *Queries) GetRefreshToken(ctx context.Context, jti pgtype.UUID) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshToken, jti)
+	var i RefreshToken
+	err := row.Scan(
+		&i.Jti,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, full_name, role, created_at, updated_at FROM users WHERE email = $1
 `
@@ -79,4 +96,39 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const revokeAllUserRefreshTokens = `-- name: RevokeAllUserRefreshTokens :exec
+UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAllUserRefreshTokens, userID)
+	return err
+}
+
+const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
+UPDATE refresh_tokens SET revoked_at = now() WHERE jti = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, revokeRefreshToken, jti)
+	return err
+}
+
+const saveRefreshToken = `-- name: SaveRefreshToken :exec
+
+INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1, $2, $3)
+`
+
+type SaveRefreshTokenParams struct {
+	Jti       pgtype.UUID
+	UserID    pgtype.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Refresh-token tracking (revocation + rotation).
+func (q *Queries) SaveRefreshToken(ctx context.Context, arg SaveRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, saveRefreshToken, arg.Jti, arg.UserID, arg.ExpiresAt)
+	return err
 }

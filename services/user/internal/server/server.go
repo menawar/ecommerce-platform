@@ -30,12 +30,14 @@ const minPasswordLen = 8
 type Server struct {
 	userv1.UnimplementedUserServiceServer
 
-	repo          store.Repository
-	accessIssuer  auth.TokenIssuer // 15m tokens
-	refreshIssuer auth.TokenIssuer // 7d tokens
-	validator     auth.TokenValidator
-	publisher     events.Publisher // emits user.registered; nil = don't publish
-	log           *slog.Logger
+	repo             store.Repository
+	refreshTokens    store.RefreshTokenStore
+	accessIssuer     auth.TokenIssuer    // 15m tokens
+	refreshIssuer    auth.TokenIssuer    // 7d tokens
+	validator        auth.TokenValidator // validates ACCESS tokens
+	refreshValidator auth.TokenValidator // validates REFRESH tokens (rejects access)
+	publisher        events.Publisher    // emits user.registered; nil = don't publish
+	log              *slog.Logger
 
 	// dummyHash is a real bcrypt hash we compare against when an email is not
 	// found, so the "no such user" path costs the same ~60ms as a real wrong
@@ -45,20 +47,23 @@ type Server struct {
 
 func NewServer(
 	repo store.Repository,
+	refreshTokens store.RefreshTokenStore,
 	accessIssuer, refreshIssuer auth.TokenIssuer,
-	validator auth.TokenValidator,
+	validator, refreshValidator auth.TokenValidator,
 	publisher events.Publisher,
 	log *slog.Logger,
 ) *Server {
 	dummy, _ := auth.HashPassword("timing-equalizer-not-a-real-password")
 	return &Server{
-		repo:          repo,
-		accessIssuer:  accessIssuer,
-		refreshIssuer: refreshIssuer,
-		validator:     validator,
-		publisher:     publisher,
-		log:           log,
-		dummyHash:     dummy,
+		repo:             repo,
+		refreshTokens:    refreshTokens,
+		accessIssuer:     accessIssuer,
+		refreshIssuer:    refreshIssuer,
+		validator:        validator,
+		refreshValidator: refreshValidator,
+		publisher:        publisher,
+		log:              log,
+		dummyHash:        dummy,
 	}
 }
 
@@ -129,20 +134,88 @@ func (s *Server) Login(ctx context.Context, req *userv1.LoginRequest) (*userv1.L
 		return nil, s.internal(ctx, "verify password", err)
 	}
 
-	access, expiresAt, err := s.accessIssuer.Issue(u.ID, u.Role)
+	access, refresh, expiresAt, err := s.issueTokenPair(ctx, u.ID, u.Role)
 	if err != nil {
-		return nil, s.internal(ctx, "issue access token", err)
+		return nil, err
 	}
-	refresh, _, err := s.refreshIssuer.Issue(u.ID, u.Role)
-	if err != nil {
-		return nil, s.internal(ctx, "issue refresh token", err)
-	}
-
 	return &userv1.LoginResponse{
 		AccessToken:  access,
 		RefreshToken: refresh,
 		ExpiresAt:    expiresAt.Unix(),
 	}, nil
+}
+
+// issueTokenPair mints an access + refresh token and PERSISTS the refresh jti so
+// it can be revoked/rotated later. Shared by Login and RefreshToken.
+func (s *Server) issueTokenPair(ctx context.Context, userID, role string) (access, refresh string, accessExp time.Time, err error) {
+	access, _, accessExp, err = s.accessIssuer.Issue(userID, role)
+	if err != nil {
+		return "", "", time.Time{}, s.internal(ctx, "issue access token", err)
+	}
+	refresh, jti, refreshExp, err := s.refreshIssuer.Issue(userID, role)
+	if err != nil {
+		return "", "", time.Time{}, s.internal(ctx, "issue refresh token", err)
+	}
+	if err := s.refreshTokens.Save(ctx, store.RefreshToken{JTI: jti, UserID: userID, ExpiresAt: refreshExp}); err != nil {
+		return "", "", time.Time{}, s.internal(ctx, "save refresh token", err)
+	}
+	return access, refresh, accessExp, nil
+}
+
+// RefreshToken rotates a refresh token. It validates the token, checks it's still
+// active in the store, then revokes it and issues a fresh pair. Presenting a token
+// that's already been revoked (e.g. a stolen, already-rotated one) revokes the
+// whole user's tokens — refresh-token reuse is the signal of theft.
+func (s *Server) RefreshToken(ctx context.Context, req *userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error) {
+	claims, err := s.refreshValidator.Validate(req.GetRefreshToken())
+	if err != nil {
+		return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+	}
+	rt, err := s.refreshTokens.Get(ctx, claims.TokenID)
+	if err != nil {
+		if errors.Is(err, store.ErrRefreshNotFound) {
+			return nil, status.Error(codes.Unauthenticated, "invalid refresh token")
+		}
+		return nil, s.internal(ctx, "get refresh token", err)
+	}
+	if rt.RevokedAt != nil {
+		// Reuse of a revoked token → likely theft. Nuke every session for the user.
+		if err := s.refreshTokens.RevokeAllForUser(ctx, rt.UserID); err != nil {
+			s.log.ErrorContext(ctx, "revoke-all on reuse", "err", err, "user_id", rt.UserID)
+		}
+		return nil, status.Error(codes.Unauthenticated, "refresh token reuse detected")
+	}
+	if !rt.Active(time.Now()) {
+		return nil, status.Error(codes.Unauthenticated, "refresh token expired")
+	}
+
+	// Rotate: revoke the presented token, then mint + persist a new pair.
+	if err := s.refreshTokens.Revoke(ctx, claims.TokenID); err != nil {
+		return nil, s.internal(ctx, "revoke old refresh token", err)
+	}
+	access, refresh, accessExp, err := s.issueTokenPair(ctx, claims.UserID, claims.Role)
+	if err != nil {
+		return nil, err
+	}
+	return &userv1.RefreshTokenResponse{
+		AccessToken:  access,
+		RefreshToken: refresh,
+		ExpiresAt:    accessExp.Unix(),
+	}, nil
+}
+
+// Logout revokes the presented refresh token. It is idempotent and lenient: an
+// invalid or already-revoked token still returns success — the caller wants the
+// session gone regardless.
+func (s *Server) Logout(ctx context.Context, req *userv1.LogoutRequest) (*userv1.LogoutResponse, error) {
+	claims, err := s.refreshValidator.Validate(req.GetRefreshToken())
+	if err != nil {
+		return &userv1.LogoutResponse{}, nil // nothing to revoke; treat as logged out
+	}
+	if err := s.refreshTokens.Revoke(ctx, claims.TokenID); err != nil && !errors.Is(err, store.ErrRefreshNotFound) {
+		return nil, s.internal(ctx, "revoke refresh token", err)
+	}
+	return &userv1.LogoutResponse{}, nil
 }
 
 // ValidateToken reports whether a token is valid and, if so, who it belongs to.

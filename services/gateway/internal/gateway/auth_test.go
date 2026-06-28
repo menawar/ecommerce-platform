@@ -18,7 +18,7 @@ import (
 func jwtBackedFake(mgr *auth.JWTManager) *fakeUserClient {
 	return &fakeUserClient{
 		loginFn: func(*userv1.LoginRequest) (*userv1.LoginResponse, error) {
-			tok, exp, err := mgr.Issue("user-42", "customer")
+			tok, _, exp, err := mgr.Issue("user-42", "customer")
 			if err != nil {
 				return nil, err
 			}
@@ -51,7 +51,7 @@ func getWithAuth(t *testing.T, url, authHeader string) *http.Response {
 // token, then the protected /me accepts it and returns the identity, while a bad
 // token and a missing header are both rejected with 401.
 func TestProtectedRoute(t *testing.T) {
-	mgr := auth.NewJWTManager("itest-secret", 15*time.Minute)
+	mgr := auth.NewJWTManager("itest-secret", 15*time.Minute, auth.TypeAccess)
 	ts := newTestServer(t, jwtBackedFake(mgr))
 
 	// 1) Login -> real access token.
