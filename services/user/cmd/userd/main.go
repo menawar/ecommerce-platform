@@ -105,9 +105,10 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	log.Info("connected to nats jetstream")
 
 	repo := store.NewPostgres(pool)
-	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL)
-	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL)
-	userSrv := server.NewServer(repo, accessMgr, refreshMgr, accessMgr, events.NewNATSPublisher(js), log)
+	// Same Postgres struct backs both the user repo and the refresh-token store.
+	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL, auth.TypeAccess)
+	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL, auth.TypeRefresh)
+	userSrv := server.NewServer(repo, repo, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), log)
 
 	shutdownTracer, err := observability.InitTracer(ctx, "user", cfg.otelEndpoint)
 	if err != nil {

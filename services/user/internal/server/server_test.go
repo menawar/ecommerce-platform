@@ -27,9 +27,9 @@ func newTestClient(t *testing.T) userv1.UserServiceClient {
 	t.Helper()
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	jwtMgr := auth.NewJWTManager("test-secret", 15*time.Minute)
-	refreshMgr := auth.NewJWTManager("test-secret", 7*24*time.Hour)
-	srv := server.NewServer(store.NewMemory(), jwtMgr, refreshMgr, jwtMgr, nil, log) // nil publisher: no events in tests
+	jwtMgr := auth.NewJWTManager("test-secret", 15*time.Minute, auth.TypeAccess)
+	refreshMgr := auth.NewJWTManager("test-secret", 7*24*time.Hour, auth.TypeRefresh)
+	srv := server.NewServer(store.NewMemory(), store.NewMemoryRefreshTokens(), jwtMgr, refreshMgr, jwtMgr, refreshMgr, nil, log) // nil publisher: no events in tests
 
 	lis := bufconn.Listen(1024 * 1024)
 	gs := grpc.NewServer()
@@ -150,5 +150,76 @@ func TestValidateToken_Garbage(t *testing.T) {
 	}
 	if val.GetValid() {
 		t.Error("garbage token reported valid")
+	}
+}
+
+func registerAndLogin(t *testing.T, ctx context.Context, c userv1.UserServiceClient, email string) *userv1.LoginResponse {
+	t.Helper()
+	if _, err := c.Register(ctx, &userv1.RegisterRequest{Email: email, Password: "supersecret", FullName: "Test"}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	login, err := c.Login(ctx, &userv1.LoginRequest{Email: email, Password: "supersecret"})
+	if err != nil {
+		t.Fatalf("Login: %v", err)
+	}
+	return login
+}
+
+// TestRefreshToken_Rotation: a refresh mints a fresh pair, and the OLD refresh
+// token no longer works (rotation revoked it).
+func TestRefreshToken_Rotation(t *testing.T) {
+	ctx := context.Background()
+	c := newTestClient(t)
+	login := registerAndLogin(t, ctx, c, "rot@example.com")
+
+	refreshed, err := c.RefreshToken(ctx, &userv1.RefreshTokenRequest{RefreshToken: login.GetRefreshToken()})
+	if err != nil {
+		t.Fatalf("RefreshToken: %v", err)
+	}
+	if refreshed.GetAccessToken() == "" || refreshed.GetRefreshToken() == login.GetRefreshToken() {
+		t.Error("refresh should mint a new, different token pair")
+	}
+	if v, err := c.ValidateToken(ctx, &userv1.ValidateTokenRequest{Token: refreshed.GetAccessToken()}); err != nil || !v.GetValid() {
+		t.Errorf("refreshed access token should validate, got valid=%v err=%v", v.GetValid(), err)
+	}
+	if _, err := c.RefreshToken(ctx, &userv1.RefreshTokenRequest{RefreshToken: login.GetRefreshToken()}); status.Code(err) != codes.Unauthenticated {
+		t.Errorf("old refresh token should be rejected after rotation, got %v", err)
+	}
+}
+
+// TestRefreshToken_ReuseDetection: replaying an already-rotated refresh token
+// revokes the whole chain — even the legitimately-rotated token stops working.
+func TestRefreshToken_ReuseDetection(t *testing.T) {
+	ctx := context.Background()
+	c := newTestClient(t)
+	login := registerAndLogin(t, ctx, c, "reuse@example.com")
+
+	rotated, err := c.RefreshToken(ctx, &userv1.RefreshTokenRequest{RefreshToken: login.GetRefreshToken()})
+	if err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+	if _, err := c.RefreshToken(ctx, &userv1.RefreshTokenRequest{RefreshToken: login.GetRefreshToken()}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("reused token should be Unauthenticated, got %v", err)
+	}
+	if _, err := c.RefreshToken(ctx, &userv1.RefreshTokenRequest{RefreshToken: rotated.GetRefreshToken()}); status.Code(err) != codes.Unauthenticated {
+		t.Errorf("chain revocation: rotated token should also be rejected, got %v", err)
+	}
+}
+
+// TestLogout: after logout the refresh token can't mint new tokens, and logout is
+// idempotent.
+func TestLogout(t *testing.T) {
+	ctx := context.Background()
+	c := newTestClient(t)
+	login := registerAndLogin(t, ctx, c, "logout@example.com")
+
+	if _, err := c.Logout(ctx, &userv1.LogoutRequest{RefreshToken: login.GetRefreshToken()}); err != nil {
+		t.Fatalf("Logout: %v", err)
+	}
+	if _, err := c.RefreshToken(ctx, &userv1.RefreshTokenRequest{RefreshToken: login.GetRefreshToken()}); status.Code(err) != codes.Unauthenticated {
+		t.Errorf("refresh after logout should be rejected, got %v", err)
+	}
+	if _, err := c.Logout(ctx, &userv1.LogoutRequest{RefreshToken: login.GetRefreshToken()}); err != nil {
+		t.Errorf("second logout should still succeed, got %v", err)
 	}
 }

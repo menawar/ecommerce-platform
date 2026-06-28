@@ -28,9 +28,9 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // PaymentService processes charges. It runs in mock mode by default (a
-// deterministic MockProvider); the real adapter is Paystack (NGN). Both
-// CreatePayment and InitializePayment are idempotent on idempotency_key — the
-// Order saga may retry, and a retry must never charge twice.
+// deterministic MockProvider); the real adapter is Paystack (NGN).
+// InitializePayment is idempotent on idempotency_key — the Order saga may retry,
+// and a retry must never charge twice.
 type PaymentServiceClient interface {
 	// InitializePayment starts an ASYNCHRONOUS charge with a redirect-based PSP
 	// (Paystack): it returns an authorization_url to send the customer to and a
@@ -72,9 +72,9 @@ func (c *paymentServiceClient) GetPayment(ctx context.Context, in *GetPaymentReq
 // for forward compatibility.
 //
 // PaymentService processes charges. It runs in mock mode by default (a
-// deterministic MockProvider); the real adapter is Paystack (NGN). Both
-// CreatePayment and InitializePayment are idempotent on idempotency_key — the
-// Order saga may retry, and a retry must never charge twice.
+// deterministic MockProvider); the real adapter is Paystack (NGN).
+// InitializePayment is idempotent on idempotency_key — the Order saga may retry,
+// and a retry must never charge twice.
 type PaymentServiceServer interface {
 	// InitializePayment starts an ASYNCHRONOUS charge with a redirect-based PSP
 	// (Paystack): it returns an authorization_url to send the customer to and a

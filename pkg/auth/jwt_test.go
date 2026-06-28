@@ -15,9 +15,9 @@ const testSecret = "test-secret-do-not-use-in-prod"
 
 // TestJWT_RoundTrip proves an issued token validates back to the same identity.
 func TestJWT_RoundTrip(t *testing.T) {
-	m := auth.NewJWTManager(testSecret, 15*time.Minute)
+	m := auth.NewJWTManager(testSecret, 15*time.Minute, auth.TypeAccess)
 
-	token, expiresAt, err := m.Issue("user-123", "admin")
+	token, _, expiresAt, err := m.Issue("user-123", "admin")
 	if err != nil {
 		t.Fatalf("Issue: %v", err)
 	}
@@ -36,8 +36,8 @@ func TestJWT_RoundTrip(t *testing.T) {
 
 // TestJWT_Tampered proves a flipped byte breaks signature verification.
 func TestJWT_Tampered(t *testing.T) {
-	m := auth.NewJWTManager(testSecret, 15*time.Minute)
-	token, _, _ := m.Issue("user-123", "customer")
+	m := auth.NewJWTManager(testSecret, 15*time.Minute, auth.TypeAccess)
+	token, _, _, _ := m.Issue("user-123", "customer")
 
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -62,8 +62,8 @@ func TestJWT_Tampered(t *testing.T) {
 // TestJWT_Expired proves expiry is enforced. We issue with a negative TTL so the
 // token is already past its exp.
 func TestJWT_Expired(t *testing.T) {
-	m := auth.NewJWTManager(testSecret, -time.Minute)
-	token, _, _ := m.Issue("user-123", "customer")
+	m := auth.NewJWTManager(testSecret, -time.Minute, auth.TypeAccess)
+	token, _, _, _ := m.Issue("user-123", "customer")
 
 	if _, err := m.Validate(token); !errors.Is(err, auth.ErrInvalidToken) {
 		t.Errorf("want ErrInvalidToken for expired token, got %v", err)
@@ -73,10 +73,10 @@ func TestJWT_Expired(t *testing.T) {
 // TestJWT_WrongSecret proves a token signed by a different secret is rejected —
 // the validator trusts only tokens it could have signed.
 func TestJWT_WrongSecret(t *testing.T) {
-	issuer := auth.NewJWTManager("secret-A", 15*time.Minute)
-	verifier := auth.NewJWTManager("secret-B", 15*time.Minute)
+	issuer := auth.NewJWTManager("secret-A", 15*time.Minute, auth.TypeAccess)
+	verifier := auth.NewJWTManager("secret-B", 15*time.Minute, auth.TypeAccess)
 
-	token, _, _ := issuer.Issue("user-123", "customer")
+	token, _, _, _ := issuer.Issue("user-123", "customer")
 	if _, err := verifier.Validate(token); !errors.Is(err, auth.ErrInvalidToken) {
 		t.Errorf("want ErrInvalidToken for foreign secret, got %v", err)
 	}
@@ -85,7 +85,7 @@ func TestJWT_WrongSecret(t *testing.T) {
 // TestJWT_AlgNone proves the algorithm-confusion defense: a token with alg=none
 // (no signature at all) must be rejected even though it's structurally valid.
 func TestJWT_AlgNone(t *testing.T) {
-	m := auth.NewJWTManager(testSecret, 15*time.Minute)
+	m := auth.NewJWTManager(testSecret, 15*time.Minute, auth.TypeAccess)
 
 	// Craft an unsigned token. The library requires an explicit unsafe sentinel
 	// to even produce one — which is exactly the attack we must reject on verify.
@@ -100,6 +100,19 @@ func TestJWT_AlgNone(t *testing.T) {
 
 	if _, err := m.Validate(tokenString); !errors.Is(err, auth.ErrInvalidToken) {
 		t.Errorf("want ErrInvalidToken for alg=none token, got %v", err)
+	}
+}
+
+// TestJWT_WrongType proves the type guard: a refresh token (valid signature, same
+// secret) is rejected by the access manager — only the "typ" claim distinguishes
+// them, so this is what stops a refresh token being replayed as an access token.
+func TestJWT_WrongType(t *testing.T) {
+	access := auth.NewJWTManager(testSecret, 15*time.Minute, auth.TypeAccess)
+	refresh := auth.NewJWTManager(testSecret, 7*24*time.Hour, auth.TypeRefresh)
+
+	refreshTok, _, _, _ := refresh.Issue("user-123", "customer")
+	if _, err := access.Validate(refreshTok); !errors.Is(err, auth.ErrInvalidToken) {
+		t.Errorf("access manager must reject a refresh token, got %v", err)
 	}
 }
 

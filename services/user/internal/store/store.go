@@ -17,6 +17,8 @@ var (
 	ErrEmailTaken = errors.New("store: email already registered")
 	// ErrNotFound is returned by lookups when no account matches.
 	ErrNotFound = errors.New("store: user not found")
+	// ErrRefreshNotFound is returned when no refresh token matches the jti.
+	ErrRefreshNotFound = errors.New("store: refresh token not found")
 )
 
 // User is a persisted account. Fields mirror the userdb.users schema from the
@@ -41,4 +43,27 @@ type Repository interface {
 	Create(ctx context.Context, u User) error
 	GetByEmail(ctx context.Context, email string) (User, error)
 	GetByID(ctx context.Context, id string) (User, error)
+}
+
+// RefreshToken is a persisted, revocable refresh-token record. We store only the
+// jti (the token's id) — never the token itself — so a DB leak can't be replayed.
+type RefreshToken struct {
+	JTI       string
+	UserID    string
+	ExpiresAt time.Time
+	RevokedAt *time.Time // nil = still active
+}
+
+// Active reports whether the token can still be used: not revoked, not expired.
+func (t RefreshToken) Active(now time.Time) bool {
+	return t.RevokedAt == nil && now.Before(t.ExpiresAt)
+}
+
+// RefreshTokenStore tracks refresh tokens so sessions are revocable (logout) and
+// rotatable (each use issues a new one and revokes the old).
+type RefreshTokenStore interface {
+	Save(ctx context.Context, t RefreshToken) error
+	Get(ctx context.Context, jti string) (RefreshToken, error)
+	Revoke(ctx context.Context, jti string) error
+	RevokeAllForUser(ctx context.Context, userID string) error
 }
