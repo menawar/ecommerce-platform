@@ -37,6 +37,23 @@ helm template rel deploy/helm/ecommerce | kubeconform -strict -summary
 helm install rel deploy/helm/ecommerce
 ```
 
+## Ingress + TLS
+
+`ingress.enabled=true` exposes the public surface via one Ingress (needs an
+ingress controller + cert-manager):
+
+- `/webhooks/paystack` → the **payment** service (Paystack calls this from the
+  internet). Routing by *path* keeps `/metrics` on the same port private.
+- `/` → the **gateway** REST API. In a fully in-cluster topology (web BFF also in
+  the cluster), drop this rule and keep the gateway ClusterIP-internal.
+
+```bash
+helm upgrade --install rel deploy/helm/ecommerce \
+  --set ingress.enabled=true \
+  --set ingress.host=api.yourstore.com \
+  --set ingress.tls.clusterIssuer=letsencrypt-prod
+```
+
 ## Production
 
 **Never deploy the committed placeholder secrets.** Override them out-of-band:
