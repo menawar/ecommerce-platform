@@ -1,0 +1,84 @@
+name: CD
+
+# Release pipeline: on a version tag, build every image, scan it, push to GHCR,
+# and (optionally) roll it out via Helm. Tag a release with e.g. `git tag v1.2.3
+# && git push --tags`.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write # push images to GHCR
+
+jobs:
+  images:
+    name: Build · scan · push (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: user, dockerfile: services/user/Dockerfile }
+          - { name: product, dockerfile: services/product/Dockerfile }
+          - { name: cart, dockerfile: services/cart/Dockerfile }
+          - { name: payment, dockerfile: services/payment/Dockerfile }
+          - { name: order, dockerfile: services/order/Dockerfile }
+          - { name: notification, dockerfile: services/notification/Dockerfile }
+          - { name: gateway, dockerfile: services/gateway/Dockerfile }
+          - { name: migrator, dockerfile: deploy/docker/migrator.Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build into the local daemon first (push: false) so we can scan BEFORE
+      # publishing — a vulnerable image never reaches the registry.
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.ref_name }}
+          load: true
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install Trivy
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Scan image (fail on fixable HIGH/CRITICAL)
+        run: trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.ref_name }}
+
+      - name: Push
+        run: docker push ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.ref_name }}
+
+  deploy:
+    name: Deploy (helm upgrade)
+    needs: images
+    runs-on: ubuntu-latest
+    # Opt-in: set repo variable DEPLOY_ENABLED=true and secret KUBE_CONFIG
+    # (base64 kubeconfig). Otherwise CD just publishes images.
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+      - name: helm upgrade
+        # Non-secret values come from the chart; production secrets must come from
+        # a values override or an external secret store (NOT this workflow). The
+        # migration hook Job runs first and aborts the release if it fails.
+        run: |
+          helm upgrade --install ecommerce deploy/helm/ecommerce \
+            --namespace ecommerce --create-namespace \
+            --set image.tag=${{ github.ref_name }} \
+            --reuse-values \
+            --wait --timeout 10m

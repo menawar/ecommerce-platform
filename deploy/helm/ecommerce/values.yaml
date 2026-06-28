@@ -9,6 +9,11 @@ image:
 
 replicas: 1
 
+# DB migrations run as a Helm hook Job (post-install/pre-upgrade) using the
+# `migrator` image (deploy/docker/migrator.Dockerfile), built/pushed by CD.
+migrations:
+  enabled: true
+
 # Public ingress for the gateway API + the Paystack webhook. Opt-in: needs an
 # ingress controller (e.g. ingress-nginx) and, for TLS, cert-manager with the
 # named ClusterIssuer. Only the /webhooks/paystack PATH of the payment service is

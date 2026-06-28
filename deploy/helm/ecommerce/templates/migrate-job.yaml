@@ -1,0 +1,61 @@
+{{- if .Values.migrations.enabled }}
+# Runs DB migrations before the app starts. As a Helm hook it executes on every
+# install/upgrade, ahead of the workloads (hook-weight); a failed migration aborts
+# the release. Idempotent — golang-migrate only applies what's pending.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ecommerce.fullname" . }}-migrate
+  labels: {{- include "ecommerce.labels" (dict "name" "migrate" "root" $) | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5 # retry: on first install the DB may still be coming up
+  template:
+    metadata:
+      labels: {{- include "ecommerce.selectorLabels" (dict "name" "migrate") | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- if .Values.infra.enabled }}
+      # In-cluster Postgres is a StatefulSet that may not be ready yet; wait for it.
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.registry }}/migrator:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # Each DB's URL is in the shared Secret as <SERVICE>_DB_URL.
+          command: ["/bin/sh", "-euc"]
+          args:
+            - |
+              for svc in user product payment order notification; do
+                var=$(echo "${svc}_DB_URL" | tr '[:lower:]' '[:upper:]')
+                url=$(eval printf '%s' "\$$var")
+                echo "==> migrating ${svc}db"
+                migrate -path "/migrations/${svc}" -database "${url}" up
+              done
+          envFrom:
+            - secretRef:
+                name: {{ include "ecommerce.fullname" . }}-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+{{- end }}
