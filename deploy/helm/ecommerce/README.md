@@ -10,10 +10,20 @@ cluster is self-contained. In **production** set `infra.enabled=false` and point
 `config`/`secrets` at managed data stores — the apps use the same hostnames, so
 nothing else changes.
 
-> **Migrations** are not yet automated by this chart. After the DBs are up, run
-> them as a one-time step (port-forward the `postgres` service and use the
-> existing `make <svc>-migrate-up` targets). A migration Helm hook Job lands with
-> the CD increment (where the migrator image is built alongside the services).
+> **Migrations** run automatically: a Helm hook Job (`migrations.enabled`,
+> default on) executes on every install/upgrade *before* the app pods, using the
+> `migrator` image (golang-migrate + every service's migration files, built by
+> CD). It waits for in-cluster Postgres, then applies each DB's pending
+> migrations; a failure aborts the release.
+
+## CI/CD
+
+`.github/workflows/cd.yml` runs on a version tag (`git tag v1.2.3 && git push
+--tags`): it builds each image, **scans it with Trivy** (fails on fixable
+HIGH/CRITICAL *before* publishing), and pushes to GHCR. An opt-in `deploy` job
+(`vars.DEPLOY_ENABLED=true` + a base64 `KUBE_CONFIG` secret) then runs `helm
+upgrade --install` — the migration hook runs first and aborts the release if it
+fails. Without those set, CD just publishes images.
 
 ## How it's wired
 
