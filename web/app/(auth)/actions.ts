@@ -6,7 +6,7 @@
 import { redirect } from "next/navigation";
 
 import { GatewayError } from "@/lib/gateway";
-import { clearSession, login, register, setSession } from "@/lib/session";
+import { login, logout, register, setSession } from "@/lib/session";
 
 // The shape useActionState threads between submissions (prev state -> next state).
 export type AuthState = { error?: string };
@@ -16,8 +16,8 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
   const password = String(formData.get("password") ?? "");
 
   try {
-    const { access_token, expires_at } = await login(email, password);
-    await setSession(access_token, expires_at);
+    const { access_token, refresh_token, expires_at } = await login(email, password);
+    await setSession(access_token, expires_at, refresh_token);
   } catch (err) {
     if (err instanceof GatewayError) {
       return { error: err.status === 401 ? "Invalid email or password" : err.message };
@@ -32,7 +32,7 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
 // A no-arg Server Action: a <form action={logoutAction}> needs no client JS and no
 // useActionState — submit clears the cookie and redirects.
 export async function logoutAction(): Promise<void> {
-  await clearSession();
+  await logout(); // revoke the refresh token server-side, then clear cookies
   redirect("/login");
 }
 
@@ -44,8 +44,8 @@ export async function registerAction(_prev: AuthState, formData: FormData): Prom
   try {
     await register(email, password, fullName);
     // Auto-login after a successful registration for a smoother first run.
-    const { access_token, expires_at } = await login(email, password);
-    await setSession(access_token, expires_at);
+    const { access_token, refresh_token, expires_at } = await login(email, password);
+    await setSession(access_token, expires_at, refresh_token);
   } catch (err) {
     if (err instanceof GatewayError) {
       if (err.status === 409) return { error: "That email is already registered" };

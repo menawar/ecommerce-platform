@@ -2,6 +2,7 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { gatewayFetch, SESSION_COOKIE } from "./gateway";
+import { SESSION_REFRESH_COOKIE, REFRESH_MAX_AGE_SECONDS } from "./auth-cookies";
 
 type LoginResponse = {
   access_token: string;
@@ -30,21 +31,52 @@ export async function register(email: string, password: string, fullName: string
 //   expires   -> match the token's own lifetime so a dead token isn't kept
 // Cookies can only be SET inside a Server Action or Route Handler, never during a
 // Server Component render — which is exactly where this is called from.
-export async function setSession(token: string, expiresAtUnix: number): Promise<void> {
+export async function setSession(token: string, expiresAtUnix: number, refreshToken: string): Promise<void> {
   const cookieStore = await cookies();
+  const secure = process.env.NODE_ENV === "production";
+  // Access cookie: expires WITH the token, so the browser drops it on expiry —
+  // that absence is the signal the middleware uses to know it's time to refresh.
   cookieStore.set({
     name: SESSION_COOKIE,
     value: token,
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure,
     path: "/",
     expires: new Date(expiresAtUnix * 1000),
   });
+  // Refresh cookie: longer-lived (the refresh TTL), used only to mint new access
+  // tokens. It outlives the access token so the session survives access expiry.
+  cookieStore.set({
+    name: SESSION_REFRESH_COOKIE,
+    value: refreshToken,
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: REFRESH_MAX_AGE_SECONDS,
+  });
+}
+
+// logout revokes the refresh token server-side (so a stolen copy stops working),
+// then clears both cookies. Best-effort revoke — the clear is what logs the user
+// out locally regardless.
+export async function logout(): Promise<void> {
+  const refresh = (await cookies()).get(SESSION_REFRESH_COOKIE)?.value;
+  if (refresh) {
+    try {
+      await gatewayFetch("/auth/logout", { method: "POST", body: JSON.stringify({ refresh_token: refresh }) });
+    } catch {
+      // already invalid / gateway down — nothing to do.
+    }
+  }
+  await clearSession();
 }
 
 export async function clearSession(): Promise<void> {
-  (await cookies()).delete(SESSION_COOKIE);
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE);
+  cookieStore.delete(SESSION_REFRESH_COOKIE);
 }
 
 // getMe calls the protected /me route; gatewayFetch forwards the cookie as a

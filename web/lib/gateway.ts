@@ -8,8 +8,10 @@ import type { Product, ProductList } from "./types";
 
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://localhost:8080";
 
-// The httpOnly cookie name the login Server Action will set (Step: auth).
-export const SESSION_COOKIE = "session";
+// Single source of truth lives in auth-cookies (so the Edge middleware can share
+// it); re-exported here for the existing server-side importers.
+export { SESSION_COOKIE } from "./auth-cookies";
+import { SESSION_COOKIE } from "./auth-cookies";
 
 // GatewayError carries the HTTP status so callers can branch — e.g. a detail page
 // turns a 404 into Next's notFound(), everything else into the error boundary.
