@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ecommerce.fullname" . }}
+  labels:
+    app.kubernetes.io/part-of: ecommerce
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    {{- if .Values.ingress.tls.enabled }}
+    # cert-manager watches this and provisions/renews the TLS cert named below.
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ include "ecommerce.fullname" . }}-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          # Paystack posts payment outcomes here from the public internet. Routing
+          # by PATH (not the whole Service) keeps /metrics on the same port private.
+          - path: /webhooks/paystack
+            pathType: Prefix
+            backend:
+              service:
+                name: payment
+                port:
+                  number: 2115
+          # Everything else is the REST API → the gateway. (In a fully in-cluster
+          # topology where the web BFF also runs here, you can drop this rule and
+          # keep the gateway ClusterIP-internal.)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8080
+{{- end }}
