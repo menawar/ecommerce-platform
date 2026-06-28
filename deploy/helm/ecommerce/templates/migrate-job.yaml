@@ -45,8 +45,11 @@ spec:
           args:
             - |
               for svc in user product payment order notification; do
-                var=$(echo "${svc}_DB_URL" | tr '[:lower:]' '[:upper:]')
-                url=$(eval printf '%s' "\$$var")
+                # POSIX-portable upcase (busybox tr lacks [:lower:] on some builds)
+                # + indirect lookup of <SERVICE>_DB_URL via an assignment (no
+                # word-splitting/globbing of the URL).
+                var=$(echo "${svc}_DB_URL" | tr 'a-z' 'A-Z')
+                eval "url=\$$var"
                 echo "==> migrating ${svc}db"
                 migrate -path "/migrations/${svc}" -database "${url}" up
               done

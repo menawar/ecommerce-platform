@@ -13,8 +13,10 @@ spec:
     - name: ecommerce.availability
       rules:
         # A scrape target is down (pod crashed / unreachable) for 5 minutes.
+        # Scoped to this release's namespace so it doesn't page on unrelated
+        # cluster targets.
         - alert: ServiceDown
-          expr: up{job=~".*"} == 0
+          expr: up{namespace="{{ .Release.Namespace }}"} == 0
           for: 5m
           labels: { severity: critical }
           annotations:
