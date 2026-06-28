@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "golang-samber-slog": {
+      "source": "samber/cc-skills-golang",
+      "sourceType": "github",
+      "skillPath": "skills/golang-samber-slog/SKILL.md",
+      "computedHash": "f0378619f95cd089cf1380214d61ea34a35a0716affee757394abe6596a7cfce"
+    },
+    "helm-chart-scaffolding": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/kubernetes-operations/skills/helm-chart-scaffolding/SKILL.md",
+      "computedHash": "d37f4bee4daa0c969ce9912054b46b04164d57ecd0e1d958e6dfb2e5aec16503"
+    },
+    "nextjs-app-router-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/frontend-mobile-development/skills/nextjs-app-router-patterns/SKILL.md",
+      "computedHash": "b4fea42eecf1f803155ef7fa133d5286ee8f2dbba3e616954e9e43c6f0ffc144"
+    },
+    "postgres": {
+      "source": "planetscale/database-skills",
+      "sourceType": "github",
+      "skillPath": "skills/postgres/SKILL.md",
+      "computedHash": "2acf9fae4fcdb6c392923708b67234828f8a9f10b10dfa5d228eaab6e9108245"
+    }
+  }
+}
