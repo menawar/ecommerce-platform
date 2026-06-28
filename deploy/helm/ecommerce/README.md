@@ -54,8 +54,12 @@ ingress controller + cert-manager):
 
 - `/webhooks/paystack` → the **payment** service (Paystack calls this from the
   internet). Routing by *path* keeps `/metrics` on the same port private.
-- `/` → the **gateway** REST API. In a fully in-cluster topology (web BFF also in
-  the cluster), drop this rule and keep the gateway ClusterIP-internal.
+- the gateway REST API, routed by **explicit path prefix** (`ingress.apiPaths`,
+  default `/auth /products /me /cart /orders`) — deliberately *not* a catch-all
+  `/`, so the gateway's own `/metrics` and `/healthz` stay off the public
+  internet. Add a prefix when you add a new top-level API route. (In a fully
+  in-cluster topology where the web BFF also runs here, drop these and keep the
+  gateway ClusterIP-internal.)
 
 ```bash
 helm upgrade --install rel deploy/helm/ecommerce \
