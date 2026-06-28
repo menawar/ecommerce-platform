@@ -1,0 +1,55 @@
+{{- if .Values.metrics.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ecommerce.fullname" . }}-dashboard
+  labels:
+    app.kubernetes.io/part-of: ecommerce
+    grafana_dashboard: "1" # the Grafana sidecar discovers + imports this
+data:
+  ecommerce.json: |-
+    {
+      "uid": "ecommerce-platform",
+      "title": "E-commerce Platform",
+      "schemaVersion": 39,
+      "timezone": "browser",
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": { "list": [] },
+      "panels": [
+        {
+          "id": 1, "title": "gRPC requests/sec by service", "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [ {
+            "expr": "sum(rate(grpc_server_handled_total[5m])) by (job)",
+            "legendFormat": "{{`{{ job }}`}}"
+          } ]
+        },
+        {
+          "id": 2, "title": "gRPC error ratio by service", "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "fieldConfig": { "defaults": { "unit": "percentunit" } },
+          "targets": [ {
+            "expr": "sum(rate(grpc_server_handled_total{code!=\"OK\"}[5m])) by (job) / sum(rate(grpc_server_handled_total[5m])) by (job)",
+            "legendFormat": "{{`{{ job }}`}}"
+          } ]
+        },
+        {
+          "id": 3, "title": "gRPC p99 latency by service", "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "fieldConfig": { "defaults": { "unit": "s" } },
+          "targets": [ {
+            "expr": "histogram_quantile(0.99, sum(rate(grpc_server_handling_seconds_bucket[5m])) by (le, job))",
+            "legendFormat": "{{`{{ job }}`}}"
+          } ]
+        },
+        {
+          "id": 4, "title": "Gateway HTTP requests/sec by status", "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [ {
+            "expr": "sum(rate(http_server_handled_total[5m])) by (code)",
+            "legendFormat": "{{`{{ code }}`}}"
+          } ]
+        }
+      ]
+    }
+{{- end }}
