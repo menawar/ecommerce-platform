@@ -1,0 +1,57 @@
+{{- if .Values.metrics.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "ecommerce.fullname" . }}
+  labels:
+    app.kubernetes.io/part-of: ecommerce
+    {{- with .Values.metrics.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: ecommerce.availability
+      rules:
+        # A scrape target is down (pod crashed / unreachable) for 5 minutes.
+        - alert: ServiceDown
+          expr: up{job=~".*"} == 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{`{{ $labels.job }}`}} is down"
+            description: "No successful scrape of {{`{{ $labels.job }}`}} for 5m."
+    - name: ecommerce.errors
+      rules:
+        # >5% of gRPC calls returning a non-OK code over 10 minutes.
+        - alert: HighGrpcErrorRate
+          expr: |
+            sum(rate(grpc_server_handled_total{code!="OK"}[5m])) by (job)
+              / sum(rate(grpc_server_handled_total[5m])) by (job) > 0.05
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "High gRPC error rate on {{`{{ $labels.job }}`}}"
+            description: "{{`{{ $labels.job }}`}} gRPC error ratio > 5% for 10m."
+        # >5% of HTTP responses are 5xx (the gateway edge) over 10 minutes.
+        - alert: HighHttp5xxRate
+          expr: |
+            sum(rate(http_server_handled_total{code=~"5.."}[5m])) by (job)
+              / sum(rate(http_server_handled_total[5m])) by (job) > 0.05
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "High HTTP 5xx rate on {{`{{ $labels.job }}`}}"
+            description: "{{`{{ $labels.job }}`}} 5xx ratio > 5% for 10m."
+    - name: ecommerce.latency
+      rules:
+        # p99 gRPC handling latency above 1s for 10 minutes.
+        - alert: HighGrpcLatencyP99
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(grpc_server_handling_seconds_bucket[5m])) by (le, job)) > 1
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "High p99 gRPC latency on {{`{{ $labels.job }}`}}"
+            description: "{{`{{ $labels.job }}`}} p99 latency > 1s for 10m."
+{{- end }}

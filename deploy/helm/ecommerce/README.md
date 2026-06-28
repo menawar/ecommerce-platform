@@ -64,6 +64,24 @@ helm upgrade --install rel deploy/helm/ecommerce \
   --set ingress.tls.clusterIssuer=letsencrypt-prod
 ```
 
+## Observability
+
+With the Prometheus Operator / kube-prometheus-stack installed, opt into the
+monitoring resources:
+
+```bash
+helm upgrade --install rel deploy/helm/ecommerce \
+  --set metrics.serviceMonitor.enabled=true \
+  --set metrics.serviceMonitor.labels.release=kube-prometheus-stack \
+  --set metrics.prometheusRule.enabled=true \
+  --set metrics.grafanaDashboard.enabled=true
+```
+
+This adds ServiceMonitors (scrape every `/metrics`), a Grafana dashboard
+(auto-imported), and alerts (`ServiceDown`, `HighGrpcErrorRate`,
+`HighHttp5xxRate`, `HighGrpcLatencyP99`). See `deploy/OPERATIONS.md` for the
+incident/rollback/backup runbook.
+
 ## Production
 
 **Never deploy the committed placeholder secrets.** Override them out-of-band:

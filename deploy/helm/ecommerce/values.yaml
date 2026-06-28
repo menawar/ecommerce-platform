@@ -14,6 +14,22 @@ replicas: 1
 migrations:
   enabled: true
 
+# Observability (needs the Prometheus Operator / kube-prometheus-stack). Each
+# service already serves /metrics on its http port; these wire it into Prometheus
+# + Grafana. Opt-in so the chart installs cleanly without the operator's CRDs.
+metrics:
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    # Label the operator's serviceMonitorSelector matches (often the Prometheus
+    # release name, e.g. `release: kube-prometheus-stack`).
+    labels: {}
+  prometheusRule:
+    enabled: false
+    labels: {}
+  grafanaDashboard:
+    enabled: false # ConfigMap auto-imported by the Grafana sidecar
+
 # Public ingress for the gateway API + the Paystack webhook. Opt-in: needs an
 # ingress controller (e.g. ingress-nginx) and, for TLS, cert-manager with the
 # named ClusterIssuer. Only the /webhooks/paystack PATH of the payment service is
