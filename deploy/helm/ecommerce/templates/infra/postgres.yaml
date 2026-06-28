@@ -39,9 +39,23 @@ spec:
     metadata:
       labels: {{- include "ecommerce.selectorLabels" (dict "name" "postgres") | nindent 8 }}
     spec:
+      # postgres:alpine runs as the 'postgres' user (UID 70); fsGroup makes the PVC
+      # group-writable so it can own its data dir without root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           image: {{ .Values.infra.postgres.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: POSTGRES_USER
               value: {{ .Values.infra.postgres.user | quote }}
@@ -64,10 +78,19 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: initdb
               mountPath: /docker-entrypoint-initdb.d
+            # read-only root → give postgres writable tmpfs for the socket + scratch
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: initdb
           configMap:
             name: postgres-initdb
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data

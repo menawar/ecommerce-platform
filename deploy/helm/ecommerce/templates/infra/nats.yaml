@@ -29,9 +29,23 @@ spec:
     metadata:
       labels: {{- include "ecommerce.selectorLabels" (dict "name" "nats") | nindent 8 }}
     spec:
+      # nats writes only to its store dir (the PVC); any non-root UID works with
+      # fsGroup granting access.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nats
           image: {{ .Values.infra.nats.image }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           # -js: JetStream (durable streams); -sd: store dir on the PVC so streams
           # survive a restart; -m: HTTP monitoring (used by the readiness probe).
           args: ["-js", "-m", "8222", "-sd", "/data"]
@@ -49,6 +63,11 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data
