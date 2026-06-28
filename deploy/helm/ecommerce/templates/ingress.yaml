@@ -32,14 +32,17 @@ spec:
                 name: payment
                 port:
                   number: 2115
-          # Everything else is the REST API → the gateway. (In a fully in-cluster
-          # topology where the web BFF also runs here, you can drop this rule and
-          # keep the gateway ClusterIP-internal.)
-          - path: /
+          # The gateway REST API, routed by explicit prefix so /metrics and
+          # /healthz on the same port are NOT publicly exposed (see values.apiPaths).
+          # (In a fully in-cluster topology where the web BFF also runs here, you can
+          # drop these and keep the gateway ClusterIP-internal.)
+          {{- range .Values.ingress.apiPaths }}
+          - path: {{ . }}
             pathType: Prefix
             backend:
               service:
                 name: gateway
                 port:
                   number: 8080
+          {{- end }}
 {{- end }}

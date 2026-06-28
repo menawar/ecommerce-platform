@@ -38,6 +38,15 @@ ingress:
   enabled: false
   className: nginx
   host: api.example.com
+  # The gateway's public API path prefixes. We route these explicitly (rather than
+  # a catch-all "/") so the gateway's own /metrics and /healthz are NOT exposed to
+  # the internet. Add a prefix here when a new top-level API route is introduced.
+  apiPaths:
+    - /auth
+    - /products
+    - /me
+    - /cart
+    - /orders
   tls:
     enabled: true
     clusterIssuer: letsencrypt-prod
