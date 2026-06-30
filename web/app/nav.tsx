@@ -306,12 +306,20 @@ export async function Nav() {
               Account
             </Link>
             {isAdmin && (
-              <Link
-                href="/admin/products"
-                style={{ color: "#ffd98a", textDecoration: "none", fontWeight: 700 }}
-              >
-                Admin
-              </Link>
+              <>
+                <Link
+                  href="/admin/products"
+                  style={{ color: "#ffd98a", textDecoration: "none", fontWeight: 700 }}
+                >
+                  Admin
+                </Link>
+                <Link
+                  href="/admin/shipping"
+                  style={{ color: "#ffd98a", textDecoration: "none", fontWeight: 700 }}
+                >
+                  Shipping
+                </Link>
+              </>
             )}
           </>
         )}

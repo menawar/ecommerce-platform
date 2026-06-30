@@ -80,6 +80,56 @@ func (q *Queries) CreateOrderItem(ctx context.Context, arg CreateOrderItemParams
 	return err
 }
 
+const createShippingMethod = `-- name: CreateShippingMethod :one
+
+INSERT INTO shipping_methods (name, description, price_cents, sort_order, active)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, name, description, price_cents, sort_order, active, created_at, updated_at
+`
+
+type CreateShippingMethodParams struct {
+	Name        string
+	Description string
+	PriceCents  int64
+	SortOrder   int32
+	Active      bool
+}
+
+// Shipping methods.
+func (q *Queries) CreateShippingMethod(ctx context.Context, arg CreateShippingMethodParams) (ShippingMethod, error) {
+	row := q.db.QueryRow(ctx, createShippingMethod,
+		arg.Name,
+		arg.Description,
+		arg.PriceCents,
+		arg.SortOrder,
+		arg.Active,
+	)
+	var i ShippingMethod
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.SortOrder,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteShippingMethod = `-- name: DeleteShippingMethod :execrows
+DELETE FROM shipping_methods WHERE id = $1
+`
+
+func (q *Queries) DeleteShippingMethod(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteShippingMethod, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getOrder = `-- name: GetOrder :one
 SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url FROM orders WHERE id = $1
 `
@@ -126,6 +176,26 @@ func (q *Queries) GetOrderByIdempotencyKey(ctx context.Context, idempotencyKey *
 	return i, err
 }
 
+const getShippingMethod = `-- name: GetShippingMethod :one
+SELECT id, name, description, price_cents, sort_order, active, created_at, updated_at FROM shipping_methods WHERE id = $1
+`
+
+func (q *Queries) GetShippingMethod(ctx context.Context, id pgtype.UUID) (ShippingMethod, error) {
+	row := q.db.QueryRow(ctx, getShippingMethod, id)
+	var i ShippingMethod
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.SortOrder,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const insertOutbox = `-- name: InsertOutbox :exec
 INSERT INTO outbox (topic, payload) VALUES ($1, $2)
 `
@@ -138,6 +208,39 @@ type InsertOutboxParams struct {
 func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) error {
 	_, err := q.db.Exec(ctx, insertOutbox, arg.Topic, arg.Payload)
 	return err
+}
+
+const listActiveShippingMethods = `-- name: ListActiveShippingMethods :many
+SELECT id, name, description, price_cents, sort_order, active, created_at, updated_at FROM shipping_methods WHERE active ORDER BY sort_order, name
+`
+
+func (q *Queries) ListActiveShippingMethods(ctx context.Context) ([]ShippingMethod, error) {
+	rows, err := q.db.Query(ctx, listActiveShippingMethods)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShippingMethod
+	for rows.Next() {
+		var i ShippingMethod
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.PriceCents,
+			&i.SortOrder,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOrderItems = `-- name: ListOrderItems :many
@@ -202,6 +305,39 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AuthorizationUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShippingMethods = `-- name: ListShippingMethods :many
+SELECT id, name, description, price_cents, sort_order, active, created_at, updated_at FROM shipping_methods ORDER BY sort_order, name
+`
+
+func (q *Queries) ListShippingMethods(ctx context.Context) ([]ShippingMethod, error) {
+	rows, err := q.db.Query(ctx, listShippingMethods)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShippingMethod
+	for rows.Next() {
+		var i ShippingMethod
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.PriceCents,
+			&i.SortOrder,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -339,6 +475,45 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+	)
+	return i, err
+}
+
+const updateShippingMethod = `-- name: UpdateShippingMethod :one
+UPDATE shipping_methods
+SET name = $2, description = $3, price_cents = $4, sort_order = $5, active = $6, updated_at = now()
+WHERE id = $1
+RETURNING id, name, description, price_cents, sort_order, active, created_at, updated_at
+`
+
+type UpdateShippingMethodParams struct {
+	ID          pgtype.UUID
+	Name        string
+	Description string
+	PriceCents  int64
+	SortOrder   int32
+	Active      bool
+}
+
+func (q *Queries) UpdateShippingMethod(ctx context.Context, arg UpdateShippingMethodParams) (ShippingMethod, error) {
+	row := q.db.QueryRow(ctx, updateShippingMethod,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.PriceCents,
+		arg.SortOrder,
+		arg.Active,
+	)
+	var i ShippingMethod
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PriceCents,
+		&i.SortOrder,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }

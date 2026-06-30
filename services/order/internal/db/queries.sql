@@ -43,3 +43,28 @@ SELECT * FROM outbox WHERE published_at IS NULL ORDER BY created_at LIMIT $1;
 
 -- name: MarkOutboxPublished :exec
 UPDATE outbox SET published_at = now() WHERE id = $1;
+
+-- Shipping methods.
+
+-- name: CreateShippingMethod :one
+INSERT INTO shipping_methods (name, description, price_cents, sort_order, active)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetShippingMethod :one
+SELECT * FROM shipping_methods WHERE id = $1;
+
+-- name: ListShippingMethods :many
+SELECT * FROM shipping_methods ORDER BY sort_order, name;
+
+-- name: ListActiveShippingMethods :many
+SELECT * FROM shipping_methods WHERE active ORDER BY sort_order, name;
+
+-- name: UpdateShippingMethod :one
+UPDATE shipping_methods
+SET name = $2, description = $3, price_cents = $4, sort_order = $5, active = $6, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteShippingMethod :execrows
+DELETE FROM shipping_methods WHERE id = $1;
