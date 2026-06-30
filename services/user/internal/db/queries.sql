@@ -60,3 +60,35 @@ UPDATE password_reset_tokens SET used_at = now() WHERE token = $1 AND used_at IS
 -- tokens, so issuing a fresh link makes any prior link stop working.
 -- name: InvalidateUserPasswordResetTokens :exec
 UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL;
+
+-- Address book.
+
+-- name: CreateAddress :one
+INSERT INTO addresses (user_id, label, recipient, phone, line1, line2, city, state, postal_code, country, is_default)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *;
+
+-- name: ListAddressesByUser :many
+SELECT * FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC;
+
+-- name: GetAddress :one
+SELECT * FROM addresses WHERE id = $1 AND user_id = $2;
+
+-- UpdateAddress full-replaces the mutable fields; scoped by user_id so one user
+-- can't edit another's. Reports rows affected (0 = not found / not owned).
+-- name: UpdateAddress :execrows
+UPDATE addresses
+SET label = $3, recipient = $4, phone = $5, line1 = $6, line2 = $7,
+    city = $8, state = $9, postal_code = $10, country = $11, updated_at = now()
+WHERE id = $1 AND user_id = $2;
+
+-- name: DeleteAddress :execrows
+DELETE FROM addresses WHERE id = $1 AND user_id = $2;
+
+-- ClearDefaultAddresses + SetAddressDefault run in one tx so a user has at most
+-- one default at a time.
+-- name: ClearDefaultAddresses :exec
+UPDATE addresses SET is_default = false, updated_at = now() WHERE user_id = $1 AND is_default = true;
+
+-- name: SetAddressDefault :execrows
+UPDATE addresses SET is_default = true, updated_at = now() WHERE id = $1 AND user_id = $2;

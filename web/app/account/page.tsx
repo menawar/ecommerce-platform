@@ -76,6 +76,13 @@ export default async function AccountPage() {
           >
             View orders
           </Link>
+          <Link
+            href="/account/addresses"
+            className="plt-btn-outline"
+            style={{ textDecoration: "none", textAlign: "center", flex: 1 }}
+          >
+            Manage addresses
+          </Link>
           <form action={logoutAction} style={{ flex: 1 }}>
             <button className="plt-btn-outline" style={{ width: "100%" }}>
               Log out
