@@ -31,6 +31,7 @@ const (
 	UserService_ResetPassword_FullMethodName        = "/user.v1.UserService/ResetPassword"
 	UserService_CreateAddress_FullMethodName        = "/user.v1.UserService/CreateAddress"
 	UserService_ListAddresses_FullMethodName        = "/user.v1.UserService/ListAddresses"
+	UserService_GetAddress_FullMethodName           = "/user.v1.UserService/GetAddress"
 	UserService_UpdateAddress_FullMethodName        = "/user.v1.UserService/UpdateAddress"
 	UserService_DeleteAddress_FullMethodName        = "/user.v1.UserService/DeleteAddress"
 	UserService_SetDefaultAddress_FullMethodName    = "/user.v1.UserService/SetDefaultAddress"
@@ -79,6 +80,9 @@ type UserServiceClient interface {
 	// --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
 	CreateAddress(ctx context.Context, in *CreateAddressRequest, opts ...grpc.CallOption) (*CreateAddressResponse, error)
 	ListAddresses(ctx context.Context, in *ListAddressesRequest, opts ...grpc.CallOption) (*ListAddressesResponse, error)
+	// GetAddress fetches one of the caller's addresses by id, scoped by user_id.
+	// Used server-to-server by the Order saga to snapshot the chosen address.
+	GetAddress(ctx context.Context, in *GetAddressRequest, opts ...grpc.CallOption) (*GetAddressResponse, error)
 	UpdateAddress(ctx context.Context, in *UpdateAddressRequest, opts ...grpc.CallOption) (*UpdateAddressResponse, error)
 	DeleteAddress(ctx context.Context, in *DeleteAddressRequest, opts ...grpc.CallOption) (*DeleteAddressResponse, error)
 	SetDefaultAddress(ctx context.Context, in *SetDefaultAddressRequest, opts ...grpc.CallOption) (*SetDefaultAddressResponse, error)
@@ -212,6 +216,16 @@ func (c *userServiceClient) ListAddresses(ctx context.Context, in *ListAddresses
 	return out, nil
 }
 
+func (c *userServiceClient) GetAddress(ctx context.Context, in *GetAddressRequest, opts ...grpc.CallOption) (*GetAddressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAddressResponse)
+	err := c.cc.Invoke(ctx, UserService_GetAddress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) UpdateAddress(ctx context.Context, in *UpdateAddressRequest, opts ...grpc.CallOption) (*UpdateAddressResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateAddressResponse)
@@ -285,6 +299,9 @@ type UserServiceServer interface {
 	// --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
 	CreateAddress(context.Context, *CreateAddressRequest) (*CreateAddressResponse, error)
 	ListAddresses(context.Context, *ListAddressesRequest) (*ListAddressesResponse, error)
+	// GetAddress fetches one of the caller's addresses by id, scoped by user_id.
+	// Used server-to-server by the Order saga to snapshot the chosen address.
+	GetAddress(context.Context, *GetAddressRequest) (*GetAddressResponse, error)
 	UpdateAddress(context.Context, *UpdateAddressRequest) (*UpdateAddressResponse, error)
 	DeleteAddress(context.Context, *DeleteAddressRequest) (*DeleteAddressResponse, error)
 	SetDefaultAddress(context.Context, *SetDefaultAddressRequest) (*SetDefaultAddressResponse, error)
@@ -333,6 +350,9 @@ func (UnimplementedUserServiceServer) CreateAddress(context.Context, *CreateAddr
 }
 func (UnimplementedUserServiceServer) ListAddresses(context.Context, *ListAddressesRequest) (*ListAddressesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListAddresses not implemented")
+}
+func (UnimplementedUserServiceServer) GetAddress(context.Context, *GetAddressRequest) (*GetAddressResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetAddress not implemented")
 }
 func (UnimplementedUserServiceServer) UpdateAddress(context.Context, *UpdateAddressRequest) (*UpdateAddressResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateAddress not implemented")
@@ -580,6 +600,24 @@ func _UserService_ListAddresses_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_GetAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAddressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).GetAddress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_GetAddress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).GetAddress(ctx, req.(*GetAddressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_UpdateAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateAddressRequest)
 	if err := dec(in); err != nil {
@@ -688,6 +726,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAddresses",
 			Handler:    _UserService_ListAddresses_Handler,
+		},
+		{
+			MethodName: "GetAddress",
+			Handler:    _UserService_GetAddress_Handler,
 		},
 		{
 			MethodName: "UpdateAddress",

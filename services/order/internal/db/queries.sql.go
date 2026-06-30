@@ -12,23 +12,40 @@ import (
 )
 
 const createOrder = `-- name: CreateOrder :one
-INSERT INTO orders (id, user_id, status, total_cents, currency, reservation_id, idempotency_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url
+INSERT INTO orders (
+    id, user_id, status, total_cents, currency, reservation_id, idempotency_key,
+    shipping_method_id, shipping_method_name, shipping_cents,
+    ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country
 `
 
 type CreateOrderParams struct {
-	ID             pgtype.UUID
-	UserID         pgtype.UUID
-	Status         string
-	TotalCents     int64
-	Currency       string
-	ReservationID  pgtype.UUID
-	IdempotencyKey *string
+	ID                 pgtype.UUID
+	UserID             pgtype.UUID
+	Status             string
+	TotalCents         int64
+	Currency           string
+	ReservationID      pgtype.UUID
+	IdempotencyKey     *string
+	ShippingMethodID   pgtype.UUID
+	ShippingMethodName string
+	ShippingCents      int64
+	ShipRecipient      string
+	ShipPhone          string
+	ShipLine1          string
+	ShipLine2          string
+	ShipCity           string
+	ShipState          string
+	ShipPostalCode     string
+	ShipCountry        string
 }
 
 // id is supplied (not defaulted) so reservation_id can equal the order id — the
 // saga reserves stock under the order's own id, making ReserveStock idempotent.
+// total_cents already includes shipping_cents; the address + method name are
+// snapshotted so later edits never rewrite the order.
 func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error) {
 	row := q.db.QueryRow(ctx, createOrder,
 		arg.ID,
@@ -38,6 +55,17 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		arg.Currency,
 		arg.ReservationID,
 		arg.IdempotencyKey,
+		arg.ShippingMethodID,
+		arg.ShippingMethodName,
+		arg.ShippingCents,
+		arg.ShipRecipient,
+		arg.ShipPhone,
+		arg.ShipLine1,
+		arg.ShipLine2,
+		arg.ShipCity,
+		arg.ShipState,
+		arg.ShipPostalCode,
+		arg.ShipCountry,
 	)
 	var i Order
 	err := row.Scan(
@@ -52,6 +80,17 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
 	)
 	return i, err
 }
@@ -131,7 +170,7 @@ func (q *Queries) DeleteShippingMethod(ctx context.Context, id pgtype.UUID) (int
 }
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url FROM orders WHERE id = $1
+SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country FROM orders WHERE id = $1
 `
 
 func (q *Queries) GetOrder(ctx context.Context, id pgtype.UUID) (Order, error) {
@@ -149,12 +188,23 @@ func (q *Queries) GetOrder(ctx context.Context, id pgtype.UUID) (Order, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
 	)
 	return i, err
 }
 
 const getOrderByIdempotencyKey = `-- name: GetOrderByIdempotencyKey :one
-SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url FROM orders WHERE idempotency_key = $1
+SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country FROM orders WHERE idempotency_key = $1
 `
 
 func (q *Queries) GetOrderByIdempotencyKey(ctx context.Context, idempotencyKey *string) (Order, error) {
@@ -172,6 +222,17 @@ func (q *Queries) GetOrderByIdempotencyKey(ctx context.Context, idempotencyKey *
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
 	)
 	return i, err
 }
@@ -275,7 +336,7 @@ func (q *Queries) ListOrderItems(ctx context.Context, orderID pgtype.UUID) ([]Or
 }
 
 const listOrdersByUser = `-- name: ListOrdersByUser :many
-SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
+SELECT id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3
 `
 
 type ListOrdersByUserParams struct {
@@ -305,6 +366,17 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AuthorizationUrl,
+			&i.ShippingMethodID,
+			&i.ShippingMethodName,
+			&i.ShippingCents,
+			&i.ShipRecipient,
+			&i.ShipPhone,
+			&i.ShipLine1,
+			&i.ShipLine2,
+			&i.ShipCity,
+			&i.ShipState,
+			&i.ShipPostalCode,
+			&i.ShipCountry,
 		); err != nil {
 			return nil, err
 		}
@@ -383,7 +455,7 @@ const markOrderPaymentPending = `-- name: MarkOrderPaymentPending :one
 UPDATE orders
 SET status = 'PAYMENT_PENDING', payment_id = $2, authorization_url = $3, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url
+RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country
 `
 
 type MarkOrderPaymentPendingParams struct {
@@ -409,6 +481,17 @@ func (q *Queries) MarkOrderPaymentPending(ctx context.Context, arg MarkOrderPaym
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
 	)
 	return i, err
 }
@@ -423,7 +506,7 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, id pgtype.UUID) error
 }
 
 const setOrderPaymentAndStatus = `-- name: SetOrderPaymentAndStatus :one
-UPDATE orders SET payment_id = $2, status = $3, updated_at = now() WHERE id = $1 RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url
+UPDATE orders SET payment_id = $2, status = $3, updated_at = now() WHERE id = $1 RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country
 `
 
 type SetOrderPaymentAndStatusParams struct {
@@ -447,12 +530,23 @@ func (q *Queries) SetOrderPaymentAndStatus(ctx context.Context, arg SetOrderPaym
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
 	)
 	return i, err
 }
 
 const updateOrderStatus = `-- name: UpdateOrderStatus :one
-UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url
+UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country
 `
 
 type UpdateOrderStatusParams struct {
@@ -475,6 +569,17 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
 	)
 	return i, err
 }

@@ -31,6 +31,7 @@ type fakeUserClient struct {
 	refreshFn              func(*userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error)
 	logoutFn               func(*userv1.LogoutRequest) (*userv1.LogoutResponse, error)
 	getUserFn              func(*userv1.GetUserRequest) (*userv1.GetUserResponse, error)
+	getAddressFn           func(*userv1.GetAddressRequest) (*userv1.GetAddressResponse, error)
 	verifyEmailFn          func(*userv1.VerifyEmailRequest) (*userv1.VerifyEmailResponse, error)
 	resendVerificationFn   func(*userv1.ResendVerificationRequest) (*userv1.ResendVerificationResponse, error)
 	requestPasswordResetFn func(*userv1.RequestPasswordResetRequest) (*userv1.RequestPasswordResetResponse, error)
@@ -92,6 +93,12 @@ func (f *fakeUserClient) CreateAddress(_ context.Context, in *userv1.CreateAddre
 func (f *fakeUserClient) ListAddresses(_ context.Context, in *userv1.ListAddressesRequest, _ ...grpc.CallOption) (*userv1.ListAddressesResponse, error) {
 	if f.listAddressesFn != nil {
 		return f.listAddressesFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) GetAddress(_ context.Context, in *userv1.GetAddressRequest, _ ...grpc.CallOption) (*userv1.GetAddressResponse, error) {
+	if f.getAddressFn != nil {
+		return f.getAddressFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "")
 }

@@ -65,6 +65,25 @@ func (s *Server) ListAddresses(ctx context.Context, req *userv1.ListAddressesReq
 	return &userv1.ListAddressesResponse{Addresses: out}, nil
 }
 
+// GetAddress returns one of the caller's addresses by id (scoped by user_id). It
+// is used server-to-server by the Order saga to snapshot the chosen address.
+func (s *Server) GetAddress(ctx context.Context, req *userv1.GetAddressRequest) (*userv1.GetAddressResponse, error) {
+	if _, err := uuid.Parse(req.GetUserId()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+	if _, err := uuid.Parse(req.GetAddressId()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "address_id must be a UUID")
+	}
+	a, err := s.addresses.Get(ctx, req.GetUserId(), req.GetAddressId())
+	if err != nil {
+		if errors.Is(err, store.ErrAddressNotFound) {
+			return nil, status.Error(codes.NotFound, "address not found")
+		}
+		return nil, s.internal(ctx, "get address", err)
+	}
+	return &userv1.GetAddressResponse{Address: toProtoAddress(a)}, nil
+}
+
 func (s *Server) UpdateAddress(ctx context.Context, req *userv1.UpdateAddressRequest) (*userv1.UpdateAddressResponse, error) {
 	if _, err := uuid.Parse(req.GetUserId()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")

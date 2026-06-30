@@ -87,7 +87,7 @@ func newOrderTestServer(t *testing.T, order *fakeOrderClient) (*httptest.Server,
 	return ts, userID
 }
 
-func TestPlaceOrder_ForwardsTokenUserAndIdempotencyKey(t *testing.T) {
+func TestPlaceOrder_ForwardsTokenKeyAddressAndShipping(t *testing.T) {
 	var got *orderv1.PlaceOrderRequest
 	order := &fakeOrderClient{
 		placeFn: func(in *orderv1.PlaceOrderRequest) (*orderv1.PlaceOrderResponse, error) {
@@ -97,7 +97,7 @@ func TestPlaceOrder_ForwardsTokenUserAndIdempotencyKey(t *testing.T) {
 	}
 	ts, userID := newOrderTestServer(t, order)
 
-	req := authReq(t, http.MethodPost, ts.URL+"/orders", "")
+	req := authReq(t, http.MethodPost, ts.URL+"/orders", `{"address_id":"a-1","shipping_method_id":"s-1"}`)
 	req.Header.Set("Idempotency-Key", "key-123")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -107,20 +107,35 @@ func TestPlaceOrder_ForwardsTokenUserAndIdempotencyKey(t *testing.T) {
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("status = %d, want 201", resp.StatusCode)
 	}
-	if got.GetUserId() != userID || got.GetIdempotencyKey() != "key-123" {
-		t.Errorf("forwarded = %+v (want user %s, key key-123)", got, userID)
+	if got.GetUserId() != userID || got.GetIdempotencyKey() != "key-123" ||
+		got.GetAddressId() != "a-1" || got.GetShippingMethodId() != "s-1" {
+		t.Errorf("forwarded = %+v (want user %s, key key-123, addr a-1, ship s-1)", got, userID)
 	}
 }
 
 func TestPlaceOrder_MissingIdempotencyKey(t *testing.T) {
 	ts, _ := newOrderTestServer(t, &fakeOrderClient{})
-	resp, err := http.DefaultClient.Do(authReq(t, http.MethodPost, ts.URL+"/orders", ""))
+	resp, err := http.DefaultClient.Do(authReq(t, http.MethodPost, ts.URL+"/orders", `{"address_id":"a-1","shipping_method_id":"s-1"}`))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("missing Idempotency-Key: status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestPlaceOrder_MissingAddressOrShipping(t *testing.T) {
+	ts, _ := newOrderTestServer(t, &fakeOrderClient{})
+	req := authReq(t, http.MethodPost, ts.URL+"/orders", `{"address_id":"a-1"}`) // no shipping_method_id
+	req.Header.Set("Idempotency-Key", "key-123")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("missing shipping_method_id: status = %d, want 400", resp.StatusCode)
 	}
 }
 
@@ -142,6 +157,40 @@ func TestGetOrder_OwnershipCheck(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("other user's order: status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestGetOrder_SurfacesShippingAndAddress(t *testing.T) {
+	order := &fakeOrderClient{}
+	ts, userID := newOrderTestServer(t, order)
+	order.getFn = func(in *orderv1.GetOrderRequest) (*orderv1.GetOrderResponse, error) {
+		return &orderv1.GetOrderResponse{Order: &orderv1.Order{
+			Id: in.GetOrderId(), UserId: userID, Status: "CONFIRMED",
+			TotalCents: 152500, ShippingCents: 150000, ShippingMethodName: "Standard",
+			ShippingAddress: &orderv1.ShippingAddress{Recipient: "Ada", Line1: "1 Rayfield", City: "Jos", State: "Plateau", Country: "NG"},
+		}}, nil
+	}
+
+	resp, err := http.DefaultClient.Do(authReq(t, http.MethodGet, ts.URL+"/orders/o-1", ""))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var dto struct {
+		TotalCents         int64  `json:"total_cents"`
+		ShippingCents      int64  `json:"shipping_cents"`
+		ShippingMethodName string `json:"shipping_method_name"`
+		ShippingAddress    *struct {
+			Recipient string `json:"recipient"`
+			City      string `json:"city"`
+		} `json:"shipping_address"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&dto)
+	if dto.TotalCents != 152500 || dto.ShippingCents != 150000 || dto.ShippingMethodName != "Standard" {
+		t.Errorf("totals/shipping wrong: %+v", dto)
+	}
+	if dto.ShippingAddress == nil || dto.ShippingAddress.Recipient != "Ada" || dto.ShippingAddress.City != "Jos" {
+		t.Errorf("address block wrong: %+v", dto.ShippingAddress)
 	}
 }
 

@@ -12,10 +12,15 @@ export async function placeOrderAction(_prev: CheckoutState, formData: FormData)
   if (!key) {
     return { error: "Missing idempotency key — please refresh and try again." };
   }
+  const addressID = String(formData.get("address_id") ?? "");
+  const shippingMethodID = String(formData.get("shipping_method_id") ?? "");
+  if (!addressID || !shippingMethodID) {
+    return { error: "Choose a delivery address and a shipping method." };
+  }
 
   let res: { order_id: string; status: string; authorization_url: string };
   try {
-    res = await placeOrder(key);
+    res = await placeOrder(key, addressID, shippingMethodID);
   } catch (err) {
     if (err instanceof GatewayError) {
       if (err.status === 401) redirect("/login");

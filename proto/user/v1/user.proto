@@ -42,6 +42,9 @@ service UserService {
   // --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
   rpc CreateAddress(CreateAddressRequest) returns (CreateAddressResponse);
   rpc ListAddresses(ListAddressesRequest) returns (ListAddressesResponse);
+  // GetAddress fetches one of the caller's addresses by id, scoped by user_id.
+  // Used server-to-server by the Order saga to snapshot the chosen address.
+  rpc GetAddress(GetAddressRequest) returns (GetAddressResponse);
   rpc UpdateAddress(UpdateAddressRequest) returns (UpdateAddressResponse);
   rpc DeleteAddress(DeleteAddressRequest) returns (DeleteAddressResponse);
   rpc SetDefaultAddress(SetDefaultAddressRequest) returns (SetDefaultAddressResponse);
@@ -91,6 +94,14 @@ message ListAddressesRequest {
 }
 message ListAddressesResponse {
   repeated Address addresses = 1;
+}
+
+message GetAddressRequest {
+  string user_id = 1;
+  string address_id = 2;
+}
+message GetAddressResponse {
+  Address address = 1;
 }
 
 message UpdateAddressRequest {

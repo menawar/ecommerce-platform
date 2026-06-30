@@ -123,7 +123,7 @@ func TestRequireVerified_BlocksCheckoutForUnverified(t *testing.T) {
 	}
 	ts, _ := newVerifyTestServer(t, fake, order)
 
-	req := authReq(t, http.MethodPost, ts.URL+"/orders", "")
+	req := authReq(t, http.MethodPost, ts.URL+"/orders", `{"address_id":"a-1","shipping_method_id":"s-1"}`)
 	req.Header.Set("Idempotency-Key", "key-123")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -206,7 +206,7 @@ func TestRequireVerified_AllowsVerified(t *testing.T) {
 	}
 	ts, _ := newVerifyTestServer(t, fake, order)
 
-	req := authReq(t, http.MethodPost, ts.URL+"/orders", "")
+	req := authReq(t, http.MethodPost, ts.URL+"/orders", `{"address_id":"a-1","shipping_method_id":"s-1"}`)
 	req.Header.Set("Idempotency-Key", "key-123")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

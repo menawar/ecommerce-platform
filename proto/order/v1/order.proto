@@ -71,20 +71,38 @@ message OrderItem {
   int32 quantity = 4;
 }
 
+// ShippingAddress is the address SNAPSHOT taken at checkout (a copy of the user's
+// chosen address), so later edits to their address book never alter past orders.
+message ShippingAddress {
+  string recipient = 1;
+  string phone = 2;
+  string line1 = 3;
+  string line2 = 4;
+  string city = 5;
+  string state = 6;
+  string postal_code = 7;
+  string country = 8;
+}
+
 message Order {
   string id = 1;
   string user_id = 2;
   string status = 3;
-  int64 total_cents = 4;
+  int64 total_cents = 4; // subtotal + shipping
   string currency = 5;
   string payment_id = 6; // empty until paid
   repeated OrderItem items = 7;
   int64 created_at = 8;
+  int64 shipping_cents = 9;
+  string shipping_method_name = 10;
+  ShippingAddress shipping_address = 11;
 }
 
 message PlaceOrderRequest {
   string user_id = 1;
   string idempotency_key = 2;
+  string address_id = 3;         // a saved address of the caller's
+  string shipping_method_id = 4; // an active shipping method
 }
 message PlaceOrderResponse {
   string order_id = 1;

@@ -38,7 +38,7 @@ func NewServer(pool *pgxpool.Pool, sg *saga.Saga, log *slog.Logger) *Server {
 // PlaceOrder runs the saga. The saga already returns gRPC status errors, so we
 // pass them through.
 func (s *Server) PlaceOrder(ctx context.Context, req *orderv1.PlaceOrderRequest) (*orderv1.PlaceOrderResponse, error) {
-	res, err := s.saga.PlaceOrder(ctx, req.GetUserId(), req.GetIdempotencyKey())
+	res, err := s.saga.PlaceOrder(ctx, req.GetUserId(), req.GetIdempotencyKey(), req.GetAddressId(), req.GetShippingMethodId())
 	if err != nil {
 		return nil, err
 	}
@@ -124,12 +124,24 @@ func uuidStr(u pgtype.UUID) string {
 
 func toProtoOrder(o db.Order, items []db.OrderItem) *orderv1.Order {
 	out := &orderv1.Order{
-		Id:         uuidStr(o.ID),
-		UserId:     uuidStr(o.UserID),
-		Status:     o.Status,
-		TotalCents: o.TotalCents,
-		Currency:   o.Currency,
-		PaymentId:  uuidStr(o.PaymentID),
+		Id:                 uuidStr(o.ID),
+		UserId:             uuidStr(o.UserID),
+		Status:             o.Status,
+		TotalCents:         o.TotalCents,
+		Currency:           o.Currency,
+		PaymentId:          uuidStr(o.PaymentID),
+		ShippingCents:      o.ShippingCents,
+		ShippingMethodName: o.ShippingMethodName,
+		ShippingAddress: &orderv1.ShippingAddress{
+			Recipient:  o.ShipRecipient,
+			Phone:      o.ShipPhone,
+			Line1:      o.ShipLine1,
+			Line2:      o.ShipLine2,
+			City:       o.ShipCity,
+			State:      o.ShipState,
+			PostalCode: o.ShipPostalCode,
+			Country:    o.ShipCountry,
+		},
 	}
 	if o.CreatedAt.Valid {
 		out.CreatedAt = o.CreatedAt.Time.Unix()
