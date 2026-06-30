@@ -19,14 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_Register_FullMethodName           = "/user.v1.UserService/Register"
-	UserService_Login_FullMethodName              = "/user.v1.UserService/Login"
-	UserService_ValidateToken_FullMethodName      = "/user.v1.UserService/ValidateToken"
-	UserService_GetUser_FullMethodName            = "/user.v1.UserService/GetUser"
-	UserService_RefreshToken_FullMethodName       = "/user.v1.UserService/RefreshToken"
-	UserService_Logout_FullMethodName             = "/user.v1.UserService/Logout"
-	UserService_VerifyEmail_FullMethodName        = "/user.v1.UserService/VerifyEmail"
-	UserService_ResendVerification_FullMethodName = "/user.v1.UserService/ResendVerification"
+	UserService_Register_FullMethodName             = "/user.v1.UserService/Register"
+	UserService_Login_FullMethodName                = "/user.v1.UserService/Login"
+	UserService_ValidateToken_FullMethodName        = "/user.v1.UserService/ValidateToken"
+	UserService_GetUser_FullMethodName              = "/user.v1.UserService/GetUser"
+	UserService_RefreshToken_FullMethodName         = "/user.v1.UserService/RefreshToken"
+	UserService_Logout_FullMethodName               = "/user.v1.UserService/Logout"
+	UserService_VerifyEmail_FullMethodName          = "/user.v1.UserService/VerifyEmail"
+	UserService_ResendVerification_FullMethodName   = "/user.v1.UserService/ResendVerification"
+	UserService_RequestPasswordReset_FullMethodName = "/user.v1.UserService/RequestPasswordReset"
+	UserService_ResetPassword_FullMethodName        = "/user.v1.UserService/ResetPassword"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -62,6 +64,13 @@ type UserServiceClient interface {
 	// ResendVerification issues a fresh verification token for the caller. The
 	// Gateway gates this behind auth and supplies user_id from the validated token.
 	ResendVerification(ctx context.Context, in *ResendVerificationRequest, opts ...grpc.CallOption) (*ResendVerificationResponse, error)
+	// RequestPasswordReset emails a single-use reset link. It is public and ALWAYS
+	// succeeds (even for an unknown email) so the response can't reveal which
+	// addresses have accounts.
+	RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error)
+	// ResetPassword consumes a reset token and sets a new password, revoking the
+	// user's existing sessions. Public — the token is the credential.
+	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error)
 }
 
 type userServiceClient struct {
@@ -152,6 +161,26 @@ func (c *userServiceClient) ResendVerification(ctx context.Context, in *ResendVe
 	return out, nil
 }
 
+func (c *userServiceClient) RequestPasswordReset(ctx context.Context, in *RequestPasswordResetRequest, opts ...grpc.CallOption) (*RequestPasswordResetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RequestPasswordResetResponse)
+	err := c.cc.Invoke(ctx, UserService_RequestPasswordReset_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetPasswordResponse)
+	err := c.cc.Invoke(ctx, UserService_ResetPassword_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
@@ -185,6 +214,13 @@ type UserServiceServer interface {
 	// ResendVerification issues a fresh verification token for the caller. The
 	// Gateway gates this behind auth and supplies user_id from the validated token.
 	ResendVerification(context.Context, *ResendVerificationRequest) (*ResendVerificationResponse, error)
+	// RequestPasswordReset emails a single-use reset link. It is public and ALWAYS
+	// succeeds (even for an unknown email) so the response can't reveal which
+	// addresses have accounts.
+	RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error)
+	// ResetPassword consumes a reset token and sets a new password, revoking the
+	// user's existing sessions. Public — the token is the credential.
+	ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -218,6 +254,12 @@ func (UnimplementedUserServiceServer) VerifyEmail(context.Context, *VerifyEmailR
 }
 func (UnimplementedUserServiceServer) ResendVerification(context.Context, *ResendVerificationRequest) (*ResendVerificationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResendVerification not implemented")
+}
+func (UnimplementedUserServiceServer) RequestPasswordReset(context.Context, *RequestPasswordResetRequest) (*RequestPasswordResetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RequestPasswordReset not implemented")
+}
+func (UnimplementedUserServiceServer) ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResetPassword not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -384,6 +426,42 @@ func _UserService_ResendVerification_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_RequestPasswordReset_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RequestPasswordResetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).RequestPasswordReset(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_RequestPasswordReset_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).RequestPasswordReset(ctx, req.(*RequestPasswordResetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_ResetPassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetPasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).ResetPassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_ResetPassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).ResetPassword(ctx, req.(*ResetPasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +500,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResendVerification",
 			Handler:    _UserService_ResendVerification_Handler,
+		},
+		{
+			MethodName: "RequestPasswordReset",
+			Handler:    _UserService_RequestPasswordReset_Handler,
+		},
+		{
+			MethodName: "ResetPassword",
+			Handler:    _UserService_ResetPassword_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

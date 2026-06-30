@@ -14,7 +14,7 @@ vi.mock("@/lib/gateway", () => ({
   GatewayError: class GatewayError extends Error {},
 }));
 
-import { verifyEmail, resendVerification } from "@/lib/session";
+import { verifyEmail, resendVerification, requestPasswordReset, resetPassword } from "@/lib/session";
 
 beforeEach(() => {
   gatewayFetch.mockReset();
@@ -35,5 +35,25 @@ describe("resendVerification", () => {
   it("POSTs to /auth/resend-verification with no body (user from cookie)", async () => {
     await resendVerification();
     expect(gatewayFetch).toHaveBeenCalledWith("/auth/resend-verification", { method: "POST" });
+  });
+});
+
+describe("requestPasswordReset", () => {
+  it("POSTs the email to /auth/forgot-password", async () => {
+    await requestPasswordReset("ada@example.com");
+    expect(gatewayFetch).toHaveBeenCalledWith("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email: "ada@example.com" }),
+    });
+  });
+});
+
+describe("resetPassword", () => {
+  it("POSTs token + password to /auth/reset-password", async () => {
+    await resetPassword("tok-1", "brand-new-pw");
+    expect(gatewayFetch).toHaveBeenCalledWith("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token: "tok-1", password: "brand-new-pw" }),
+    });
   });
 });

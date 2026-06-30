@@ -97,6 +97,10 @@ func (h *Handler) Router() http.Handler {
 		pub.Post("/auth/logout", h.logout)
 		// Verifying carries the single-use token in the body, not an access token.
 		pub.Post("/auth/verify-email", h.verifyEmail)
+		// Password reset: both carry their credential (email / reset token) in the
+		// body, so they're public and IP-rate-limited like login.
+		pub.Post("/auth/forgot-password", h.forgotPassword)
+		pub.Post("/auth/reset-password", h.resetPassword)
 		// Catalog browsing is public — anyone can shop before logging in.
 		pub.Get("/products", h.listProducts)
 		pub.Get("/products/{id}", h.getProduct)
@@ -310,6 +314,46 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.users.VerifyEmail(r.Context(), &userv1.VerifyEmailRequest{Token: req.Token}); err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+// forgotPassword emails a reset link. It is public and always returns 204 (even
+// for an unknown email) so the response can't reveal which addresses have
+// accounts — the User service enforces the same enumeration-safety.
+func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var req forgotPasswordRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if _, err := h.users.RequestPasswordReset(r.Context(), &userv1.RequestPasswordResetRequest{Email: req.Email}); err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type resetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+// resetPassword consumes a reset token and sets a new password. Public — the token
+// in the body is the credential.
+func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var req resetPasswordRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if _, err := h.users.ResetPassword(r.Context(), &userv1.ResetPasswordRequest{Token: req.Token, NewPassword: req.Password}); err != nil {
 		h.writeGRPCError(w, r, err)
 		return
 	}

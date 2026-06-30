@@ -31,6 +31,13 @@ service UserService {
   // ResendVerification issues a fresh verification token for the caller. The
   // Gateway gates this behind auth and supplies user_id from the validated token.
   rpc ResendVerification(ResendVerificationRequest) returns (ResendVerificationResponse);
+  // RequestPasswordReset emails a single-use reset link. It is public and ALWAYS
+  // succeeds (even for an unknown email) so the response can't reveal which
+  // addresses have accounts.
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse);
+  // ResetPassword consumes a reset token and sets a new password, revoking the
+  // user's existing sessions. Public — the token is the credential.
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
 }
 
 message RegisterRequest {
@@ -90,6 +97,17 @@ message ResendVerificationRequest {
   string user_id = 1; // the authenticated caller, supplied by the Gateway
 }
 message ResendVerificationResponse {}
+
+message RequestPasswordResetRequest {
+  string email = 1;
+}
+message RequestPasswordResetResponse {}
+
+message ResetPasswordRequest {
+  string token = 1;        // the single-use token from the reset link
+  string new_password = 2; // plaintext on the wire (TLS); hashed immediately
+}
+message ResetPasswordResponse {}
 
 message ValidateTokenRequest {
   string token = 1;

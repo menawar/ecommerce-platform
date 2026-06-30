@@ -95,31 +95,40 @@ func TestHandle_Idempotent(t *testing.T) {
 	}
 }
 
-// TestHandle_VerificationLinkSurfaced proves the verification link rides from the
-// event payload through to the Sender, so the email can include it (and the
-// LogSender prints it in dev).
-func TestHandle_VerificationLinkSurfaced(t *testing.T) {
-	ctx := context.Background()
-	pool := testPool(t)
-	sender := &capturingSender{}
-	h := notify.NewHandler(pool, sender, discard())
+// TestHandle_ActionLinkSurfaced proves the action link (action_url) rides from the
+// event payload through to the Sender for transactional-link emails, so the email
+// can include it (and the LogSender prints it in dev).
+func TestHandle_ActionLinkSurfaced(t *testing.T) {
+	cases := []struct {
+		topic, link, wantTemplate string
+	}{
+		{"user.verification_requested", "http://localhost:3000/verify-email?token=abc-123", "email_verification"},
+		{"user.password_reset_requested", "http://localhost:3000/reset-password?token=xyz-789", "password_reset"},
+	}
+	for _, c := range cases {
+		t.Run(c.topic, func(t *testing.T) {
+			ctx := context.Background()
+			pool := testPool(t)
+			sender := &capturingSender{}
+			h := notify.NewHandler(pool, sender, discard())
 
-	const link = "http://localhost:3000/verify-email?token=abc-123"
-	env, err := events.New("user.verification_requested", map[string]string{
-		"user_id":    uuid.NewString(),
-		"verify_url": link,
-	})
-	if err != nil {
-		t.Fatalf("event: %v", err)
-	}
-	if err := h.Handle(ctx, env); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
-	if sender.last.Template != "email_verification" {
-		t.Errorf("template = %q, want email_verification", sender.last.Template)
-	}
-	if sender.last.Link != link {
-		t.Errorf("link = %q, want %q", sender.last.Link, link)
+			env, err := events.New(c.topic, map[string]string{
+				"user_id":    uuid.NewString(),
+				"action_url": c.link,
+			})
+			if err != nil {
+				t.Fatalf("event: %v", err)
+			}
+			if err := h.Handle(ctx, env); err != nil {
+				t.Fatalf("Handle: %v", err)
+			}
+			if sender.last.Template != c.wantTemplate {
+				t.Errorf("template = %q, want %q", sender.last.Template, c.wantTemplate)
+			}
+			if sender.last.Link != c.link {
+				t.Errorf("link = %q, want %q", sender.last.Link, c.link)
+			}
+		})
 	}
 }
 

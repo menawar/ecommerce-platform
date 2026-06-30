@@ -108,11 +108,13 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 
 	repo := store.NewPostgres(pool)
 	// Same Postgres struct backs both the user repo and the refresh-token store;
-	// verification tokens live in a separate type (distinct Save/Get method set).
+	// verification and password-reset tokens live in separate types (distinct
+	// Save/Get method sets).
 	verifTokens := store.NewPostgresVerificationTokens(pool)
+	resetTokens := store.NewPostgresPasswordResetTokens(pool)
 	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL, auth.TypeAccess)
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL, auth.TypeRefresh)
-	userSrv := server.NewServer(repo, repo, verifTokens, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), cfg.webBaseURL, log)
+	userSrv := server.NewServer(repo, repo, verifTokens, resetTokens, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), cfg.webBaseURL, log)
 
 	shutdownTracer, err := observability.InitTracer(ctx, "user", cfg.otelEndpoint)
 	if err != nil {
