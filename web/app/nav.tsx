@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { isLoggedIn, currentRole } from "@/lib/session";
+import { isLoggedIn, getMe } from "@/lib/session";
 import { logoutAction } from "@/app/(auth)/actions";
 
 // An async Server Component: it reads the session cookie on the server to decide
@@ -8,10 +8,20 @@ import { logoutAction } from "@/app/(auth)/actions";
 // (dynamic) — exactly what an auth-aware header needs.
 export async function Nav() {
   const loggedIn = await isLoggedIn();
-  // Role drives the Admin link; currentRole never throws (null when anon/expired).
-  // This is one extra gateway round-trip per render for logged-in users — cheap
-  // enough here; not worth threading role down through the layout to avoid.
-  const isAdmin = loggedIn && (await currentRole()) === "admin";
+  // One /me round-trip serves both the Admin link (role) and the verify banner
+  // (email_verified). getMe throws on an expired/invalid token, so swallow it —
+  // the header should still render for a lapsed session (links just go anonymous).
+  let me: { role: string; email_verified: boolean } | null = null;
+  if (loggedIn) {
+    try {
+      me = await getMe();
+    } catch {
+      me = null;
+    }
+  }
+  const isAdmin = me?.role === "admin";
+  // `me` is only set when logged in, so its presence already implies a session.
+  const needsVerify = me !== null && !me.email_verified;
 
   // Try to get cart count when logged in
   let cartCount = 0;
@@ -41,6 +51,25 @@ export async function Nav() {
         Fresh from the Jos Plateau &nbsp;·&nbsp; Home of Peace &amp; Tourism
         &nbsp;·&nbsp; Free delivery on bulk orders over ₦50,000
       </div>
+
+      {/* ── Verify-email banner ───────────────────────────────────────────── */}
+      {needsVerify && (
+        <div
+          style={{
+            background: "var(--plt-gold, #f3b73f)",
+            color: "#3a2c00",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: "8px 16px",
+            textAlign: "center",
+          }}
+        >
+          Verify your email to place orders.{" "}
+          <Link href="/verify-email" style={{ color: "#3a2c00", textDecoration: "underline" }}>
+            Resend the link
+          </Link>
+        </div>
+      )}
 
       {/* ── Utility Bar ───────────────────────────────────────────────────── */}
       <div

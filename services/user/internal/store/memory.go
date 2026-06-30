@@ -75,3 +75,17 @@ func (m *Memory) GetByID(_ context.Context, id string) (User, error) {
 	}
 	return u, nil
 }
+
+// SetEmailVerified flips the flag for an existing account. Verifying an unknown
+// id is a no-op (mirrors the Postgres UPDATE affecting zero rows), and verifying
+// an already-verified account is idempotent.
+func (m *Memory) SetEmailVerified(_ context.Context, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if u, ok := m.byID[userID]; ok {
+		u.EmailVerified = true
+		m.byID[userID] = u
+	}
+	return nil
+}

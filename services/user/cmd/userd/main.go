@@ -45,6 +45,7 @@ type config struct {
 	dbURL        string
 	natsURL      string
 	otelEndpoint string
+	webBaseURL   string
 	accessTTL    time.Duration
 	refreshTTL   time.Duration
 }
@@ -59,6 +60,7 @@ func main() {
 		dbURL:        env("USER_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/userdb?sslmode=disable"),
 		natsURL:      env("NATS_URL", "nats://localhost:4222"),
 		otelEndpoint: env("OTEL_ENDPOINT", "localhost:4317"),
+		webBaseURL:   env("WEB_BASE_URL", "http://localhost:3000"),
 		accessTTL:    15 * time.Minute,
 		refreshTTL:   7 * 24 * time.Hour,
 	}
@@ -105,10 +107,12 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	log.Info("connected to nats jetstream")
 
 	repo := store.NewPostgres(pool)
-	// Same Postgres struct backs both the user repo and the refresh-token store.
+	// Same Postgres struct backs both the user repo and the refresh-token store;
+	// verification tokens live in a separate type (distinct Save/Get method set).
+	verifTokens := store.NewPostgresVerificationTokens(pool)
 	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL, auth.TypeAccess)
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL, auth.TypeRefresh)
-	userSrv := server.NewServer(repo, repo, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), log)
+	userSrv := server.NewServer(repo, repo, verifTokens, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), cfg.webBaseURL, log)
 
 	shutdownTracer, err := observability.InitTracer(ctx, "user", cfg.otelEndpoint)
 	if err != nil {

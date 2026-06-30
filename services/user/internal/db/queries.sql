@@ -25,3 +25,17 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE jti = $1 AND revoked_at IS NU
 
 -- name: RevokeAllUserRefreshTokens :exec
 UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL;
+
+-- Email verification.
+
+-- name: SetEmailVerified :exec
+UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1;
+
+-- name: SaveVerificationToken :exec
+INSERT INTO verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3);
+
+-- name: GetVerificationToken :one
+SELECT * FROM verification_tokens WHERE token = $1;
+
+-- name: UseVerificationToken :exec
+UPDATE verification_tokens SET used_at = now() WHERE token = $1 AND used_at IS NULL;

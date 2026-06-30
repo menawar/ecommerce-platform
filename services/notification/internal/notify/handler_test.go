@@ -25,6 +25,14 @@ func (s *countingSender) Send(context.Context, notify.Notification) error {
 	return nil
 }
 
+// capturingSender records the last Notification it was asked to send.
+type capturingSender struct{ last notify.Notification }
+
+func (s *capturingSender) Send(_ context.Context, n notify.Notification) error {
+	s.last = n
+	return nil
+}
+
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("NOTIFICATION_DB_URL")
@@ -87,6 +95,34 @@ func TestHandle_Idempotent(t *testing.T) {
 	}
 }
 
+// TestHandle_VerificationLinkSurfaced proves the verification link rides from the
+// event payload through to the Sender, so the email can include it (and the
+// LogSender prints it in dev).
+func TestHandle_VerificationLinkSurfaced(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	sender := &capturingSender{}
+	h := notify.NewHandler(pool, sender, discard())
+
+	const link = "http://localhost:3000/verify-email?token=abc-123"
+	env, err := events.New("user.verification_requested", map[string]string{
+		"user_id":    uuid.NewString(),
+		"verify_url": link,
+	})
+	if err != nil {
+		t.Fatalf("event: %v", err)
+	}
+	if err := h.Handle(ctx, env); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if sender.last.Template != "email_verification" {
+		t.Errorf("template = %q, want email_verification", sender.last.Template)
+	}
+	if sender.last.Link != link {
+		t.Errorf("link = %q, want %q", sender.last.Link, link)
+	}
+}
+
 func TestHandle_IgnoresUnknownTopic(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
@@ -111,10 +147,11 @@ func TestHandle_TemplatesByTopic(t *testing.T) {
 	h := notify.NewHandler(pool, &countingSender{}, discard())
 
 	cases := map[string]string{
-		"user.registered": "welcome",
-		"order.confirmed":  "order_confirmation",
-		"order.cancelled":  "order_cancelled",
-		"order.paid":       "payment_received",
+		"user.registered":             "welcome",
+		"user.verification_requested": "email_verification",
+		"order.confirmed":             "order_confirmation",
+		"order.cancelled":             "order_cancelled",
+		"order.paid":                  "payment_received",
 	}
 	for topic, wantTemplate := range cases {
 		env := event(t, topic)

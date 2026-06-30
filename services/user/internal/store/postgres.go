@@ -87,14 +87,23 @@ func mapGetErr(err error) error {
 
 func toUser(r db.User) User {
 	return User{
-		ID:           uuid.UUID(r.ID.Bytes).String(),
-		Email:        r.Email,
-		PasswordHash: r.PasswordHash,
-		FullName:     r.FullName,
-		Role:         r.Role,
-		CreatedAt:    r.CreatedAt.Time,
-		UpdatedAt:    r.UpdatedAt.Time,
+		ID:            uuid.UUID(r.ID.Bytes).String(),
+		Email:         r.Email,
+		PasswordHash:  r.PasswordHash,
+		FullName:      r.FullName,
+		Role:          r.Role,
+		EmailVerified: r.EmailVerified,
+		CreatedAt:     r.CreatedAt.Time,
+		UpdatedAt:     r.UpdatedAt.Time,
 	}
+}
+
+func (p *Postgres) SetEmailVerified(ctx context.Context, userID string) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("store: invalid user id %q: %w", userID, err)
+	}
+	return p.q.SetEmailVerified(ctx, pgtype.UUID{Bytes: uid, Valid: true})
 }
 
 func isUniqueViolation(err error) bool {

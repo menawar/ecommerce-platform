@@ -19,6 +19,10 @@ export async function placeOrderAction(_prev: CheckoutState, formData: FormData)
   } catch (err) {
     if (err instanceof GatewayError) {
       if (err.status === 401) redirect("/login");
+      // requireVerified blocks checkout until the email is confirmed.
+      if (err.status === 403) {
+        return { error: "Please verify your email before checking out — check your inbox or resend the link from the banner above." };
+      }
       return { error: err.message }; // e.g. 422 "cart is empty"
     }
     throw err;

@@ -25,6 +25,12 @@ service UserService {
   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
   // Logout revokes the presented refresh token, ending that session server-side.
   rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // VerifyEmail consumes a single-use token (from the emailed link) and marks the
+  // account's email verified. It is public — the token itself is the credential.
+  rpc VerifyEmail(VerifyEmailRequest) returns (VerifyEmailResponse);
+  // ResendVerification issues a fresh verification token for the caller. The
+  // Gateway gates this behind auth and supplies user_id from the validated token.
+  rpc ResendVerification(ResendVerificationRequest) returns (ResendVerificationResponse);
 }
 
 message RegisterRequest {
@@ -72,7 +78,18 @@ message GetUserResponse {
   string email = 2;
   string full_name = 3;
   string role = 4;
+  bool email_verified = 5;
 }
+
+message VerifyEmailRequest {
+  string token = 1; // the single-use token from the verification link
+}
+message VerifyEmailResponse {}
+
+message ResendVerificationRequest {
+  string user_id = 1; // the authenticated caller, supplied by the Gateway
+}
+message ResendVerificationResponse {}
 
 message ValidateTokenRequest {
   string token = 1;

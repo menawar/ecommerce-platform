@@ -29,7 +29,7 @@ func newTestClient(t *testing.T) userv1.UserServiceClient {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	jwtMgr := auth.NewJWTManager("test-secret", 15*time.Minute, auth.TypeAccess)
 	refreshMgr := auth.NewJWTManager("test-secret", 7*24*time.Hour, auth.TypeRefresh)
-	srv := server.NewServer(store.NewMemory(), store.NewMemoryRefreshTokens(), jwtMgr, refreshMgr, jwtMgr, refreshMgr, nil, log) // nil publisher: no events in tests
+	srv := server.NewServer(store.NewMemory(), store.NewMemoryRefreshTokens(), store.NewMemoryVerificationTokens(), jwtMgr, refreshMgr, jwtMgr, refreshMgr, nil, "http://localhost:3000", log) // nil publisher: no events in tests
 
 	lis := bufconn.Listen(1024 * 1024)
 	gs := grpc.NewServer()

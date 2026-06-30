@@ -95,6 +95,8 @@ func (h *Handler) Router() http.Handler {
 		// so they live with the public (IP-rate-limited) routes.
 		pub.Post("/auth/refresh", h.refresh)
 		pub.Post("/auth/logout", h.logout)
+		// Verifying carries the single-use token in the body, not an access token.
+		pub.Post("/auth/verify-email", h.verifyEmail)
 		// Catalog browsing is public — anyone can shop before logging in.
 		pub.Get("/products", h.listProducts)
 		pub.Get("/products/{id}", h.getProduct)
@@ -106,6 +108,7 @@ func (h *Handler) Router() http.Handler {
 		pr.Use(h.requireAuth)
 		pr.Use(h.rateLimit) // after requireAuth → keyed PER USER
 		pr.Get("/me", h.me)
+		pr.Post("/auth/resend-verification", h.resendVerification)
 
 		// Cart is per-user: every handler reads the user_id from the validated
 		// token (Identity), never from the request — so one user can't touch
@@ -115,7 +118,9 @@ func (h *Handler) Router() http.Handler {
 		pr.Put("/cart/items/{productID}", h.updateCartItem)
 		pr.Delete("/cart/items/{productID}", h.removeCartItem)
 
-		pr.Post("/orders", h.placeOrder)
+		// Checkout is the money path — gate it behind a verified email. Browsing
+		// orders and the cart stay open to unverified users.
+		pr.With(h.requireVerified).Post("/orders", h.placeOrder)
 		pr.Get("/orders", h.listOrders)
 		pr.Get("/orders/{id}", h.getOrder)
 	})
@@ -149,9 +154,10 @@ func echoRequestID(next http.Handler) http.Handler {
 	})
 }
 
-// me is a protected dummy endpoint that proves auth works: it returns the caller
-// identity that requireAuth extracted from the token. The Phase 1 acceptance
-// uses it as the "protected endpoint that accepts a good token, rejects a bad one".
+// me returns the authenticated caller's profile. user_id and role come from the
+// validated token (Identity); email_verified is read fresh from the User service
+// so the UI's "verify your email" banner reflects current state immediately after
+// a user verifies (no waiting for the access token to refresh).
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	id, ok := IdentityFrom(r.Context())
 	if !ok {
@@ -159,7 +165,21 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"user_id": id.UserID, "role": id.Role})
+	// email_verified is a non-critical UI hint (the verify banner); checkout is
+	// gated independently by requireVerified with its own fresh read. So if the
+	// lookup blips, fail OPEN — keep /me returning 200 for any valid token (its
+	// long-standing invariant) rather than 5xx-ing pages that only need identity.
+	verified := true
+	if resp, err := h.users.GetUser(r.Context(), &userv1.GetUserRequest{UserId: id.UserID}); err != nil {
+		h.log.WarnContext(r.Context(), "me: GetUser failed, defaulting email_verified=true", "err", err, "user_id", id.UserID)
+	} else {
+		verified = resp.GetEmailVerified()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user_id":        id.UserID,
+		"role":           id.Role,
+		"email_verified": verified,
+	})
 }
 
 // requestLogger is a middleware: it takes the next handler and returns a handler
@@ -270,6 +290,42 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.users.Logout(r.Context(), &userv1.LogoutRequest{RefreshToken: req.RefreshToken}); err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type verifyEmailRequest struct {
+	Token string `json:"token"`
+}
+
+// verifyEmail consumes the single-use token from a verification link. It is
+// public — the token itself is the credential, carried in the body, not an
+// access token.
+func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req verifyEmailRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if _, err := h.users.VerifyEmail(r.Context(), &userv1.VerifyEmailRequest{Token: req.Token}); err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// resendVerification issues a fresh verification link for the authenticated
+// caller. The user_id comes from the validated token (Identity), never the
+// request body — a caller can only ask for their OWN link.
+func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
+	id, ok := IdentityFrom(r.Context())
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if _, err := h.users.ResendVerification(r.Context(), &userv1.ResendVerificationRequest{UserId: id.UserID}); err != nil {
 		h.writeGRPCError(w, r, err)
 		return
 	}

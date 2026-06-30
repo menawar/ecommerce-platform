@@ -31,6 +31,10 @@ func jwtBackedFake(mgr *auth.JWTManager) *fakeUserClient {
 			}
 			return &userv1.ValidateTokenResponse{Valid: true, UserId: claims.UserID, Role: claims.Role}, nil
 		},
+		// /me now reads verification state from the user service.
+		getUserFn: func(in *userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+			return &userv1.GetUserResponse{UserId: in.GetUserId(), Role: "customer", EmailVerified: true}, nil
+		},
 	}
 }
 
@@ -71,10 +75,13 @@ func TestProtectedRoute(t *testing.T) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("status = %d, want 200", resp.StatusCode)
 		}
-		var id map[string]string
+		var id map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&id)
 		if id["user_id"] != "user-42" || id["role"] != "customer" {
 			t.Errorf("identity = %+v, want {user-42 customer}", id)
+		}
+		if id["email_verified"] != true {
+			t.Errorf("email_verified = %v, want true", id["email_verified"])
 		}
 	})
 

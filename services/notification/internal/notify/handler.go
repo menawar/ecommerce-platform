@@ -18,10 +18,11 @@ import (
 // topicTemplates maps event topics to notification templates. Topics not listed
 // are simply ignored (acked, never turned into a notification).
 var topicTemplates = map[string]string{
-	"user.registered": "welcome",
-	"order.paid":      "payment_received",
-	"order.confirmed": "order_confirmation",
-	"order.cancelled": "order_cancelled",
+	"user.registered":             "welcome",
+	"user.verification_requested": "email_verification",
+	"order.paid":                  "payment_received",
+	"order.confirmed":             "order_confirmation",
+	"order.cancelled":             "order_cancelled",
 }
 
 type Handler struct {
@@ -50,9 +51,11 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		return nil // unparseable id -> drop (ack), retrying won't help
 	}
 
-	// Every payload we handle carries user_id; extract it best-effort.
+	// Every payload we handle carries user_id; some (verification) also carry a
+	// link the email must include. Extract both best-effort.
 	var data struct {
-		UserID string `json:"user_id"`
+		UserID    string `json:"user_id"`
+		VerifyURL string `json:"verify_url"`
 	}
 	_ = json.Unmarshal(env.Data, &data)
 	var userID pgtype.UUID
@@ -86,6 +89,7 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		UserID:   data.UserID,
 		Channel:  "email",
 		Template: template,
+		Link:     data.VerifyURL,
 	})
 }
 

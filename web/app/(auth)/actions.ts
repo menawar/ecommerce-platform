@@ -6,7 +6,7 @@
 import { redirect } from "next/navigation";
 
 import { GatewayError } from "@/lib/gateway";
-import { login, logout, register, setSession } from "@/lib/session";
+import { login, logout, register, resendVerification, setSession, verifyEmail } from "@/lib/session";
 
 // The shape useActionState threads between submissions (prev state -> next state).
 export type AuthState = { error?: string };
@@ -34,6 +34,43 @@ export async function loginAction(_prev: AuthState, formData: FormData): Promise
 export async function logoutAction(): Promise<void> {
   await logout(); // revoke the refresh token server-side, then clear cookies
   redirect("/login");
+}
+
+// VerifyState threads the result of a verify-email submission back to the form.
+// Verification runs ONLY from this action (a POST on explicit click), never on a
+// GET page render — so email link-scanners/prefetchers can't silently consume the
+// single-use token before the human acts.
+export type VerifyState = { status?: "ok" | "invalid" };
+
+export async function verifyEmailAction(_prev: VerifyState, formData: FormData): Promise<VerifyState> {
+  const token = String(formData.get("token") ?? "");
+  if (!token) return { status: "invalid" };
+  try {
+    await verifyEmail(token);
+  } catch (err) {
+    // 400 is the expected "invalid or expired" answer; anything else is a real
+    // fault and should reach the error boundary.
+    if (err instanceof GatewayError && err.status === 400) return { status: "invalid" };
+    throw err;
+  }
+  return { status: "ok" };
+}
+
+// ResendState threads the outcome of a resend-verification submission back to the
+// form so it can confirm "sent" or surface an error.
+export type ResendState = { sent?: boolean; error?: string };
+
+export async function resendVerificationAction(): Promise<ResendState> {
+  try {
+    await resendVerification();
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      // 401 means the session lapsed — the link page will prompt a re-login.
+      return { error: err.status === 401 ? "Please sign in to resend the link." : err.message };
+    }
+    throw err;
+  }
+  return { sent: true };
 }
 
 export async function registerAction(_prev: AuthState, formData: FormData): Promise<AuthState> {

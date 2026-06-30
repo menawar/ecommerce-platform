@@ -81,24 +81,28 @@ export async function clearSession(): Promise<void> {
 
 // getMe calls the protected /me route; gatewayFetch forwards the cookie as a
 // Bearer token. A 401 here means the token is missing/expired/invalid.
-export async function getMe(): Promise<{ user_id: string; role: string }> {
-  return gatewayFetch<{ user_id: string; role: string }>("/me");
+export async function getMe(): Promise<{ user_id: string; role: string; email_verified: boolean }> {
+  return gatewayFetch<{ user_id: string; role: string; email_verified: boolean }>("/me");
+}
+
+// verifyEmail consumes the single-use token from a verification link. It is a
+// public route — no session needed — so an anonymous visitor clicking the link
+// can verify. A GatewayError 400 means the token is invalid or expired.
+export async function verifyEmail(token: string): Promise<void> {
+  await gatewayFetch<void>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+// resendVerification asks for a fresh verification link for the logged-in user.
+// The gateway derives the user from the session cookie, so no body is needed.
+export async function resendVerification(): Promise<void> {
+  await gatewayFetch<void>("/auth/resend-verification", { method: "POST" });
 }
 
 // isLoggedIn is a cheap presence check for UI (which nav links to show). It does
 // NOT prove the token is valid — that's the gateway's job on each real request.
 export async function isLoggedIn(): Promise<boolean> {
   return Boolean((await cookies()).get(SESSION_COOKIE)?.value);
-}
-
-// currentRole returns the caller's role, or null when not logged in or the token
-// is invalid/expired. Unlike getMe it never throws — it's for UI decisions (e.g.
-// whether to show the Admin link), so a 401 just means "no role", not an error.
-export async function currentRole(): Promise<string | null> {
-  if (!(await isLoggedIn())) return null;
-  try {
-    return (await getMe()).role;
-  } catch {
-    return null;
-  }
 }
