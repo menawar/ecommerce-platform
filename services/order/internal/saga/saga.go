@@ -90,13 +90,20 @@ type orderEvent struct {
 // On insufficient stock or a declined charge it COMPENSATES (release the
 // reservation) and ends CANCELLED (+order.cancelled). It is idempotent on
 // idempotency_key.
-func (s *Saga) PlaceOrder(ctx context.Context, userID, idempotencyKey string) (*Result, error) {
+func (s *Saga) PlaceOrder(ctx context.Context, userID, idempotencyKey, addressID, shippingMethodID string) (*Result, error) {
 	if idempotencyKey == "" {
 		return nil, status.Error(codes.InvalidArgument, "idempotency_key is required")
 	}
 	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+	smUUID, err := uuid.Parse(shippingMethodID)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "shipping_method_id must be a UUID")
+	}
+	if _, err := uuid.Parse(addressID); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "address_id must be a UUID")
 	}
 
 	// 1. Idempotency: a retried PlaceOrder with the same key returns the existing
@@ -119,7 +126,7 @@ func (s *Saga) PlaceOrder(ctx context.Context, userID, idempotencyKey string) (*
 
 	// 3. Resolve prices from the Product service (authoritative) and snapshot them.
 	var lines []lineItem
-	var total int64
+	var subtotal int64
 	for _, ci := range cartItems {
 		p, err := s.products.GetProduct(ctx, &productv1.GetProductRequest{ProductId: ci.GetProductId()})
 		if err != nil {
@@ -128,12 +135,38 @@ func (s *Saga) PlaceOrder(ctx context.Context, userID, idempotencyKey string) (*
 		}
 		prod := p.GetProduct()
 		lines = append(lines, lineItem{prod.GetId(), prod.GetName(), prod.GetPriceCents(), ci.GetQuantity()})
-		total += prod.GetPriceCents() * int64(ci.GetQuantity())
+		subtotal += prod.GetPriceCents() * int64(ci.GetQuantity())
+	}
+
+	// 3a. Resolve the chosen shipping method (same DB) — must exist and be active.
+	sm, err := s.q.GetShippingMethod(ctx, pgUUID(smUUID))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.FailedPrecondition, "shipping method unavailable")
+		}
+		return nil, s.internal(ctx, "get shipping method", err)
+	}
+	if !sm.Active {
+		return nil, status.Error(codes.FailedPrecondition, "shipping method unavailable")
+	}
+
+	// 3b. Snapshot the chosen address from the User service (db-per-service: the
+	// order service can't read userdb). GetAddress is scoped by user_id, so a
+	// missing/not-owned id comes back NotFound -> treat as a bad checkout input.
+	addrResp, err := s.users.GetAddress(ctx, &userv1.GetAddressRequest{UserId: userID, AddressId: addressID})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, status.Error(codes.FailedPrecondition, "address unavailable")
+		}
+		return nil, s.internal(ctx, "get address", err)
 	}
 
 	// 4. Create the order PENDING + items in ONE transaction. id == reservation_id.
+	// total = subtotal + shipping.
+	total := subtotal + sm.PriceCents
 	orderID := uuid.New()
-	if err := s.createOrder(ctx, orderID, userUUID, idempotencyKey, total, lines); err != nil {
+	ship := shipSnapshot{methodID: smUUID, methodName: sm.Name, cents: sm.PriceCents, addr: addrResp.GetAddress()}
+	if err := s.createOrder(ctx, orderID, userUUID, idempotencyKey, total, lines, ship); err != nil {
 		// A concurrent PlaceOrder with the same key won the unique race — return it.
 		if isUniqueViolation(err) {
 			if existing, gerr := s.q.GetOrderByIdempotencyKey(ctx, &idempotencyKey); gerr == nil {
@@ -353,8 +386,18 @@ func (s *Saga) cancel(ctx context.Context, orderID uuid.UUID, ev orderEvent) *Re
 	return &Result{OrderID: orderID.String(), Status: order.StatusCancelled}
 }
 
+// shipSnapshot is the shipping method + address copy persisted onto the order at
+// checkout, so later edits to the method catalog or the user's address book never
+// rewrite a past order.
+type shipSnapshot struct {
+	methodID   uuid.UUID
+	methodName string
+	cents      int64
+	addr       *userv1.Address
+}
+
 // createOrder inserts the order + items in one transaction.
-func (s *Saga) createOrder(ctx context.Context, orderID, userUUID uuid.UUID, key string, total int64, lines []lineItem) error {
+func (s *Saga) createOrder(ctx context.Context, orderID, userUUID uuid.UUID, key string, total int64, lines []lineItem, ship shipSnapshot) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -362,14 +405,26 @@ func (s *Saga) createOrder(ctx context.Context, orderID, userUUID uuid.UUID, key
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
 
+	a := ship.addr
 	if _, err := q.CreateOrder(ctx, db.CreateOrderParams{
-		ID:             pgUUID(orderID),
-		UserID:         pgUUID(userUUID),
-		Status:         string(order.StatusPending),
-		TotalCents:     total,
-		Currency:       "NGN",
-		ReservationID:  pgUUID(orderID),
-		IdempotencyKey: &key,
+		ID:                 pgUUID(orderID),
+		UserID:             pgUUID(userUUID),
+		Status:             string(order.StatusPending),
+		TotalCents:         total,
+		Currency:           "NGN",
+		ReservationID:      pgUUID(orderID),
+		IdempotencyKey:     &key,
+		ShippingMethodID:   pgUUID(ship.methodID),
+		ShippingMethodName: ship.methodName,
+		ShippingCents:      ship.cents,
+		ShipRecipient:      a.GetRecipient(),
+		ShipPhone:          a.GetPhone(),
+		ShipLine1:          a.GetLine1(),
+		ShipLine2:          a.GetLine2(),
+		ShipCity:           a.GetCity(),
+		ShipState:          a.GetState(),
+		ShipPostalCode:     a.GetPostalCode(),
+		ShipCountry:        a.GetCountry(),
 	}); err != nil {
 		return err
 	}

@@ -9,17 +9,28 @@ import (
 )
 
 type Order struct {
-	ID               pgtype.UUID
-	UserID           pgtype.UUID
-	Status           string
-	TotalCents       int64
-	Currency         string
-	ReservationID    pgtype.UUID
-	PaymentID        pgtype.UUID
-	IdempotencyKey   *string
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	AuthorizationUrl string
+	ID                 pgtype.UUID
+	UserID             pgtype.UUID
+	Status             string
+	TotalCents         int64
+	Currency           string
+	ReservationID      pgtype.UUID
+	PaymentID          pgtype.UUID
+	IdempotencyKey     *string
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	AuthorizationUrl   string
+	ShippingMethodID   pgtype.UUID
+	ShippingMethodName string
+	ShippingCents      int64
+	ShipRecipient      string
+	ShipPhone          string
+	ShipLine1          string
+	ShipLine2          string
+	ShipCity           string
+	ShipState          string
+	ShipPostalCode     string
+	ShipCountry        string
 }
 
 type OrderItem struct {

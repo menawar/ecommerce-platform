@@ -1,8 +1,14 @@
 -- name: CreateOrder :one
 -- id is supplied (not defaulted) so reservation_id can equal the order id — the
 -- saga reserves stock under the order's own id, making ReserveStock idempotent.
-INSERT INTO orders (id, user_id, status, total_cents, currency, reservation_id, idempotency_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+-- total_cents already includes shipping_cents; the address + method name are
+-- snapshotted so later edits never rewrite the order.
+INSERT INTO orders (
+    id, user_id, status, total_cents, currency, reservation_id, idempotency_key,
+    shipping_method_id, shipping_method_name, shipping_cents,
+    ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 RETURNING *;
 
 -- name: GetOrder :one

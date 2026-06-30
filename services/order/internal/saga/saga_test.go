@@ -104,8 +104,19 @@ func (f *fakePayment) GetPayment(context.Context, *paymentv1.GetPaymentRequest, 
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-// fakeUser resolves a customer's email for the payment-initialization step.
-type fakeUser struct{}
+// fakeUser resolves a customer's email (for payment) and address (for the order
+// snapshot). addrErr, when set, makes GetAddress fail — e.g. a not-owned address.
+type fakeUser struct{ addrErr error }
+
+func (f fakeUser) GetAddress(_ context.Context, in *userv1.GetAddressRequest, _ ...grpc.CallOption) (*userv1.GetAddressResponse, error) {
+	if f.addrErr != nil {
+		return nil, f.addrErr
+	}
+	return &userv1.GetAddressResponse{Address: &userv1.Address{
+		Id: in.GetAddressId(), UserId: in.GetUserId(), Recipient: "Ada Lovelace", Phone: "08030000000",
+		Line1: "1 Rayfield Rd", City: "Jos", State: "Plateau", Country: "NG",
+	}}, nil
+}
 
 func (fakeUser) GetUser(_ context.Context, in *userv1.GetUserRequest, _ ...grpc.CallOption) (*userv1.GetUserResponse, error) {
 	return &userv1.GetUserResponse{UserId: in.GetUserId(), Email: "buyer@example.com"}, nil
@@ -170,6 +181,20 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("truncate: %v", err)
 	}
 	return pool
+}
+
+// seedShipping inserts an active shipping method and returns its id, for the saga
+// to resolve at checkout. Returns the id and its price so tests can assert totals.
+func seedShipping(t *testing.T, pool *pgxpool.Pool, priceCents int64) string {
+	t.Helper()
+	var id string
+	err := pool.QueryRow(context.Background(),
+		"INSERT INTO shipping_methods (name, price_cents, active) VALUES ('Standard', $1, true) RETURNING id::text",
+		priceCents).Scan(&id)
+	if err != nil {
+		t.Fatalf("seed shipping method: %v", err)
+	}
+	return id
 }
 
 func cartItem(price int64) (string, *cartv1.CartItem, *productv1.Product) {
@@ -242,7 +267,7 @@ func TestSaga_HappyPath(t *testing.T) {
 	s := saga.New(pool, cart, product, payment, fakeUser{}, discard())
 
 	// Phase 1: start. The saga pauses awaiting the customer's payment.
-	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
+	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
@@ -284,7 +309,7 @@ func TestSaga_PaymentDeclined(t *testing.T) {
 	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
 	s := saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
 
-	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
+	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
@@ -322,7 +347,7 @@ func TestSaga_ResumeIdempotent(t *testing.T) {
 	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
 	s := saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
 
-	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
+	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
@@ -354,7 +379,7 @@ func TestSaga_InsufficientStock(t *testing.T) {
 	payment := &fakePayment{}
 	s := saga.New(pool, cart, product, payment, fakeUser{}, discard())
 
-	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString())
+	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
@@ -381,11 +406,13 @@ func TestSaga_Idempotent(t *testing.T) {
 
 	key := uuid.NewString()
 	user := uuid.NewString()
-	first, err := s.PlaceOrder(ctx, user, key)
+	addr := uuid.NewString()
+	ship := seedShipping(t, pool, 150000)
+	first, err := s.PlaceOrder(ctx, user, key, addr, ship)
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	second, err := s.PlaceOrder(ctx, user, key)
+	second, err := s.PlaceOrder(ctx, user, key, addr, ship)
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
@@ -397,12 +424,80 @@ func TestSaga_Idempotent(t *testing.T) {
 	}
 }
 
+// TestSaga_TotalIncludesShippingAndSnapshot: total = subtotal + shipping, and the
+// chosen method name + address are snapshotted onto the order.
+func TestSaga_TotalIncludesShippingAndSnapshot(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	pid, ci, prod := cartItem(2500)
+	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
+	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
+	s := saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
+
+	ship := seedShipping(t, pool, 150000)
+	res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), ship)
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+
+	var total, shipping int64
+	var methodName, recipient, city string
+	if err := pool.QueryRow(ctx,
+		"SELECT total_cents, shipping_cents, shipping_method_name, ship_recipient, ship_city FROM orders WHERE id=$1",
+		res.OrderID).Scan(&total, &shipping, &methodName, &recipient, &city); err != nil {
+		t.Fatalf("read order: %v", err)
+	}
+	if total != 2500+150000 {
+		t.Errorf("total_cents = %d, want %d (subtotal+shipping)", total, 2500+150000)
+	}
+	if shipping != 150000 || methodName != "Standard" {
+		t.Errorf("shipping snapshot = %d/%q, want 150000/Standard", shipping, methodName)
+	}
+	if recipient != "Ada Lovelace" || city != "Jos" {
+		t.Errorf("address snapshot = %q/%q, want Ada Lovelace/Jos", recipient, city)
+	}
+}
+
+func TestSaga_BadShippingOrAddressRejected(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	pid, ci, prod := cartItem(2500)
+	mkSaga := func(usr fakeUser) *saga.Saga {
+		cart := &fakeCart{items: []*cartv1.CartItem{ci}}
+		product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
+		return saga.New(pool, cart, product, &fakePayment{}, usr, discard())
+	}
+
+	t.Run("inactive shipping method", func(t *testing.T) {
+		var ship string
+		_ = pool.QueryRow(ctx, "INSERT INTO shipping_methods (name, price_cents, active) VALUES ('Off', 1000, false) RETURNING id::text").Scan(&ship)
+		_, err := mkSaga(fakeUser{}).PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), ship)
+		if status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("want FailedPrecondition, got %v", err)
+		}
+	})
+	t.Run("unknown shipping method", func(t *testing.T) {
+		_, err := mkSaga(fakeUser{}).PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString())
+		if status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("want FailedPrecondition, got %v", err)
+		}
+	})
+	t.Run("unknown/not-owned address", func(t *testing.T) {
+		ship := seedShipping(t, pool, 150000)
+		usr := fakeUser{addrErr: status.Error(codes.NotFound, "address not found")}
+		_, err := mkSaga(usr).PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), ship)
+		if status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("want FailedPrecondition, got %v", err)
+		}
+	})
+}
+
 func TestSaga_EmptyCart(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
 	s := saga.New(pool, &fakeCart{}, &fakeProduct{products: map[string]*productv1.Product{}}, &fakePayment{}, fakeUser{}, discard())
 
-	if _, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString()); status.Code(err) != codes.FailedPrecondition {
+	if _, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000)); status.Code(err) != codes.FailedPrecondition {
 		t.Errorf("empty cart: want FailedPrecondition, got %v", err)
 	}
 }

@@ -137,6 +137,21 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             </div>
           ))}
 
+          {order.shipping_method_name && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: 10,
+              }}
+            >
+              <span style={{ color: "var(--plt-text-secondary)" }}>
+                Delivery — {order.shipping_method_name}
+              </span>
+              <b>{order.shipping_cents === 0 ? "Free" : formatPrice(order.shipping_cents, order.currency)}</b>
+            </div>
+          )}
+
           <div
             style={{
               display: "flex",
@@ -152,6 +167,23 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <span>{formatPrice(order.total_cents, order.currency)}</span>
           </div>
         </div>
+
+        {order.shipping_address && (
+          <div className="plt-card-lg" style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>Delivery address</div>
+            <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--plt-text-secondary)" }}>
+              <div style={{ fontWeight: 700, color: "var(--plt-text)" }}>{order.shipping_address.recipient}</div>
+              <div>
+                {order.shipping_address.line1}
+                {order.shipping_address.line2 ? `, ${order.shipping_address.line2}` : ""}, {order.shipping_address.city},{" "}
+                {order.shipping_address.state}
+                {order.shipping_address.postal_code ? ` ${order.shipping_address.postal_code}` : ""},{" "}
+                {order.shipping_address.country}
+              </div>
+              <div>{order.shipping_address.phone}</div>
+            </div>
+          </div>
+        )}
 
         {isConfirmed && (
           <div

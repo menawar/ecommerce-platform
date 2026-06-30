@@ -30,6 +30,8 @@ const mockPlaceOrder = vi.mocked(placeOrder);
 function form(key = "k-1"): FormData {
   const fd = new FormData();
   fd.set("idempotency_key", key);
+  fd.set("address_id", "a-1");
+  fd.set("shipping_method_id", "s-1");
   return fd;
 }
 

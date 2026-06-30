@@ -117,6 +117,36 @@ func TestAddresses_RejectsOverlongField(t *testing.T) {
 	}
 }
 
+func TestAddresses_GetByID(t *testing.T) {
+	ctx := context.Background()
+	client := newTestClient(t)
+	const uid = "77777777-7777-7777-7777-777777777777"
+
+	created, _ := client.CreateAddress(ctx, &userv1.CreateAddressRequest{UserId: uid, Address: sampleAddrInput()})
+	id := created.GetAddress().GetId()
+
+	got, err := client.GetAddress(ctx, &userv1.GetAddressRequest{UserId: uid, AddressId: id})
+	if err != nil {
+		t.Fatalf("GetAddress: %v", err)
+	}
+	if got.GetAddress().GetId() != id || got.GetAddress().GetCity() != "Jos" {
+		t.Errorf("got %+v", got.GetAddress())
+	}
+
+	t.Run("another user can't fetch it (NotFound)", func(t *testing.T) {
+		_, err := client.GetAddress(ctx, &userv1.GetAddressRequest{UserId: "88888888-8888-8888-8888-888888888888", AddressId: id})
+		if status.Code(err) != codes.NotFound {
+			t.Errorf("want NotFound, got %v", err)
+		}
+	})
+	t.Run("unknown id (NotFound)", func(t *testing.T) {
+		_, err := client.GetAddress(ctx, &userv1.GetAddressRequest{UserId: uid, AddressId: "99999999-9999-9999-9999-999999999999"})
+		if status.Code(err) != codes.NotFound {
+			t.Errorf("want NotFound, got %v", err)
+		}
+	})
+}
+
 func TestAddresses_Validation(t *testing.T) {
 	ctx := context.Background()
 	client := newTestClient(t)
