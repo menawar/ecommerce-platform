@@ -44,35 +44,44 @@ func (c *capturePublisher) Publish(_ context.Context, topic string, payload []by
 	return nil
 }
 
-// tokenFor parses the captured user.verification_requested event and pulls the
-// token out of its verify_url. It fails the test if no such event was emitted.
-func (c *capturePublisher) tokenFor(t *testing.T) string {
+// tokenFor parses the captured event for the given topic and pulls the token out
+// of its action_url. It fails the test if no such event was emitted.
+func (c *capturePublisher) tokenFor(t *testing.T, topic string) string {
 	t.Helper()
 	c.mu.Lock()
-	payload, ok := c.byTopic["user.verification_requested"]
+	payload, ok := c.byTopic[topic]
 	c.mu.Unlock()
 	if !ok {
-		t.Fatal("no user.verification_requested event was published")
+		t.Fatalf("no %s event was published", topic)
 	}
 	env, err := events.Parse(payload)
 	if err != nil {
 		t.Fatalf("parse envelope: %v", err)
 	}
 	var data struct {
-		VerifyURL string `json:"verify_url"`
+		ActionURL string `json:"action_url"`
 	}
 	if err := json.Unmarshal(env.Data, &data); err != nil {
 		t.Fatalf("unmarshal data: %v", err)
 	}
-	u, err := url.Parse(data.VerifyURL)
+	u, err := url.Parse(data.ActionURL)
 	if err != nil {
-		t.Fatalf("parse verify_url %q: %v", data.VerifyURL, err)
+		t.Fatalf("parse action_url %q: %v", data.ActionURL, err)
 	}
 	tok := u.Query().Get("token")
 	if tok == "" {
-		t.Fatalf("verify_url %q has no token", data.VerifyURL)
+		t.Fatalf("action_url %q has no token", data.ActionURL)
 	}
 	return tok
+}
+
+// published reports whether an event for the topic was captured (for asserting a
+// NON-event, e.g. enumeration-safe password reset for an unknown email).
+func (c *capturePublisher) published(topic string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.byTopic[topic]
+	return ok
 }
 
 // newVerifyTestClient wires a Server with a real in-memory store and a capturing
@@ -86,6 +95,7 @@ func newVerifyTestClient(t *testing.T) (userv1.UserServiceClient, *capturePublis
 	pub := newCapturePublisher()
 	srv := server.NewServer(
 		store.NewMemory(), store.NewMemoryRefreshTokens(), store.NewMemoryVerificationTokens(),
+		store.NewMemoryPasswordResetTokens(),
 		jwtMgr, refreshMgr, jwtMgr, refreshMgr, pub, testWebBaseURL, log,
 	)
 
@@ -133,7 +143,7 @@ func TestVerifyEmail_HappyPath(t *testing.T) {
 		t.Fatal("new account should be unverified")
 	}
 
-	token := pub.tokenFor(t)
+	token := pub.tokenFor(t, "user.verification_requested")
 	if _, err := client.VerifyEmail(ctx, &userv1.VerifyEmailRequest{Token: token}); err != nil {
 		t.Fatalf("VerifyEmail: %v", err)
 	}
@@ -148,7 +158,7 @@ func TestVerifyEmail_ReclickIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	client, pub := newVerifyTestClient(t)
 	registerForVerify(t, client, "ada@example.com")
-	token := pub.tokenFor(t)
+	token := pub.tokenFor(t, "user.verification_requested")
 
 	if _, err := client.VerifyEmail(ctx, &userv1.VerifyEmailRequest{Token: token}); err != nil {
 		t.Fatalf("first VerifyEmail: %v", err)
@@ -189,7 +199,7 @@ func TestResendVerification(t *testing.T) {
 	if _, err := client.ResendVerification(ctx, &userv1.ResendVerificationRequest{UserId: userID}); err != nil {
 		t.Fatalf("ResendVerification: %v", err)
 	}
-	token := pub.tokenFor(t)
+	token := pub.tokenFor(t, "user.verification_requested")
 	if _, err := client.VerifyEmail(ctx, &userv1.VerifyEmailRequest{Token: token}); err != nil {
 		t.Fatalf("VerifyEmail after resend: %v", err)
 	}

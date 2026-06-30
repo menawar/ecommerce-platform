@@ -101,6 +101,24 @@ export async function resendVerification(): Promise<void> {
   await gatewayFetch<void>("/auth/resend-verification", { method: "POST" });
 }
 
+// requestPasswordReset asks for a reset link. The gateway always returns 204 (even
+// for an unknown email), so this resolves regardless of whether the account exists.
+export async function requestPasswordReset(email: string): Promise<void> {
+  await gatewayFetch<void>("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+// resetPassword consumes a reset token and sets a new password. A GatewayError 400
+// means the token is invalid or expired.
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await gatewayFetch<void>("/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
 // isLoggedIn is a cheap presence check for UI (which nav links to show). It does
 // NOT prove the token is valid — that's the gateway's job on each real request.
 export async function isLoggedIn(): Promise<boolean> {

@@ -39,3 +39,24 @@ SELECT * FROM verification_tokens WHERE token = $1;
 
 -- name: UseVerificationToken :exec
 UPDATE verification_tokens SET used_at = now() WHERE token = $1 AND used_at IS NULL;
+
+-- Password reset.
+
+-- name: UpdatePassword :exec
+UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1;
+
+-- name: SavePasswordResetToken :exec
+INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3);
+
+-- name: GetPasswordResetToken :one
+SELECT * FROM password_reset_tokens WHERE token = $1;
+
+-- ConsumePasswordResetToken flips the token to used ONLY if it was still unused,
+-- and reports how many rows changed (1 = this caller won the single-use race).
+-- name: ConsumePasswordResetToken :execrows
+UPDATE password_reset_tokens SET used_at = now() WHERE token = $1 AND used_at IS NULL;
+
+-- InvalidateUserPasswordResetTokens spends all of a user's outstanding reset
+-- tokens, so issuing a fresh link makes any prior link stop working.
+-- name: InvalidateUserPasswordResetTokens :exec
+UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL;

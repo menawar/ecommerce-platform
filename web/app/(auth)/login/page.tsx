@@ -4,7 +4,12 @@ import { loginAction } from "../actions";
 // Server Component: it imports the Server Action and hands it to the client form.
 // Passing a server action as a prop is allowed — it's a serializable reference, not
 // the function body, so no server code ships to the browser.
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reset?: string }>;
+}) {
+  const { reset } = await searchParams;
   return (
     <main
       style={{
@@ -56,6 +61,21 @@ export default function LoginPage() {
         >
           Welcome back to Plateau
         </p>
+        {reset === "1" && (
+          <div
+            style={{
+              fontSize: 13,
+              color: "var(--plt-green-deep)",
+              background: "var(--plt-success-bg, #e8f3e3)",
+              padding: "10px 12px",
+              borderRadius: "var(--plt-radius-sm)",
+              marginTop: 16,
+              textAlign: "center",
+            }}
+          >
+            Password updated — sign in with your new password.
+          </div>
+        )}
         <AuthForm action={loginAction} mode="login" />
       </div>
     </main>

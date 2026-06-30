@@ -69,6 +69,14 @@ export function AuthForm({
         </div>
       )}
 
+      {!isRegister && (
+        <div style={{ textAlign: "right", marginTop: -4 }}>
+          <Link href="/forgot-password" style={{ fontSize: 13, color: "var(--plt-terracotta)", fontWeight: 600 }}>
+            Forgot password?
+          </Link>
+        </div>
+      )}
+
       <button
         disabled={pending}
         className="plt-btn-primary-lg"

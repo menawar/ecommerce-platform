@@ -131,6 +131,12 @@ func (fakeUser) VerifyEmail(context.Context, *userv1.VerifyEmailRequest, ...grpc
 func (fakeUser) ResendVerification(context.Context, *userv1.ResendVerificationRequest, ...grpc.CallOption) (*userv1.ResendVerificationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (fakeUser) RequestPasswordReset(context.Context, *userv1.RequestPasswordResetRequest, ...grpc.CallOption) (*userv1.RequestPasswordResetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) ResetPassword(context.Context, *userv1.ResetPasswordRequest, ...grpc.CallOption) (*userv1.ResetPasswordResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 
 // --- harness ---
 

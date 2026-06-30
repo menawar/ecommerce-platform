@@ -89,3 +89,16 @@ func (m *Memory) SetEmailVerified(_ context.Context, userID string) error {
 	}
 	return nil
 }
+
+// UpdatePassword replaces the account's password hash. An unknown id is a no-op
+// (mirrors the Postgres UPDATE affecting zero rows).
+func (m *Memory) UpdatePassword(_ context.Context, userID, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if u, ok := m.byID[userID]; ok {
+		u.PasswordHash = passwordHash
+		m.byID[userID] = u
+	}
+	return nil
+}

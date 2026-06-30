@@ -6,7 +6,16 @@
 import { redirect } from "next/navigation";
 
 import { GatewayError } from "@/lib/gateway";
-import { login, logout, register, resendVerification, setSession, verifyEmail } from "@/lib/session";
+import {
+  login,
+  logout,
+  register,
+  requestPasswordReset,
+  resendVerification,
+  resetPassword,
+  setSession,
+  verifyEmail,
+} from "@/lib/session";
 
 // The shape useActionState threads between submissions (prev state -> next state).
 export type AuthState = { error?: string };
@@ -71,6 +80,51 @@ export async function resendVerificationAction(): Promise<ResendState> {
     throw err;
   }
   return { sent: true };
+}
+
+// ForgotState threads the outcome of a forgot-password submission. On success we
+// show the SAME confirmation whether or not the email exists (enumeration-safe);
+// only a genuine infrastructure failure surfaces an error.
+export type ForgotState = { sent?: boolean; error?: string };
+
+export async function forgotPasswordAction(_prev: ForgotState, formData: FormData): Promise<ForgotState> {
+  const email = String(formData.get("email") ?? "");
+  try {
+    await requestPasswordReset(email);
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      return { error: "Something went wrong — please try again." };
+    }
+    throw err;
+  }
+  return { sent: true };
+}
+
+// ResetPwState threads a reset-password failure back to the form. Success
+// redirects to login, so there's no success state to render.
+export type ResetPwState = { error?: string };
+
+export async function resetPasswordAction(_prev: ResetPwState, formData: FormData): Promise<ResetPwState> {
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  try {
+    await resetPassword(token, password);
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      // Password length is validated in the form (minLength), so a 400 here means
+      // the token is bad/expired. Other statuses get a generic message rather than
+      // leaking the raw gateway/gRPC text.
+      return {
+        error:
+          err.status === 400
+            ? "This reset link is invalid or has expired."
+            : "Something went wrong — please try again.",
+      };
+    }
+    throw err;
+  }
+  // Sessions were revoked server-side; send the user to log in with the new password.
+  redirect("/login?reset=1");
 }
 
 export async function registerAction(_prev: AuthState, formData: FormData): Promise<AuthState> {

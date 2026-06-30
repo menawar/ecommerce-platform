@@ -106,6 +106,17 @@ func (p *Postgres) SetEmailVerified(ctx context.Context, userID string) error {
 	return p.q.SetEmailVerified(ctx, pgtype.UUID{Bytes: uid, Valid: true})
 }
 
+func (p *Postgres) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return fmt.Errorf("store: invalid user id %q: %w", userID, err)
+	}
+	return p.q.UpdatePassword(ctx, db.UpdatePasswordParams{
+		ID:           pgtype.UUID{Bytes: uid, Valid: true},
+		PasswordHash: passwordHash,
+	})
+}
+
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"

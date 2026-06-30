@@ -703,6 +703,174 @@ func (*ResendVerificationResponse) Descriptor() ([]byte, []int) {
 	return file_user_v1_user_proto_rawDescGZIP(), []int{13}
 }
 
+type RequestPasswordResetRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestPasswordResetRequest) Reset() {
+	*x = RequestPasswordResetRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestPasswordResetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestPasswordResetRequest) ProtoMessage() {}
+
+func (x *RequestPasswordResetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestPasswordResetRequest.ProtoReflect.Descriptor instead.
+func (*RequestPasswordResetRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RequestPasswordResetRequest) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+type RequestPasswordResetResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestPasswordResetResponse) Reset() {
+	*x = RequestPasswordResetResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestPasswordResetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestPasswordResetResponse) ProtoMessage() {}
+
+func (x *RequestPasswordResetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestPasswordResetResponse.ProtoReflect.Descriptor instead.
+func (*RequestPasswordResetResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{15}
+}
+
+type ResetPasswordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // the single-use token from the reset link
+	NewPassword   string                 `protobuf:"bytes,2,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"` // plaintext on the wire (TLS); hashed immediately
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetPasswordRequest) Reset() {
+	*x = ResetPasswordRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetPasswordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetPasswordRequest) ProtoMessage() {}
+
+func (x *ResetPasswordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetPasswordRequest.ProtoReflect.Descriptor instead.
+func (*ResetPasswordRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ResetPasswordRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ResetPasswordRequest) GetNewPassword() string {
+	if x != nil {
+		return x.NewPassword
+	}
+	return ""
+}
+
+type ResetPasswordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetPasswordResponse) Reset() {
+	*x = ResetPasswordResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetPasswordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetPasswordResponse) ProtoMessage() {}
+
+func (x *ResetPasswordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetPasswordResponse.ProtoReflect.Descriptor instead.
+func (*ResetPasswordResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{17}
+}
+
 type ValidateTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -712,7 +880,7 @@ type ValidateTokenRequest struct {
 
 func (x *ValidateTokenRequest) Reset() {
 	*x = ValidateTokenRequest{}
-	mi := &file_user_v1_user_proto_msgTypes[14]
+	mi := &file_user_v1_user_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +892,7 @@ func (x *ValidateTokenRequest) String() string {
 func (*ValidateTokenRequest) ProtoMessage() {}
 
 func (x *ValidateTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_user_v1_user_proto_msgTypes[14]
+	mi := &file_user_v1_user_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +905,7 @@ func (x *ValidateTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateTokenRequest.ProtoReflect.Descriptor instead.
 func (*ValidateTokenRequest) Descriptor() ([]byte, []int) {
-	return file_user_v1_user_proto_rawDescGZIP(), []int{14}
+	return file_user_v1_user_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ValidateTokenRequest) GetToken() string {
@@ -758,7 +926,7 @@ type ValidateTokenResponse struct {
 
 func (x *ValidateTokenResponse) Reset() {
 	*x = ValidateTokenResponse{}
-	mi := &file_user_v1_user_proto_msgTypes[15]
+	mi := &file_user_v1_user_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +938,7 @@ func (x *ValidateTokenResponse) String() string {
 func (*ValidateTokenResponse) ProtoMessage() {}
 
 func (x *ValidateTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_user_v1_user_proto_msgTypes[15]
+	mi := &file_user_v1_user_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +951,7 @@ func (x *ValidateTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateTokenResponse.ProtoReflect.Descriptor instead.
 func (*ValidateTokenResponse) Descriptor() ([]byte, []int) {
-	return file_user_v1_user_proto_rawDescGZIP(), []int{15}
+	return file_user_v1_user_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ValidateTokenResponse) GetValid() bool {
@@ -849,13 +1017,20 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x13VerifyEmailResponse\"4\n" +
 	"\x19ResendVerificationRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x1c\n" +
-	"\x1aResendVerificationResponse\",\n" +
+	"\x1aResendVerificationResponse\"3\n" +
+	"\x1bRequestPasswordResetRequest\x12\x14\n" +
+	"\x05email\x18\x01 \x01(\tR\x05email\"\x1e\n" +
+	"\x1cRequestPasswordResetResponse\"O\n" +
+	"\x14ResetPasswordRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
+	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x17\n" +
+	"\x15ResetPasswordResponse\",\n" +
 	"\x14ValidateTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"Z\n" +
 	"\x15ValidateTokenResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role2\xc5\x04\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role2\xfa\x05\n" +
 	"\vUserService\x12?\n" +
 	"\bRegister\x12\x18.user.v1.RegisterRequest\x1a\x19.user.v1.RegisterResponse\x126\n" +
 	"\x05Login\x12\x15.user.v1.LoginRequest\x1a\x16.user.v1.LoginResponse\x12N\n" +
@@ -864,7 +1039,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\fRefreshToken\x12\x1c.user.v1.RefreshTokenRequest\x1a\x1d.user.v1.RefreshTokenResponse\x129\n" +
 	"\x06Logout\x12\x16.user.v1.LogoutRequest\x1a\x17.user.v1.LogoutResponse\x12H\n" +
 	"\vVerifyEmail\x12\x1b.user.v1.VerifyEmailRequest\x1a\x1c.user.v1.VerifyEmailResponse\x12]\n" +
-	"\x12ResendVerification\x12\".user.v1.ResendVerificationRequest\x1a#.user.v1.ResendVerificationResponseB\x91\x01\n" +
+	"\x12ResendVerification\x12\".user.v1.ResendVerificationRequest\x1a#.user.v1.ResendVerificationResponse\x12c\n" +
+	"\x14RequestPasswordReset\x12$.user.v1.RequestPasswordResetRequest\x1a%.user.v1.RequestPasswordResetResponse\x12N\n" +
+	"\rResetPassword\x12\x1d.user.v1.ResetPasswordRequest\x1a\x1e.user.v1.ResetPasswordResponseB\x91\x01\n" +
 	"\vcom.user.v1B\tUserProtoP\x01Z:github.com/menawar/ecommerce-platform/proto/user/v1;userv1\xa2\x02\x03UXX\xaa\x02\aUser.V1\xca\x02\aUser\\V1\xe2\x02\x13User\\V1\\GPBMetadata\xea\x02\bUser::V1b\x06proto3"
 
 var (
@@ -879,44 +1056,52 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_user_v1_user_proto_goTypes = []any{
-	(*RegisterRequest)(nil),            // 0: user.v1.RegisterRequest
-	(*RegisterResponse)(nil),           // 1: user.v1.RegisterResponse
-	(*LoginRequest)(nil),               // 2: user.v1.LoginRequest
-	(*LoginResponse)(nil),              // 3: user.v1.LoginResponse
-	(*RefreshTokenRequest)(nil),        // 4: user.v1.RefreshTokenRequest
-	(*RefreshTokenResponse)(nil),       // 5: user.v1.RefreshTokenResponse
-	(*LogoutRequest)(nil),              // 6: user.v1.LogoutRequest
-	(*LogoutResponse)(nil),             // 7: user.v1.LogoutResponse
-	(*GetUserRequest)(nil),             // 8: user.v1.GetUserRequest
-	(*GetUserResponse)(nil),            // 9: user.v1.GetUserResponse
-	(*VerifyEmailRequest)(nil),         // 10: user.v1.VerifyEmailRequest
-	(*VerifyEmailResponse)(nil),        // 11: user.v1.VerifyEmailResponse
-	(*ResendVerificationRequest)(nil),  // 12: user.v1.ResendVerificationRequest
-	(*ResendVerificationResponse)(nil), // 13: user.v1.ResendVerificationResponse
-	(*ValidateTokenRequest)(nil),       // 14: user.v1.ValidateTokenRequest
-	(*ValidateTokenResponse)(nil),      // 15: user.v1.ValidateTokenResponse
+	(*RegisterRequest)(nil),              // 0: user.v1.RegisterRequest
+	(*RegisterResponse)(nil),             // 1: user.v1.RegisterResponse
+	(*LoginRequest)(nil),                 // 2: user.v1.LoginRequest
+	(*LoginResponse)(nil),                // 3: user.v1.LoginResponse
+	(*RefreshTokenRequest)(nil),          // 4: user.v1.RefreshTokenRequest
+	(*RefreshTokenResponse)(nil),         // 5: user.v1.RefreshTokenResponse
+	(*LogoutRequest)(nil),                // 6: user.v1.LogoutRequest
+	(*LogoutResponse)(nil),               // 7: user.v1.LogoutResponse
+	(*GetUserRequest)(nil),               // 8: user.v1.GetUserRequest
+	(*GetUserResponse)(nil),              // 9: user.v1.GetUserResponse
+	(*VerifyEmailRequest)(nil),           // 10: user.v1.VerifyEmailRequest
+	(*VerifyEmailResponse)(nil),          // 11: user.v1.VerifyEmailResponse
+	(*ResendVerificationRequest)(nil),    // 12: user.v1.ResendVerificationRequest
+	(*ResendVerificationResponse)(nil),   // 13: user.v1.ResendVerificationResponse
+	(*RequestPasswordResetRequest)(nil),  // 14: user.v1.RequestPasswordResetRequest
+	(*RequestPasswordResetResponse)(nil), // 15: user.v1.RequestPasswordResetResponse
+	(*ResetPasswordRequest)(nil),         // 16: user.v1.ResetPasswordRequest
+	(*ResetPasswordResponse)(nil),        // 17: user.v1.ResetPasswordResponse
+	(*ValidateTokenRequest)(nil),         // 18: user.v1.ValidateTokenRequest
+	(*ValidateTokenResponse)(nil),        // 19: user.v1.ValidateTokenResponse
 }
 var file_user_v1_user_proto_depIdxs = []int32{
 	0,  // 0: user.v1.UserService.Register:input_type -> user.v1.RegisterRequest
 	2,  // 1: user.v1.UserService.Login:input_type -> user.v1.LoginRequest
-	14, // 2: user.v1.UserService.ValidateToken:input_type -> user.v1.ValidateTokenRequest
+	18, // 2: user.v1.UserService.ValidateToken:input_type -> user.v1.ValidateTokenRequest
 	8,  // 3: user.v1.UserService.GetUser:input_type -> user.v1.GetUserRequest
 	4,  // 4: user.v1.UserService.RefreshToken:input_type -> user.v1.RefreshTokenRequest
 	6,  // 5: user.v1.UserService.Logout:input_type -> user.v1.LogoutRequest
 	10, // 6: user.v1.UserService.VerifyEmail:input_type -> user.v1.VerifyEmailRequest
 	12, // 7: user.v1.UserService.ResendVerification:input_type -> user.v1.ResendVerificationRequest
-	1,  // 8: user.v1.UserService.Register:output_type -> user.v1.RegisterResponse
-	3,  // 9: user.v1.UserService.Login:output_type -> user.v1.LoginResponse
-	15, // 10: user.v1.UserService.ValidateToken:output_type -> user.v1.ValidateTokenResponse
-	9,  // 11: user.v1.UserService.GetUser:output_type -> user.v1.GetUserResponse
-	5,  // 12: user.v1.UserService.RefreshToken:output_type -> user.v1.RefreshTokenResponse
-	7,  // 13: user.v1.UserService.Logout:output_type -> user.v1.LogoutResponse
-	11, // 14: user.v1.UserService.VerifyEmail:output_type -> user.v1.VerifyEmailResponse
-	13, // 15: user.v1.UserService.ResendVerification:output_type -> user.v1.ResendVerificationResponse
-	8,  // [8:16] is the sub-list for method output_type
-	0,  // [0:8] is the sub-list for method input_type
+	14, // 8: user.v1.UserService.RequestPasswordReset:input_type -> user.v1.RequestPasswordResetRequest
+	16, // 9: user.v1.UserService.ResetPassword:input_type -> user.v1.ResetPasswordRequest
+	1,  // 10: user.v1.UserService.Register:output_type -> user.v1.RegisterResponse
+	3,  // 11: user.v1.UserService.Login:output_type -> user.v1.LoginResponse
+	19, // 12: user.v1.UserService.ValidateToken:output_type -> user.v1.ValidateTokenResponse
+	9,  // 13: user.v1.UserService.GetUser:output_type -> user.v1.GetUserResponse
+	5,  // 14: user.v1.UserService.RefreshToken:output_type -> user.v1.RefreshTokenResponse
+	7,  // 15: user.v1.UserService.Logout:output_type -> user.v1.LogoutResponse
+	11, // 16: user.v1.UserService.VerifyEmail:output_type -> user.v1.VerifyEmailResponse
+	13, // 17: user.v1.UserService.ResendVerification:output_type -> user.v1.ResendVerificationResponse
+	15, // 18: user.v1.UserService.RequestPasswordReset:output_type -> user.v1.RequestPasswordResetResponse
+	17, // 19: user.v1.UserService.ResetPassword:output_type -> user.v1.ResetPasswordResponse
+	10, // [10:20] is the sub-list for method output_type
+	0,  // [0:10] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
@@ -933,7 +1118,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

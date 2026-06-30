@@ -28,22 +28,27 @@ const minPasswordLen = 8
 // verificationTTL is how long an email-verification link stays valid.
 const verificationTTL = 24 * time.Hour
 
+// passwordResetTTL is how long a reset link stays valid — shorter than
+// verification because it can change credentials.
+const passwordResetTTL = 1 * time.Hour
+
 // Server implements userv1.UserServiceServer. It depends on INTERFACES
 // (store.Repository, auth.TokenIssuer, auth.TokenValidator) so it can be tested
 // with an in-memory store and swapped to Postgres without touching this code.
 type Server struct {
 	userv1.UnimplementedUserServiceServer
 
-	repo               store.Repository
-	refreshTokens      store.RefreshTokenStore
-	verificationTokens store.VerificationTokenStore
-	accessIssuer       auth.TokenIssuer    // 15m tokens
-	refreshIssuer      auth.TokenIssuer    // 7d tokens
-	validator          auth.TokenValidator // validates ACCESS tokens
-	refreshValidator   auth.TokenValidator // validates REFRESH tokens (rejects access)
-	publisher          events.Publisher    // emits user.* events; nil = don't publish
-	verifyBaseURL      string              // base URL the verification link points at
-	log                *slog.Logger
+	repo                store.Repository
+	refreshTokens       store.RefreshTokenStore
+	verificationTokens  store.VerificationTokenStore
+	passwordResetTokens store.PasswordResetTokenStore
+	accessIssuer        auth.TokenIssuer    // 15m tokens
+	refreshIssuer       auth.TokenIssuer    // 7d tokens
+	validator           auth.TokenValidator // validates ACCESS tokens
+	refreshValidator    auth.TokenValidator // validates REFRESH tokens (rejects access)
+	publisher           events.Publisher    // emits user.* events; nil = don't publish
+	webBaseURL          string              // base URL for emailed links (verify, reset)
+	log                 *slog.Logger
 
 	// dummyHash is a real bcrypt hash we compare against when an email is not
 	// found, so the "no such user" path costs the same ~60ms as a real wrong
@@ -55,25 +60,27 @@ func NewServer(
 	repo store.Repository,
 	refreshTokens store.RefreshTokenStore,
 	verificationTokens store.VerificationTokenStore,
+	passwordResetTokens store.PasswordResetTokenStore,
 	accessIssuer, refreshIssuer auth.TokenIssuer,
 	validator, refreshValidator auth.TokenValidator,
 	publisher events.Publisher,
-	verifyBaseURL string,
+	webBaseURL string,
 	log *slog.Logger,
 ) *Server {
 	dummy, _ := auth.HashPassword("timing-equalizer-not-a-real-password")
 	return &Server{
-		repo:               repo,
-		refreshTokens:      refreshTokens,
-		verificationTokens: verificationTokens,
-		accessIssuer:       accessIssuer,
-		refreshIssuer:      refreshIssuer,
-		validator:          validator,
-		refreshValidator:   refreshValidator,
-		publisher:          publisher,
-		verifyBaseURL:      verifyBaseURL,
-		log:                log,
-		dummyHash:          dummy,
+		repo:                repo,
+		refreshTokens:       refreshTokens,
+		verificationTokens:  verificationTokens,
+		passwordResetTokens: passwordResetTokens,
+		accessIssuer:        accessIssuer,
+		refreshIssuer:       refreshIssuer,
+		validator:           validator,
+		refreshValidator:    refreshValidator,
+		publisher:           publisher,
+		webBaseURL:          webBaseURL,
+		log:                 log,
+		dummyHash:           dummy,
 	}
 }
 
@@ -331,6 +338,79 @@ func (s *Server) ResendVerification(ctx context.Context, req *userv1.ResendVerif
 	return &userv1.ResendVerificationResponse{}, nil
 }
 
+// RequestPasswordReset emails a reset link. It ALWAYS reports success, even for an
+// unknown email, so the response can't be used to enumerate which addresses have
+// accounts — only a genuine infrastructure fault returns an error.
+func (s *Server) RequestPasswordReset(ctx context.Context, req *userv1.RequestPasswordResetRequest) (*userv1.RequestPasswordResetResponse, error) {
+	email, err := normalizeEmail(req.GetEmail())
+	if err != nil {
+		// Don't reveal that the address was even malformed differently from "sent".
+		return &userv1.RequestPasswordResetResponse{}, nil
+	}
+	u, err := s.repo.GetByEmail(ctx, email)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return &userv1.RequestPasswordResetResponse{}, nil // no account → silent success
+		}
+		return nil, s.internal(ctx, "lookup user for reset", err)
+	}
+	if err := s.issuePasswordReset(ctx, u.ID, u.Email); err != nil {
+		return nil, s.internal(ctx, "issue password reset", err)
+	}
+	return &userv1.RequestPasswordResetResponse{}, nil
+}
+
+// ResetPassword consumes a reset token, sets the new password, and revokes the
+// user's existing sessions. The password is validated BEFORE the token is touched
+// so a too-short password doesn't burn the link. An unknown/expired/used token is
+// reported as one generic InvalidArgument.
+func (s *Server) ResetPassword(ctx context.Context, req *userv1.ResetPasswordRequest) (*userv1.ResetPasswordResponse, error) {
+	if strings.TrimSpace(req.GetToken()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "token is required")
+	}
+	if len(req.GetNewPassword()) < minPasswordLen {
+		return nil, status.Errorf(codes.InvalidArgument, "password must be at least %d characters", minPasswordLen)
+	}
+
+	prt, err := s.passwordResetTokens.Get(ctx, req.GetToken())
+	if err != nil {
+		if errors.Is(err, store.ErrPasswordResetNotFound) {
+			return nil, errInvalidReset()
+		}
+		return nil, s.internal(ctx, "get password reset token", err)
+	}
+	if !prt.Usable(time.Now()) { // expiry/used pre-check (Consume re-checks used atomically)
+		return nil, errInvalidReset()
+	}
+
+	hash, err := auth.HashPassword(req.GetNewPassword())
+	if err != nil {
+		return nil, s.internal(ctx, "hash password", err)
+	}
+
+	// Consume the token BEFORE changing the password and only proceed if we won the
+	// single-use race. This makes the token strictly single-use under concurrency
+	// and leaves no replay window: a lost/already-spent token never reaches the
+	// password update.
+	won, err := s.passwordResetTokens.Consume(ctx, prt.Token)
+	if err != nil {
+		return nil, s.internal(ctx, "consume reset token", err)
+	}
+	if !won {
+		return nil, errInvalidReset()
+	}
+	if err := s.repo.UpdatePassword(ctx, prt.UserID, hash); err != nil {
+		return nil, s.internal(ctx, "update password", err)
+	}
+	// A reset means "I may have lost control" — kill every existing session so a
+	// stolen refresh token stops working. Best-effort: the password is already set.
+	if err := s.refreshTokens.RevokeAllForUser(ctx, prt.UserID); err != nil {
+		s.log.ErrorContext(ctx, "revoke sessions after reset", "err", err, "user_id", prt.UserID)
+	}
+	s.log.InfoContext(ctx, "password reset", "user_id", prt.UserID)
+	return &userv1.ResetPasswordResponse{}, nil
+}
+
 type userRegistered struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`
@@ -373,44 +453,74 @@ func (s *Server) issueVerification(ctx context.Context, userID, email string) er
 	// The dev-visible link surfaces via the Notification service's LogSender; here
 	// we log only the user_id for correlation.
 	s.log.InfoContext(ctx, "email verification link issued", "user_id", userID)
-	s.publishVerificationRequested(ctx, userID, email, s.verifyURL(token))
+	s.publishLinkEvent(ctx, "user.verification_requested", userID, email, s.linkURL("/verify-email", token))
 	return nil
 }
 
-// verifyURL builds the link a recipient clicks. The path matches the web app's
-// verification page; the token rides as a query param.
-func (s *Server) verifyURL(token string) string {
-	base := strings.TrimRight(s.verifyBaseURL, "/")
-	return base + "/verify-email?token=" + url.QueryEscape(token)
+// issuePasswordReset mints + persists a single-use reset token, logs the user_id
+// (never the link), and best-effort emits user.password_reset_requested. A
+// persistence failure is returned so RequestPasswordReset can surface it.
+func (s *Server) issuePasswordReset(ctx context.Context, userID, email string) error {
+	// Revoke any earlier outstanding links first, so only the newest one works.
+	if err := s.passwordResetTokens.InvalidateForUser(ctx, userID); err != nil {
+		return err
+	}
+	token := uuid.NewString()
+	if err := s.passwordResetTokens.Save(ctx, store.PasswordResetToken{
+		Token:     token,
+		UserID:    userID,
+		ExpiresAt: time.Now().Add(passwordResetTTL),
+	}); err != nil {
+		return err
+	}
+	s.log.InfoContext(ctx, "password reset link issued", "user_id", userID)
+	s.publishLinkEvent(ctx, "user.password_reset_requested", userID, email, s.linkURL("/reset-password", token))
+	return nil
 }
 
-type verificationRequested struct {
+// linkURL builds an emailed link: the web base URL + a page path + the token as a
+// query param. Shared by the verification and reset flows.
+func (s *Server) linkURL(path, token string) string {
+	base := strings.TrimRight(s.webBaseURL, "/")
+	return base + path + "?token=" + url.QueryEscape(token)
+}
+
+// linkEvent is the payload for transactional emails that carry an action link.
+// action_url is generic on purpose so the Notification service handles every such
+// email (verify, reset, …) with one code path.
+type linkEvent struct {
 	UserID    string `json:"user_id"`
 	Email     string `json:"email"`
-	VerifyURL string `json:"verify_url"`
+	ActionURL string `json:"action_url"`
 }
 
-func (s *Server) publishVerificationRequested(ctx context.Context, userID, email, link string) {
+// publishLinkEvent best-effort emits a link-carrying user.* event. A publish
+// failure is logged, never returned — the caller's state change already happened.
+func (s *Server) publishLinkEvent(ctx context.Context, topic, userID, email, link string) {
 	if s.publisher == nil {
 		return
 	}
-	env, err := events.New("user.verification_requested", verificationRequested{UserID: userID, Email: email, VerifyURL: link})
+	env, err := events.New(topic, linkEvent{UserID: userID, Email: email, ActionURL: link})
 	if err != nil {
-		s.log.ErrorContext(ctx, "build user.verification_requested", "err", err)
+		s.log.ErrorContext(ctx, "build event", "err", err, "topic", topic)
 		return
 	}
 	payload, err := env.Marshal()
 	if err != nil {
-		s.log.ErrorContext(ctx, "marshal user.verification_requested", "err", err)
+		s.log.ErrorContext(ctx, "marshal event", "err", err, "topic", topic)
 		return
 	}
-	if err := s.publisher.Publish(ctx, "user.verification_requested", payload); err != nil {
-		s.log.ErrorContext(ctx, "publish user.verification_requested", "err", err)
+	if err := s.publisher.Publish(ctx, topic, payload); err != nil {
+		s.log.ErrorContext(ctx, "publish event", "err", err, "topic", topic)
 	}
 }
 
 func errInvalidCredentials() error {
 	return status.Error(codes.Unauthenticated, "invalid email or password")
+}
+
+func errInvalidReset() error {
+	return status.Error(codes.InvalidArgument, "reset token is invalid or expired")
 }
 
 func errInvalidVerification() error {

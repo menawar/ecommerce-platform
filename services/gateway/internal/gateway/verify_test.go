@@ -138,6 +138,61 @@ func TestRequireVerified_BlocksCheckoutForUnverified(t *testing.T) {
 	}
 }
 
+func TestForgotPassword_ForwardsEmail(t *testing.T) {
+	var gotEmail string
+	fake := &fakeUserClient{
+		requestPasswordResetFn: func(in *userv1.RequestPasswordResetRequest) (*userv1.RequestPasswordResetResponse, error) {
+			gotEmail = in.GetEmail()
+			return &userv1.RequestPasswordResetResponse{}, nil
+		},
+	}
+	ts := newTestServer(t, fake)
+
+	resp := postJSON(t, ts.URL+"/auth/forgot-password", `{"email":"ada@example.com"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	if gotEmail != "ada@example.com" {
+		t.Errorf("forwarded email = %q, want ada@example.com", gotEmail)
+	}
+}
+
+func TestResetPassword_ForwardsTokenAndPassword(t *testing.T) {
+	var got *userv1.ResetPasswordRequest
+	fake := &fakeUserClient{
+		resetPasswordFn: func(in *userv1.ResetPasswordRequest) (*userv1.ResetPasswordResponse, error) {
+			got = in
+			return &userv1.ResetPasswordResponse{}, nil
+		},
+	}
+	ts := newTestServer(t, fake)
+
+	resp := postJSON(t, ts.URL+"/auth/reset-password", `{"token":"tok-1","password":"brand-new-pw"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	if got.GetToken() != "tok-1" || got.GetNewPassword() != "brand-new-pw" {
+		t.Errorf("forwarded = %+v, want token tok-1 / password brand-new-pw", got)
+	}
+}
+
+func TestResetPassword_BadTokenMapsTo400(t *testing.T) {
+	fake := &fakeUserClient{
+		resetPasswordFn: func(*userv1.ResetPasswordRequest) (*userv1.ResetPasswordResponse, error) {
+			return nil, status.Error(codes.InvalidArgument, "reset token is invalid or expired")
+		},
+	}
+	ts := newTestServer(t, fake)
+
+	resp := postJSON(t, ts.URL+"/auth/reset-password", `{"token":"nope","password":"brand-new-pw"}`)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestRequireVerified_AllowsVerified(t *testing.T) {
 	order := &fakeOrderClient{
 		placeFn: func(*orderv1.PlaceOrderRequest) (*orderv1.PlaceOrderResponse, error) {

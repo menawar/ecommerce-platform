@@ -21,6 +21,8 @@ var (
 	ErrRefreshNotFound = errors.New("store: refresh token not found")
 	// ErrVerificationNotFound is returned when no verification token matches.
 	ErrVerificationNotFound = errors.New("store: verification token not found")
+	// ErrPasswordResetNotFound is returned when no password-reset token matches.
+	ErrPasswordResetNotFound = errors.New("store: password reset token not found")
 )
 
 // User is a persisted account. Fields mirror the userdb.users schema from the
@@ -49,6 +51,8 @@ type Repository interface {
 	// SetEmailVerified flips email_verified to true for the account. It is
 	// idempotent: verifying an already-verified account is a no-op success.
 	SetEmailVerified(ctx context.Context, userID string) error
+	// UpdatePassword replaces the account's password hash (used by password reset).
+	UpdatePassword(ctx context.Context, userID, passwordHash string) error
 }
 
 // RefreshToken is a persisted, revocable refresh-token record. We store only the
@@ -101,4 +105,38 @@ type VerificationTokenStore interface {
 	// report whether the token existed — a missing or already-used token is a
 	// silent no-op, not an error. Callers detect validity via Get + Usable first.
 	Use(ctx context.Context, token string) error
+}
+
+// PasswordResetToken is a single-use, short-lived token emailed as a link; using
+// it lets the holder set a new password. Same shape as VerificationToken but a
+// distinct type so the two flows can't be confused.
+type PasswordResetToken struct {
+	Token     string
+	UserID    string
+	ExpiresAt time.Time
+	UsedAt    *time.Time // nil = not yet used
+}
+
+// Usable reports whether the token can still reset a password: not used, not expired.
+func (t PasswordResetToken) Usable(now time.Time) bool {
+	return t.UsedAt == nil && now.Before(t.ExpiresAt)
+}
+
+// PasswordResetTokenStore persists password-reset tokens. A separate store (and
+// type) from the verification and refresh stores for the same reason: so one
+// Postgres struct can implement it without Save/Get method collisions.
+//
+// Unlike VerificationTokenStore.Use (best-effort), reset consumption is ATOMIC:
+// Consume flips an unused token and reports whether THIS caller won, so the
+// password update can be gated on it — closing the check-then-act race and the
+// replay window that a password credential can't tolerate.
+type PasswordResetTokenStore interface {
+	Save(ctx context.Context, t PasswordResetToken) error
+	Get(ctx context.Context, token string) (PasswordResetToken, error)
+	// Consume marks the token used only if it was still unused, returning true iff
+	// this call performed the flip (exactly one concurrent caller gets true).
+	Consume(ctx context.Context, token string) (bool, error)
+	// InvalidateForUser spends all of a user's outstanding (unused) reset tokens,
+	// so issuing a new link revokes any prior one.
+	InvalidateForUser(ctx context.Context, userID string) error
 }

@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumePasswordResetToken = `-- name: ConsumePasswordResetToken :execrows
+UPDATE password_reset_tokens SET used_at = now() WHERE token = $1 AND used_at IS NULL
+`
+
+// ConsumePasswordResetToken flips the token to used ONLY if it was still unused,
+// and reports how many rows changed (1 = this caller won the single-use race).
+func (q *Queries) ConsumePasswordResetToken(ctx context.Context, token pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, consumePasswordResetToken, token)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createUser = `-- name: CreateUser :exec
 
 INSERT INTO users (id, email, password_hash, full_name, role, created_at, updated_at)
@@ -41,6 +55,23 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const getPasswordResetToken = `-- name: GetPasswordResetToken :one
+SELECT token, user_id, expires_at, used_at, created_at FROM password_reset_tokens WHERE token = $1
+`
+
+func (q *Queries) GetPasswordResetToken(ctx context.Context, token pgtype.UUID) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, getPasswordResetToken, token)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.Token,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getRefreshToken = `-- name: GetRefreshToken :one
@@ -117,6 +148,17 @@ func (q *Queries) GetVerificationToken(ctx context.Context, token pgtype.UUID) (
 	return i, err
 }
 
+const invalidateUserPasswordResetTokens = `-- name: InvalidateUserPasswordResetTokens :exec
+UPDATE password_reset_tokens SET used_at = now() WHERE user_id = $1 AND used_at IS NULL
+`
+
+// InvalidateUserPasswordResetTokens spends all of a user's outstanding reset
+// tokens, so issuing a fresh link makes any prior link stop working.
+func (q *Queries) InvalidateUserPasswordResetTokens(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, invalidateUserPasswordResetTokens, userID)
+	return err
+}
+
 const revokeAllUserRefreshTokens = `-- name: RevokeAllUserRefreshTokens :exec
 UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL
 `
@@ -132,6 +174,21 @@ UPDATE refresh_tokens SET revoked_at = now() WHERE jti = $1 AND revoked_at IS NU
 
 func (q *Queries) RevokeRefreshToken(ctx context.Context, jti pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, revokeRefreshToken, jti)
+	return err
+}
+
+const savePasswordResetToken = `-- name: SavePasswordResetToken :exec
+INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)
+`
+
+type SavePasswordResetTokenParams struct {
+	Token     pgtype.UUID
+	UserID    pgtype.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) SavePasswordResetToken(ctx context.Context, arg SavePasswordResetTokenParams) error {
+	_, err := q.db.Exec(ctx, savePasswordResetToken, arg.Token, arg.UserID, arg.ExpiresAt)
 	return err
 }
 
@@ -175,6 +232,22 @@ UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1
 // Email verification.
 func (q *Queries) SetEmailVerified(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, setEmailVerified, id)
+	return err
+}
+
+const updatePassword = `-- name: UpdatePassword :exec
+
+UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1
+`
+
+type UpdatePasswordParams struct {
+	ID           pgtype.UUID
+	PasswordHash string
+}
+
+// Password reset.
+func (q *Queries) UpdatePassword(ctx context.Context, arg UpdatePasswordParams) error {
+	_, err := q.db.Exec(ctx, updatePassword, arg.ID, arg.PasswordHash)
 	return err
 }
 

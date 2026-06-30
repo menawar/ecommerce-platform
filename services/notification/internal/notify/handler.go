@@ -18,11 +18,12 @@ import (
 // topicTemplates maps event topics to notification templates. Topics not listed
 // are simply ignored (acked, never turned into a notification).
 var topicTemplates = map[string]string{
-	"user.registered":             "welcome",
-	"user.verification_requested": "email_verification",
-	"order.paid":                  "payment_received",
-	"order.confirmed":             "order_confirmation",
-	"order.cancelled":             "order_cancelled",
+	"user.registered":               "welcome",
+	"user.verification_requested":   "email_verification",
+	"user.password_reset_requested": "password_reset",
+	"order.paid":                    "payment_received",
+	"order.confirmed":               "order_confirmation",
+	"order.cancelled":               "order_cancelled",
 }
 
 type Handler struct {
@@ -51,13 +52,20 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		return nil // unparseable id -> drop (ack), retrying won't help
 	}
 
-	// Every payload we handle carries user_id; some (verification) also carry a
-	// link the email must include. Extract both best-effort.
+	// Every payload we handle carries user_id; transactional-link emails (verify,
+	// password reset) also carry a generic action_url. Extract best-effort.
 	var data struct {
 		UserID    string `json:"user_id"`
+		ActionURL string `json:"action_url"`
+		// verify_url is the pre-rename field name; read it as a fallback so events
+		// already in the stream during a rolling deploy still carry their link.
+		// TODO: remove one release after the action_url rename ships.
 		VerifyURL string `json:"verify_url"`
 	}
 	_ = json.Unmarshal(env.Data, &data)
+	if data.ActionURL == "" {
+		data.ActionURL = data.VerifyURL
+	}
 	var userID pgtype.UUID
 	if uid, perr := uuid.Parse(data.UserID); perr == nil {
 		userID = pgtype.UUID{Bytes: uid, Valid: true}
@@ -89,7 +97,7 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		UserID:   data.UserID,
 		Channel:  "email",
 		Template: template,
-		Link:     data.VerifyURL,
+		Link:     data.ActionURL,
 	})
 }
 
