@@ -61,7 +61,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, jti pgtype.UUID) (Refresh
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, full_name, role, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, password_hash, full_name, role, created_at, updated_at, email_verified FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -75,12 +75,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmailVerified,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, full_name, role, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, password_hash, full_name, role, created_at, updated_at, email_verified FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -94,6 +95,24 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EmailVerified,
+	)
+	return i, err
+}
+
+const getVerificationToken = `-- name: GetVerificationToken :one
+SELECT token, user_id, expires_at, used_at, created_at FROM verification_tokens WHERE token = $1
+`
+
+func (q *Queries) GetVerificationToken(ctx context.Context, token pgtype.UUID) (VerificationToken, error) {
+	row := q.db.QueryRow(ctx, getVerificationToken, token)
+	var i VerificationToken
+	err := row.Scan(
+		&i.Token,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -130,5 +149,40 @@ type SaveRefreshTokenParams struct {
 // Refresh-token tracking (revocation + rotation).
 func (q *Queries) SaveRefreshToken(ctx context.Context, arg SaveRefreshTokenParams) error {
 	_, err := q.db.Exec(ctx, saveRefreshToken, arg.Jti, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
+const saveVerificationToken = `-- name: SaveVerificationToken :exec
+INSERT INTO verification_tokens (token, user_id, expires_at) VALUES ($1, $2, $3)
+`
+
+type SaveVerificationTokenParams struct {
+	Token     pgtype.UUID
+	UserID    pgtype.UUID
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) SaveVerificationToken(ctx context.Context, arg SaveVerificationTokenParams) error {
+	_, err := q.db.Exec(ctx, saveVerificationToken, arg.Token, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
+const setEmailVerified = `-- name: SetEmailVerified :exec
+
+UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1
+`
+
+// Email verification.
+func (q *Queries) SetEmailVerified(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, setEmailVerified, id)
+	return err
+}
+
+const useVerificationToken = `-- name: UseVerificationToken :exec
+UPDATE verification_tokens SET used_at = now() WHERE token = $1 AND used_at IS NULL
+`
+
+func (q *Queries) UseVerificationToken(ctx context.Context, token pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, useVerificationToken, token)
 	return err
 }

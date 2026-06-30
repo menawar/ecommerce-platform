@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -24,20 +25,25 @@ import (
 
 const minPasswordLen = 8
 
+// verificationTTL is how long an email-verification link stays valid.
+const verificationTTL = 24 * time.Hour
+
 // Server implements userv1.UserServiceServer. It depends on INTERFACES
 // (store.Repository, auth.TokenIssuer, auth.TokenValidator) so it can be tested
 // with an in-memory store and swapped to Postgres without touching this code.
 type Server struct {
 	userv1.UnimplementedUserServiceServer
 
-	repo             store.Repository
-	refreshTokens    store.RefreshTokenStore
-	accessIssuer     auth.TokenIssuer    // 15m tokens
-	refreshIssuer    auth.TokenIssuer    // 7d tokens
-	validator        auth.TokenValidator // validates ACCESS tokens
-	refreshValidator auth.TokenValidator // validates REFRESH tokens (rejects access)
-	publisher        events.Publisher    // emits user.registered; nil = don't publish
-	log              *slog.Logger
+	repo               store.Repository
+	refreshTokens      store.RefreshTokenStore
+	verificationTokens store.VerificationTokenStore
+	accessIssuer       auth.TokenIssuer    // 15m tokens
+	refreshIssuer      auth.TokenIssuer    // 7d tokens
+	validator          auth.TokenValidator // validates ACCESS tokens
+	refreshValidator   auth.TokenValidator // validates REFRESH tokens (rejects access)
+	publisher          events.Publisher    // emits user.* events; nil = don't publish
+	verifyBaseURL      string              // base URL the verification link points at
+	log                *slog.Logger
 
 	// dummyHash is a real bcrypt hash we compare against when an email is not
 	// found, so the "no such user" path costs the same ~60ms as a real wrong
@@ -48,22 +54,26 @@ type Server struct {
 func NewServer(
 	repo store.Repository,
 	refreshTokens store.RefreshTokenStore,
+	verificationTokens store.VerificationTokenStore,
 	accessIssuer, refreshIssuer auth.TokenIssuer,
 	validator, refreshValidator auth.TokenValidator,
 	publisher events.Publisher,
+	verifyBaseURL string,
 	log *slog.Logger,
 ) *Server {
 	dummy, _ := auth.HashPassword("timing-equalizer-not-a-real-password")
 	return &Server{
-		repo:             repo,
-		refreshTokens:    refreshTokens,
-		accessIssuer:     accessIssuer,
-		refreshIssuer:    refreshIssuer,
-		validator:        validator,
-		refreshValidator: refreshValidator,
-		publisher:        publisher,
-		log:              log,
-		dummyHash:        dummy,
+		repo:               repo,
+		refreshTokens:      refreshTokens,
+		verificationTokens: verificationTokens,
+		accessIssuer:       accessIssuer,
+		refreshIssuer:      refreshIssuer,
+		validator:          validator,
+		refreshValidator:   refreshValidator,
+		publisher:          publisher,
+		verifyBaseURL:      verifyBaseURL,
+		log:                log,
+		dummyHash:          dummy,
 	}
 }
 
@@ -110,6 +120,12 @@ func (s *Server) Register(ctx context.Context, req *userv1.RegisterRequest) (*us
 	// outbox, a welcome notification isn't worth holding the registration tx open
 	// for — if the publish fails, the user is still registered; we just log it.
 	s.publishUserRegistered(ctx, u.ID, u.Email)
+	// Issue the email-verification token, also best-effort: a failure here must not
+	// fail an otherwise-successful registration — the user can ask for a fresh link
+	// via ResendVerification.
+	if err := s.issueVerification(ctx, u.ID, u.Email); err != nil {
+		s.log.ErrorContext(ctx, "issue verification on register", "err", err, "user_id", u.ID)
+	}
 	return &userv1.RegisterResponse{UserId: u.ID}, nil
 }
 
@@ -247,11 +263,72 @@ func (s *Server) GetUser(ctx context.Context, req *userv1.GetUserRequest) (*user
 		return nil, s.internal(ctx, "get user", err)
 	}
 	return &userv1.GetUserResponse{
-		UserId:   u.ID,
-		Email:    u.Email,
-		FullName: u.FullName,
-		Role:     u.Role,
+		UserId:        u.ID,
+		Email:         u.Email,
+		FullName:      u.FullName,
+		Role:          u.Role,
+		EmailVerified: u.EmailVerified,
 	}, nil
+}
+
+// VerifyEmail consumes a single-use verification token and marks the account's
+// email verified. Re-clicking a link whose account is already verified returns
+// success (idempotent); an unknown, expired, or already-spent token for an
+// unverified account is reported as a single generic InvalidArgument so the
+// response can't be used to probe which tokens exist.
+func (s *Server) VerifyEmail(ctx context.Context, req *userv1.VerifyEmailRequest) (*userv1.VerifyEmailResponse, error) {
+	if strings.TrimSpace(req.GetToken()) == "" {
+		return nil, status.Error(codes.InvalidArgument, "token is required")
+	}
+	vt, err := s.verificationTokens.Get(ctx, req.GetToken())
+	if err != nil {
+		if errors.Is(err, store.ErrVerificationNotFound) {
+			return nil, errInvalidVerification()
+		}
+		return nil, s.internal(ctx, "get verification token", err)
+	}
+
+	if !vt.Usable(time.Now()) {
+		// Expired or already used. If the account is already verified, a repeat
+		// click is a no-op success rather than a confusing error.
+		if u, gerr := s.repo.GetByID(ctx, vt.UserID); gerr == nil && u.EmailVerified {
+			return &userv1.VerifyEmailResponse{}, nil
+		}
+		return nil, errInvalidVerification()
+	}
+
+	if err := s.repo.SetEmailVerified(ctx, vt.UserID); err != nil {
+		return nil, s.internal(ctx, "set email verified", err)
+	}
+	if err := s.verificationTokens.Use(ctx, vt.Token); err != nil {
+		// The flag is already flipped; failing to mark the token used only leaves it
+		// reusable until expiry (still harmless — SetEmailVerified is idempotent).
+		s.log.ErrorContext(ctx, "mark verification token used", "err", err, "user_id", vt.UserID)
+	}
+	s.log.InfoContext(ctx, "email verified", "user_id", vt.UserID)
+	return &userv1.VerifyEmailResponse{}, nil
+}
+
+// ResendVerification issues a fresh verification token for the caller. If the
+// account is already verified it is a no-op success — there is nothing to send.
+func (s *Server) ResendVerification(ctx context.Context, req *userv1.ResendVerificationRequest) (*userv1.ResendVerificationResponse, error) {
+	if _, err := uuid.Parse(req.GetUserId()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a UUID")
+	}
+	u, err := s.repo.GetByID(ctx, req.GetUserId())
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, s.internal(ctx, "get user", err)
+	}
+	if u.EmailVerified {
+		return &userv1.ResendVerificationResponse{}, nil
+	}
+	if err := s.issueVerification(ctx, u.ID, u.Email); err != nil {
+		return nil, s.internal(ctx, "resend verification", err)
+	}
+	return &userv1.ResendVerificationResponse{}, nil
 }
 
 type userRegistered struct {
@@ -278,8 +355,66 @@ func (s *Server) publishUserRegistered(ctx context.Context, userID, email string
 	}
 }
 
+// issueVerification mints + persists a single-use verification token, logs the
+// link (handy in dev), and best-effort emits user.verification_requested carrying
+// the link so the Notification service can render/send the email. A persistence
+// failure is returned so callers can decide whether it is fatal (resend) or not
+// (register).
+func (s *Server) issueVerification(ctx context.Context, userID, email string) error {
+	token := uuid.NewString()
+	if err := s.verificationTokens.Save(ctx, store.VerificationToken{
+		Token:     token,
+		UserID:    userID,
+		ExpiresAt: time.Now().Add(verificationTTL),
+	}); err != nil {
+		return err
+	}
+	// The link carries a live, single-use credential — never log the URL itself.
+	// The dev-visible link surfaces via the Notification service's LogSender; here
+	// we log only the user_id for correlation.
+	s.log.InfoContext(ctx, "email verification link issued", "user_id", userID)
+	s.publishVerificationRequested(ctx, userID, email, s.verifyURL(token))
+	return nil
+}
+
+// verifyURL builds the link a recipient clicks. The path matches the web app's
+// verification page; the token rides as a query param.
+func (s *Server) verifyURL(token string) string {
+	base := strings.TrimRight(s.verifyBaseURL, "/")
+	return base + "/verify-email?token=" + url.QueryEscape(token)
+}
+
+type verificationRequested struct {
+	UserID    string `json:"user_id"`
+	Email     string `json:"email"`
+	VerifyURL string `json:"verify_url"`
+}
+
+func (s *Server) publishVerificationRequested(ctx context.Context, userID, email, link string) {
+	if s.publisher == nil {
+		return
+	}
+	env, err := events.New("user.verification_requested", verificationRequested{UserID: userID, Email: email, VerifyURL: link})
+	if err != nil {
+		s.log.ErrorContext(ctx, "build user.verification_requested", "err", err)
+		return
+	}
+	payload, err := env.Marshal()
+	if err != nil {
+		s.log.ErrorContext(ctx, "marshal user.verification_requested", "err", err)
+		return
+	}
+	if err := s.publisher.Publish(ctx, "user.verification_requested", payload); err != nil {
+		s.log.ErrorContext(ctx, "publish user.verification_requested", "err", err)
+	}
+}
+
 func errInvalidCredentials() error {
 	return status.Error(codes.Unauthenticated, "invalid email or password")
+}
+
+func errInvalidVerification() error {
+	return status.Error(codes.InvalidArgument, "verification token is invalid or expired")
 }
 
 // internal logs the real cause and returns a leak-free Internal status. Keeping

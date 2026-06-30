@@ -47,6 +47,11 @@ func newOrderTestServer(t *testing.T, order *fakeOrderClient) (*httptest.Server,
 		validateFn: func(*userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error) {
 			return &userv1.ValidateTokenResponse{Valid: true, UserId: userID, Role: "customer"}, nil
 		},
+		// placeOrder is gated behind requireVerified, which calls GetUser — the
+		// order tests assume a verified customer so checkout isn't blocked.
+		getUserFn: func(*userv1.GetUserRequest) (*userv1.GetUserResponse, error) {
+			return &userv1.GetUserResponse{UserId: userID, EmailVerified: true}, nil
+		},
 	}
 	h := gateway.NewHandler(uc, &fakeProductClient{}, &fakeCartClient{}, order, testMetrics(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	ts := httptest.NewServer(h.Router())

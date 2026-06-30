@@ -25,11 +25,14 @@ import (
 // exactly what the gateway is responsible for: JSON<->proto translation and
 // status<->HTTP mapping. The real end-to-end is the acceptance run.
 type fakeUserClient struct {
-	registerFn func(*userv1.RegisterRequest) (*userv1.RegisterResponse, error)
-	loginFn    func(*userv1.LoginRequest) (*userv1.LoginResponse, error)
-	validateFn func(*userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error)
-	refreshFn  func(*userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error)
-	logoutFn   func(*userv1.LogoutRequest) (*userv1.LogoutResponse, error)
+	registerFn           func(*userv1.RegisterRequest) (*userv1.RegisterResponse, error)
+	loginFn              func(*userv1.LoginRequest) (*userv1.LoginResponse, error)
+	validateFn           func(*userv1.ValidateTokenRequest) (*userv1.ValidateTokenResponse, error)
+	refreshFn            func(*userv1.RefreshTokenRequest) (*userv1.RefreshTokenResponse, error)
+	logoutFn             func(*userv1.LogoutRequest) (*userv1.LogoutResponse, error)
+	getUserFn            func(*userv1.GetUserRequest) (*userv1.GetUserResponse, error)
+	verifyEmailFn        func(*userv1.VerifyEmailRequest) (*userv1.VerifyEmailResponse, error)
+	resendVerificationFn func(*userv1.ResendVerificationRequest) (*userv1.ResendVerificationResponse, error)
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)
@@ -43,7 +46,22 @@ func (f *fakeUserClient) Login(_ context.Context, in *userv1.LoginRequest, _ ...
 func (f *fakeUserClient) ValidateToken(_ context.Context, in *userv1.ValidateTokenRequest, _ ...grpc.CallOption) (*userv1.ValidateTokenResponse, error) {
 	return f.validateFn(in)
 }
-func (f *fakeUserClient) GetUser(_ context.Context, _ *userv1.GetUserRequest, _ ...grpc.CallOption) (*userv1.GetUserResponse, error) {
+func (f *fakeUserClient) GetUser(_ context.Context, in *userv1.GetUserRequest, _ ...grpc.CallOption) (*userv1.GetUserResponse, error) {
+	if f.getUserFn != nil {
+		return f.getUserFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) VerifyEmail(_ context.Context, in *userv1.VerifyEmailRequest, _ ...grpc.CallOption) (*userv1.VerifyEmailResponse, error) {
+	if f.verifyEmailFn != nil {
+		return f.verifyEmailFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) ResendVerification(_ context.Context, in *userv1.ResendVerificationRequest, _ ...grpc.CallOption) (*userv1.ResendVerificationResponse, error) {
+	if f.resendVerificationFn != nil {
+		return f.resendVerificationFn(in)
+	}
 	return nil, status.Error(codes.Unimplemented, "")
 }
 func (f *fakeUserClient) RefreshToken(_ context.Context, in *userv1.RefreshTokenRequest, _ ...grpc.CallOption) (*userv1.RefreshTokenResponse, error) {

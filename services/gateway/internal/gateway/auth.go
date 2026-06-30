@@ -87,6 +87,33 @@ func (h *Handler) requireAdmin(next http.Handler) http.Handler {
 	})
 }
 
+// requireVerified gates a route behind a verified email. Chained AFTER
+// requireAuth, it asks the User service for the caller's current verification
+// state (a fresh read, so verifying takes effect immediately — no waiting for the
+// access token to refresh) and returns 403 if the email isn't verified yet. We
+// gate only the money path (placing an order); browsing and cart stay open.
+func (h *Handler) requireVerified(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, ok := IdentityFrom(r.Context())
+		if !ok {
+			// requireAuth didn't run ahead of us — a routing mistake. Fail closed.
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		resp, err := h.users.GetUser(r.Context(), &userv1.GetUserRequest{UserId: id.UserID})
+		if err != nil {
+			// The lookup itself failed (e.g. user service down) — upstream error.
+			h.writeGRPCError(w, r, err)
+			return
+		}
+		if !resp.GetEmailVerified() {
+			writeError(w, http.StatusForbidden, "email verification required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // bearerToken extracts the token from an "Authorization: Bearer <token>" header.
 // The scheme match is case-insensitive per RFC 7235; the token must be non-empty.
 func bearerToken(r *http.Request) (string, bool) {
