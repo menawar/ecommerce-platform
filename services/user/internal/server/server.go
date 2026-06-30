@@ -42,6 +42,7 @@ type Server struct {
 	refreshTokens       store.RefreshTokenStore
 	verificationTokens  store.VerificationTokenStore
 	passwordResetTokens store.PasswordResetTokenStore
+	addresses           store.AddressStore
 	accessIssuer        auth.TokenIssuer    // 15m tokens
 	refreshIssuer       auth.TokenIssuer    // 7d tokens
 	validator           auth.TokenValidator // validates ACCESS tokens
@@ -61,6 +62,7 @@ func NewServer(
 	refreshTokens store.RefreshTokenStore,
 	verificationTokens store.VerificationTokenStore,
 	passwordResetTokens store.PasswordResetTokenStore,
+	addresses store.AddressStore,
 	accessIssuer, refreshIssuer auth.TokenIssuer,
 	validator, refreshValidator auth.TokenValidator,
 	publisher events.Publisher,
@@ -73,6 +75,7 @@ func NewServer(
 		refreshTokens:       refreshTokens,
 		verificationTokens:  verificationTokens,
 		passwordResetTokens: passwordResetTokens,
+		addresses:           addresses,
 		accessIssuer:        accessIssuer,
 		refreshIssuer:       refreshIssuer,
 		validator:           validator,

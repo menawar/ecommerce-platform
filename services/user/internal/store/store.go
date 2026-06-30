@@ -23,6 +23,8 @@ var (
 	ErrVerificationNotFound = errors.New("store: verification token not found")
 	// ErrPasswordResetNotFound is returned when no password-reset token matches.
 	ErrPasswordResetNotFound = errors.New("store: password reset token not found")
+	// ErrAddressNotFound is returned when no address matches (or isn't the caller's).
+	ErrAddressNotFound = errors.New("store: address not found")
 )
 
 // User is a persisted account. Fields mirror the userdb.users schema from the
@@ -139,4 +141,42 @@ type PasswordResetTokenStore interface {
 	// InvalidateForUser spends all of a user's outstanding (unused) reset tokens,
 	// so issuing a new link revokes any prior one.
 	InvalidateForUser(ctx context.Context, userID string) error
+}
+
+// Address is a saved shipping address in a user's address book. Orders snapshot a
+// copy at checkout, so editing an address never rewrites past orders.
+type Address struct {
+	ID         string
+	UserID     string
+	Label      string
+	Recipient  string
+	Phone      string
+	Line1      string
+	Line2      string
+	City       string
+	State      string
+	PostalCode string
+	Country    string
+	IsDefault  bool
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+// AddressStore persists the per-user address book. Every read/write is scoped by
+// user_id so a caller can only ever touch their OWN addresses — passing someone
+// else's id yields ErrAddressNotFound, not their data. A separate store/type from
+// the others so its Create/Get don't collide on the shared Postgres struct.
+type AddressStore interface {
+	// Create inserts a and returns it with its generated id/timestamps. If
+	// a.IsDefault, it atomically clears any prior default first.
+	Create(ctx context.Context, a Address) (Address, error)
+	ListByUser(ctx context.Context, userID string) ([]Address, error)
+	Get(ctx context.Context, userID, id string) (Address, error)
+	// Update replaces the mutable fields of the user's address (a.ID, a.UserID);
+	// the default flag is managed only via SetDefault. ErrAddressNotFound if the
+	// address isn't the caller's.
+	Update(ctx context.Context, a Address) error
+	Delete(ctx context.Context, userID, id string) error
+	// SetDefault makes id the user's only default (clears others first, in one tx).
+	SetDefault(ctx context.Context, userID, id string) error
 }

@@ -137,6 +137,21 @@ func (fakeUser) RequestPasswordReset(context.Context, *userv1.RequestPasswordRes
 func (fakeUser) ResetPassword(context.Context, *userv1.ResetPasswordRequest, ...grpc.CallOption) (*userv1.ResetPasswordResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (fakeUser) CreateAddress(context.Context, *userv1.CreateAddressRequest, ...grpc.CallOption) (*userv1.CreateAddressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) ListAddresses(context.Context, *userv1.ListAddressesRequest, ...grpc.CallOption) (*userv1.ListAddressesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) UpdateAddress(context.Context, *userv1.UpdateAddressRequest, ...grpc.CallOption) (*userv1.UpdateAddressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) DeleteAddress(context.Context, *userv1.DeleteAddressRequest, ...grpc.CallOption) (*userv1.DeleteAddressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) SetDefaultAddress(context.Context, *userv1.SetDefaultAddressRequest, ...grpc.CallOption) (*userv1.SetDefaultAddressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 
 // --- harness ---
 

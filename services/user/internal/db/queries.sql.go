@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearDefaultAddresses = `-- name: ClearDefaultAddresses :exec
+UPDATE addresses SET is_default = false, updated_at = now() WHERE user_id = $1 AND is_default = true
+`
+
+// ClearDefaultAddresses + SetAddressDefault run in one tx so a user has at most
+// one default at a time.
+func (q *Queries) ClearDefaultAddresses(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearDefaultAddresses, userID)
+	return err
+}
+
 const consumePasswordResetToken = `-- name: ConsumePasswordResetToken :execrows
 UPDATE password_reset_tokens SET used_at = now() WHERE token = $1 AND used_at IS NULL
 `
@@ -23,6 +34,62 @@ func (q *Queries) ConsumePasswordResetToken(ctx context.Context, token pgtype.UU
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const createAddress = `-- name: CreateAddress :one
+
+INSERT INTO addresses (user_id, label, recipient, phone, line1, line2, city, state, postal_code, country, is_default)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, user_id, label, recipient, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at
+`
+
+type CreateAddressParams struct {
+	UserID     pgtype.UUID
+	Label      string
+	Recipient  string
+	Phone      string
+	Line1      string
+	Line2      string
+	City       string
+	State      string
+	PostalCode string
+	Country    string
+	IsDefault  bool
+}
+
+// Address book.
+func (q *Queries) CreateAddress(ctx context.Context, arg CreateAddressParams) (Address, error) {
+	row := q.db.QueryRow(ctx, createAddress,
+		arg.UserID,
+		arg.Label,
+		arg.Recipient,
+		arg.Phone,
+		arg.Line1,
+		arg.Line2,
+		arg.City,
+		arg.State,
+		arg.PostalCode,
+		arg.Country,
+		arg.IsDefault,
+	)
+	var i Address
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Label,
+		&i.Recipient,
+		&i.Phone,
+		&i.Line1,
+		&i.Line2,
+		&i.City,
+		&i.State,
+		&i.PostalCode,
+		&i.Country,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const createUser = `-- name: CreateUser :exec
@@ -55,6 +122,54 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const deleteAddress = `-- name: DeleteAddress :execrows
+DELETE FROM addresses WHERE id = $1 AND user_id = $2
+`
+
+type DeleteAddressParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) DeleteAddress(ctx context.Context, arg DeleteAddressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAddress, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getAddress = `-- name: GetAddress :one
+SELECT id, user_id, label, recipient, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at FROM addresses WHERE id = $1 AND user_id = $2
+`
+
+type GetAddressParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) GetAddress(ctx context.Context, arg GetAddressParams) (Address, error) {
+	row := q.db.QueryRow(ctx, getAddress, arg.ID, arg.UserID)
+	var i Address
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Label,
+		&i.Recipient,
+		&i.Phone,
+		&i.Line1,
+		&i.Line2,
+		&i.City,
+		&i.State,
+		&i.PostalCode,
+		&i.Country,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getPasswordResetToken = `-- name: GetPasswordResetToken :one
@@ -159,6 +274,45 @@ func (q *Queries) InvalidateUserPasswordResetTokens(ctx context.Context, userID 
 	return err
 }
 
+const listAddressesByUser = `-- name: ListAddressesByUser :many
+SELECT id, user_id, label, recipient, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at FROM addresses WHERE user_id = $1 ORDER BY is_default DESC, created_at DESC
+`
+
+func (q *Queries) ListAddressesByUser(ctx context.Context, userID pgtype.UUID) ([]Address, error) {
+	rows, err := q.db.Query(ctx, listAddressesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Address
+	for rows.Next() {
+		var i Address
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Label,
+			&i.Recipient,
+			&i.Phone,
+			&i.Line1,
+			&i.Line2,
+			&i.City,
+			&i.State,
+			&i.PostalCode,
+			&i.Country,
+			&i.IsDefault,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeAllUserRefreshTokens = `-- name: RevokeAllUserRefreshTokens :exec
 UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL
 `
@@ -224,6 +378,23 @@ func (q *Queries) SaveVerificationToken(ctx context.Context, arg SaveVerificatio
 	return err
 }
 
+const setAddressDefault = `-- name: SetAddressDefault :execrows
+UPDATE addresses SET is_default = true, updated_at = now() WHERE id = $1 AND user_id = $2
+`
+
+type SetAddressDefaultParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+func (q *Queries) SetAddressDefault(ctx context.Context, arg SetAddressDefaultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAddressDefault, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setEmailVerified = `-- name: SetEmailVerified :exec
 
 UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1
@@ -233,6 +404,49 @@ UPDATE users SET email_verified = true, updated_at = now() WHERE id = $1
 func (q *Queries) SetEmailVerified(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, setEmailVerified, id)
 	return err
+}
+
+const updateAddress = `-- name: UpdateAddress :execrows
+UPDATE addresses
+SET label = $3, recipient = $4, phone = $5, line1 = $6, line2 = $7,
+    city = $8, state = $9, postal_code = $10, country = $11, updated_at = now()
+WHERE id = $1 AND user_id = $2
+`
+
+type UpdateAddressParams struct {
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	Label      string
+	Recipient  string
+	Phone      string
+	Line1      string
+	Line2      string
+	City       string
+	State      string
+	PostalCode string
+	Country    string
+}
+
+// UpdateAddress full-replaces the mutable fields; scoped by user_id so one user
+// can't edit another's. Reports rows affected (0 = not found / not owned).
+func (q *Queries) UpdateAddress(ctx context.Context, arg UpdateAddressParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateAddress,
+		arg.ID,
+		arg.UserID,
+		arg.Label,
+		arg.Recipient,
+		arg.Phone,
+		arg.Line1,
+		arg.Line2,
+		arg.City,
+		arg.State,
+		arg.PostalCode,
+		arg.Country,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updatePassword = `-- name: UpdatePassword :exec

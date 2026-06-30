@@ -38,7 +38,79 @@ service UserService {
   // ResetPassword consumes a reset token and sets a new password, revoking the
   // user's existing sessions. Public — the token is the credential.
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+
+  // --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
+  rpc CreateAddress(CreateAddressRequest) returns (CreateAddressResponse);
+  rpc ListAddresses(ListAddressesRequest) returns (ListAddressesResponse);
+  rpc UpdateAddress(UpdateAddressRequest) returns (UpdateAddressResponse);
+  rpc DeleteAddress(DeleteAddressRequest) returns (DeleteAddressResponse);
+  rpc SetDefaultAddress(SetDefaultAddressRequest) returns (SetDefaultAddressResponse);
 }
+
+// Address is a saved shipping address. created_at is unix seconds.
+message Address {
+  string id = 1;
+  string user_id = 2;
+  string label = 3;
+  string recipient = 4;
+  string phone = 5;
+  string line1 = 6;
+  string line2 = 7;
+  string city = 8;
+  string state = 9;
+  string postal_code = 10;
+  string country = 11;
+  bool is_default = 12;
+  int64 created_at = 13;
+}
+
+// AddressInput carries the mutable fields shared by create + update.
+message AddressInput {
+  string label = 1;
+  string recipient = 2;
+  string phone = 3;
+  string line1 = 4;
+  string line2 = 5;
+  string city = 6;
+  string state = 7;
+  string postal_code = 8;
+  string country = 9;
+}
+
+message CreateAddressRequest {
+  string user_id = 1;
+  AddressInput address = 2;
+  bool is_default = 3;
+}
+message CreateAddressResponse {
+  Address address = 1;
+}
+
+message ListAddressesRequest {
+  string user_id = 1;
+}
+message ListAddressesResponse {
+  repeated Address addresses = 1;
+}
+
+message UpdateAddressRequest {
+  string user_id = 1;
+  string address_id = 2;
+  AddressInput address = 3;
+}
+message UpdateAddressResponse {}
+
+message DeleteAddressRequest {
+  string user_id = 1;
+  string address_id = 2;
+}
+message DeleteAddressResponse {}
+
+message SetDefaultAddressRequest {
+  string user_id = 1;
+  string address_id = 2;
+}
+message SetDefaultAddressResponse {}
 
 message RegisterRequest {
   string email = 1;

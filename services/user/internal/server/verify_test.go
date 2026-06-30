@@ -95,7 +95,7 @@ func newVerifyTestClient(t *testing.T) (userv1.UserServiceClient, *capturePublis
 	pub := newCapturePublisher()
 	srv := server.NewServer(
 		store.NewMemory(), store.NewMemoryRefreshTokens(), store.NewMemoryVerificationTokens(),
-		store.NewMemoryPasswordResetTokens(),
+		store.NewMemoryPasswordResetTokens(), store.NewMemoryAddresses(),
 		jwtMgr, refreshMgr, jwtMgr, refreshMgr, pub, testWebBaseURL, log,
 	)
 

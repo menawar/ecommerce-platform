@@ -112,9 +112,10 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	// Save/Get method sets).
 	verifTokens := store.NewPostgresVerificationTokens(pool)
 	resetTokens := store.NewPostgresPasswordResetTokens(pool)
+	addresses := store.NewPostgresAddresses(pool)
 	accessMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.accessTTL, auth.TypeAccess)
 	refreshMgr := auth.NewJWTManager(cfg.jwtSecret, cfg.refreshTTL, auth.TypeRefresh)
-	userSrv := server.NewServer(repo, repo, verifTokens, resetTokens, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), cfg.webBaseURL, log)
+	userSrv := server.NewServer(repo, repo, verifTokens, resetTokens, addresses, accessMgr, refreshMgr, accessMgr, refreshMgr, events.NewNATSPublisher(js), cfg.webBaseURL, log)
 
 	shutdownTracer, err := observability.InitTracer(ctx, "user", cfg.otelEndpoint)
 	if err != nil {

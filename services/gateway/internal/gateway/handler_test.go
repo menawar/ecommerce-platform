@@ -35,6 +35,11 @@ type fakeUserClient struct {
 	resendVerificationFn   func(*userv1.ResendVerificationRequest) (*userv1.ResendVerificationResponse, error)
 	requestPasswordResetFn func(*userv1.RequestPasswordResetRequest) (*userv1.RequestPasswordResetResponse, error)
 	resetPasswordFn        func(*userv1.ResetPasswordRequest) (*userv1.ResetPasswordResponse, error)
+	createAddressFn        func(*userv1.CreateAddressRequest) (*userv1.CreateAddressResponse, error)
+	listAddressesFn        func(*userv1.ListAddressesRequest) (*userv1.ListAddressesResponse, error)
+	updateAddressFn        func(*userv1.UpdateAddressRequest) (*userv1.UpdateAddressResponse, error)
+	deleteAddressFn        func(*userv1.DeleteAddressRequest) (*userv1.DeleteAddressResponse, error)
+	setDefaultAddressFn    func(*userv1.SetDefaultAddressRequest) (*userv1.SetDefaultAddressResponse, error)
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)
@@ -75,6 +80,36 @@ func (f *fakeUserClient) RequestPasswordReset(_ context.Context, in *userv1.Requ
 func (f *fakeUserClient) ResetPassword(_ context.Context, in *userv1.ResetPasswordRequest, _ ...grpc.CallOption) (*userv1.ResetPasswordResponse, error) {
 	if f.resetPasswordFn != nil {
 		return f.resetPasswordFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) CreateAddress(_ context.Context, in *userv1.CreateAddressRequest, _ ...grpc.CallOption) (*userv1.CreateAddressResponse, error) {
+	if f.createAddressFn != nil {
+		return f.createAddressFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) ListAddresses(_ context.Context, in *userv1.ListAddressesRequest, _ ...grpc.CallOption) (*userv1.ListAddressesResponse, error) {
+	if f.listAddressesFn != nil {
+		return f.listAddressesFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) UpdateAddress(_ context.Context, in *userv1.UpdateAddressRequest, _ ...grpc.CallOption) (*userv1.UpdateAddressResponse, error) {
+	if f.updateAddressFn != nil {
+		return f.updateAddressFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) DeleteAddress(_ context.Context, in *userv1.DeleteAddressRequest, _ ...grpc.CallOption) (*userv1.DeleteAddressResponse, error) {
+	if f.deleteAddressFn != nil {
+		return f.deleteAddressFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) SetDefaultAddress(_ context.Context, in *userv1.SetDefaultAddressRequest, _ ...grpc.CallOption) (*userv1.SetDefaultAddressResponse, error) {
+	if f.setDefaultAddressFn != nil {
+		return f.setDefaultAddressFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "")
 }

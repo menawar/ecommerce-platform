@@ -122,6 +122,13 @@ func (h *Handler) Router() http.Handler {
 		pr.Put("/cart/items/{productID}", h.updateCartItem)
 		pr.Delete("/cart/items/{productID}", h.removeCartItem)
 
+		// Address book — all scoped to the caller (user_id from the JWT).
+		pr.Get("/addresses", h.listAddresses)
+		pr.Post("/addresses", h.createAddress)
+		pr.Patch("/addresses/{id}", h.updateAddress)
+		pr.Delete("/addresses/{id}", h.deleteAddress)
+		pr.Post("/addresses/{id}/default", h.setDefaultAddress)
+
 		// Checkout is the money path — gate it behind a verified email. Browsing
 		// orders and the cart stay open to unverified users.
 		pr.With(h.requireVerified).Post("/orders", h.placeOrder)
