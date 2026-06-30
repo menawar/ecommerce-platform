@@ -20,9 +20,13 @@ import (
 )
 
 type fakeOrderClient struct {
-	placeFn func(*orderv1.PlaceOrderRequest) (*orderv1.PlaceOrderResponse, error)
-	listFn  func(*orderv1.ListOrdersRequest) (*orderv1.ListOrdersResponse, error)
-	getFn   func(*orderv1.GetOrderRequest) (*orderv1.GetOrderResponse, error)
+	placeFn          func(*orderv1.PlaceOrderRequest) (*orderv1.PlaceOrderResponse, error)
+	listFn           func(*orderv1.ListOrdersRequest) (*orderv1.ListOrdersResponse, error)
+	getFn            func(*orderv1.GetOrderRequest) (*orderv1.GetOrderResponse, error)
+	listShippingFn   func(*orderv1.ListShippingMethodsRequest) (*orderv1.ListShippingMethodsResponse, error)
+	createShippingFn func(*orderv1.CreateShippingMethodRequest) (*orderv1.CreateShippingMethodResponse, error)
+	updateShippingFn func(*orderv1.UpdateShippingMethodRequest) (*orderv1.UpdateShippingMethodResponse, error)
+	deleteShippingFn func(*orderv1.DeleteShippingMethodRequest) (*orderv1.DeleteShippingMethodResponse, error)
 }
 
 var _ orderv1.OrderServiceClient = (*fakeOrderClient)(nil)
@@ -37,6 +41,30 @@ func (f *fakeOrderClient) GetOrder(_ context.Context, in *orderv1.GetOrderReques
 	return f.getFn(in)
 }
 func (f *fakeOrderClient) CancelOrder(context.Context, *orderv1.CancelOrderRequest, ...grpc.CallOption) (*orderv1.CancelOrderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) ListShippingMethods(_ context.Context, in *orderv1.ListShippingMethodsRequest, _ ...grpc.CallOption) (*orderv1.ListShippingMethodsResponse, error) {
+	if f.listShippingFn != nil {
+		return f.listShippingFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) CreateShippingMethod(_ context.Context, in *orderv1.CreateShippingMethodRequest, _ ...grpc.CallOption) (*orderv1.CreateShippingMethodResponse, error) {
+	if f.createShippingFn != nil {
+		return f.createShippingFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) UpdateShippingMethod(_ context.Context, in *orderv1.UpdateShippingMethodRequest, _ ...grpc.CallOption) (*orderv1.UpdateShippingMethodResponse, error) {
+	if f.updateShippingFn != nil {
+		return f.updateShippingFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) DeleteShippingMethod(_ context.Context, in *orderv1.DeleteShippingMethodRequest, _ ...grpc.CallOption) (*orderv1.DeleteShippingMethodResponse, error) {
+	if f.deleteShippingFn != nil {
+		return f.deleteShippingFn(in)
+	}
 	return nil, status.Error(codes.Unimplemented, "unused")
 }
 

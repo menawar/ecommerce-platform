@@ -129,6 +129,9 @@ func (h *Handler) Router() http.Handler {
 		pr.Delete("/addresses/{id}", h.deleteAddress)
 		pr.Post("/addresses/{id}/default", h.setDefaultAddress)
 
+		// Shipping methods: listing is role-aware (customers see active; admins all).
+		pr.Get("/shipping-methods", h.listShippingMethods)
+
 		// Checkout is the money path — gate it behind a verified email. Browsing
 		// orders and the cart stay open to unverified users.
 		pr.With(h.requireVerified).Post("/orders", h.placeOrder)
@@ -146,6 +149,10 @@ func (h *Handler) Router() http.Handler {
 		ar.Post("/products", h.createProduct)
 		ar.Patch("/products/{id}", h.updateProduct)
 		ar.Delete("/products/{id}", h.deleteProduct)
+
+		ar.Post("/shipping-methods", h.createShippingMethod)
+		ar.Patch("/shipping-methods/{id}", h.updateShippingMethod)
+		ar.Delete("/shipping-methods/{id}", h.deleteShippingMethod)
 	})
 
 	return r

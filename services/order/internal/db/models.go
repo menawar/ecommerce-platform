@@ -38,3 +38,14 @@ type Outbox struct {
 	CreatedAt   pgtype.Timestamptz
 	PublishedAt pgtype.Timestamptz
 }
+
+type ShippingMethod struct {
+	ID          pgtype.UUID
+	Name        string
+	Description string
+	PriceCents  int64
+	SortOrder   int32
+	Active      bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}

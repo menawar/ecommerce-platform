@@ -19,10 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	OrderService_PlaceOrder_FullMethodName  = "/order.v1.OrderService/PlaceOrder"
-	OrderService_GetOrder_FullMethodName    = "/order.v1.OrderService/GetOrder"
-	OrderService_ListOrders_FullMethodName  = "/order.v1.OrderService/ListOrders"
-	OrderService_CancelOrder_FullMethodName = "/order.v1.OrderService/CancelOrder"
+	OrderService_PlaceOrder_FullMethodName           = "/order.v1.OrderService/PlaceOrder"
+	OrderService_GetOrder_FullMethodName             = "/order.v1.OrderService/GetOrder"
+	OrderService_ListOrders_FullMethodName           = "/order.v1.OrderService/ListOrders"
+	OrderService_CancelOrder_FullMethodName          = "/order.v1.OrderService/CancelOrder"
+	OrderService_ListShippingMethods_FullMethodName  = "/order.v1.OrderService/ListShippingMethods"
+	OrderService_CreateShippingMethod_FullMethodName = "/order.v1.OrderService/CreateShippingMethod"
+	OrderService_UpdateShippingMethod_FullMethodName = "/order.v1.OrderService/UpdateShippingMethod"
+	OrderService_DeleteShippingMethod_FullMethodName = "/order.v1.OrderService/DeleteShippingMethod"
 )
 
 // OrderServiceClient is the client API for OrderService service.
@@ -37,6 +41,12 @@ type OrderServiceClient interface {
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*GetOrderResponse, error)
 	ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
 	CancelOrder(ctx context.Context, in *CancelOrderRequest, opts ...grpc.CallOption) (*CancelOrderResponse, error)
+	// --- Shipping methods. List serves checkout (active_only) and the admin list
+	// (all); create/update/delete are admin-only (the Gateway enforces the role). ---
+	ListShippingMethods(ctx context.Context, in *ListShippingMethodsRequest, opts ...grpc.CallOption) (*ListShippingMethodsResponse, error)
+	CreateShippingMethod(ctx context.Context, in *CreateShippingMethodRequest, opts ...grpc.CallOption) (*CreateShippingMethodResponse, error)
+	UpdateShippingMethod(ctx context.Context, in *UpdateShippingMethodRequest, opts ...grpc.CallOption) (*UpdateShippingMethodResponse, error)
+	DeleteShippingMethod(ctx context.Context, in *DeleteShippingMethodRequest, opts ...grpc.CallOption) (*DeleteShippingMethodResponse, error)
 }
 
 type orderServiceClient struct {
@@ -87,6 +97,46 @@ func (c *orderServiceClient) CancelOrder(ctx context.Context, in *CancelOrderReq
 	return out, nil
 }
 
+func (c *orderServiceClient) ListShippingMethods(ctx context.Context, in *ListShippingMethodsRequest, opts ...grpc.CallOption) (*ListShippingMethodsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListShippingMethodsResponse)
+	err := c.cc.Invoke(ctx, OrderService_ListShippingMethods_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderServiceClient) CreateShippingMethod(ctx context.Context, in *CreateShippingMethodRequest, opts ...grpc.CallOption) (*CreateShippingMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateShippingMethodResponse)
+	err := c.cc.Invoke(ctx, OrderService_CreateShippingMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderServiceClient) UpdateShippingMethod(ctx context.Context, in *UpdateShippingMethodRequest, opts ...grpc.CallOption) (*UpdateShippingMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateShippingMethodResponse)
+	err := c.cc.Invoke(ctx, OrderService_UpdateShippingMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderServiceClient) DeleteShippingMethod(ctx context.Context, in *DeleteShippingMethodRequest, opts ...grpc.CallOption) (*DeleteShippingMethodResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteShippingMethodResponse)
+	err := c.cc.Invoke(ctx, OrderService_DeleteShippingMethod_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrderServiceServer is the server API for OrderService service.
 // All implementations must embed UnimplementedOrderServiceServer
 // for forward compatibility.
@@ -99,6 +149,12 @@ type OrderServiceServer interface {
 	GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error)
 	ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error)
 	CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error)
+	// --- Shipping methods. List serves checkout (active_only) and the admin list
+	// (all); create/update/delete are admin-only (the Gateway enforces the role). ---
+	ListShippingMethods(context.Context, *ListShippingMethodsRequest) (*ListShippingMethodsResponse, error)
+	CreateShippingMethod(context.Context, *CreateShippingMethodRequest) (*CreateShippingMethodResponse, error)
+	UpdateShippingMethod(context.Context, *UpdateShippingMethodRequest) (*UpdateShippingMethodResponse, error)
+	DeleteShippingMethod(context.Context, *DeleteShippingMethodRequest) (*DeleteShippingMethodResponse, error)
 	mustEmbedUnimplementedOrderServiceServer()
 }
 
@@ -120,6 +176,18 @@ func (UnimplementedOrderServiceServer) ListOrders(context.Context, *ListOrdersRe
 }
 func (UnimplementedOrderServiceServer) CancelOrder(context.Context, *CancelOrderRequest) (*CancelOrderResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelOrder not implemented")
+}
+func (UnimplementedOrderServiceServer) ListShippingMethods(context.Context, *ListShippingMethodsRequest) (*ListShippingMethodsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListShippingMethods not implemented")
+}
+func (UnimplementedOrderServiceServer) CreateShippingMethod(context.Context, *CreateShippingMethodRequest) (*CreateShippingMethodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateShippingMethod not implemented")
+}
+func (UnimplementedOrderServiceServer) UpdateShippingMethod(context.Context, *UpdateShippingMethodRequest) (*UpdateShippingMethodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateShippingMethod not implemented")
+}
+func (UnimplementedOrderServiceServer) DeleteShippingMethod(context.Context, *DeleteShippingMethodRequest) (*DeleteShippingMethodResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteShippingMethod not implemented")
 }
 func (UnimplementedOrderServiceServer) mustEmbedUnimplementedOrderServiceServer() {}
 func (UnimplementedOrderServiceServer) testEmbeddedByValue()                      {}
@@ -214,6 +282,78 @@ func _OrderService_CancelOrder_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrderService_ListShippingMethods_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListShippingMethodsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).ListShippingMethods(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_ListShippingMethods_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).ListShippingMethods(ctx, req.(*ListShippingMethodsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrderService_CreateShippingMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateShippingMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).CreateShippingMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_CreateShippingMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).CreateShippingMethod(ctx, req.(*CreateShippingMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrderService_UpdateShippingMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateShippingMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).UpdateShippingMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_UpdateShippingMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).UpdateShippingMethod(ctx, req.(*UpdateShippingMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrderService_DeleteShippingMethod_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteShippingMethodRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).DeleteShippingMethod(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_DeleteShippingMethod_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).DeleteShippingMethod(ctx, req.(*DeleteShippingMethodRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OrderService_ServiceDesc is the grpc.ServiceDesc for OrderService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -236,6 +376,22 @@ var OrderService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelOrder",
 			Handler:    _OrderService_CancelOrder_Handler,
+		},
+		{
+			MethodName: "ListShippingMethods",
+			Handler:    _OrderService_ListShippingMethods_Handler,
+		},
+		{
+			MethodName: "CreateShippingMethod",
+			Handler:    _OrderService_CreateShippingMethod_Handler,
+		},
+		{
+			MethodName: "UpdateShippingMethod",
+			Handler:    _OrderService_UpdateShippingMethod_Handler,
+		},
+		{
+			MethodName: "DeleteShippingMethod",
+			Handler:    _OrderService_DeleteShippingMethod_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

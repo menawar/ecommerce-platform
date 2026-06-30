@@ -10,7 +10,59 @@ service OrderService {
   rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
   rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+
+  // --- Shipping methods. List serves checkout (active_only) and the admin list
+  // (all); create/update/delete are admin-only (the Gateway enforces the role). ---
+  rpc ListShippingMethods(ListShippingMethodsRequest) returns (ListShippingMethodsResponse);
+  rpc CreateShippingMethod(CreateShippingMethodRequest) returns (CreateShippingMethodResponse);
+  rpc UpdateShippingMethod(UpdateShippingMethodRequest) returns (UpdateShippingMethodResponse);
+  rpc DeleteShippingMethod(DeleteShippingMethodRequest) returns (DeleteShippingMethodResponse);
 }
+
+message ShippingMethod {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int64 price_cents = 4;
+  int32 sort_order = 5;
+  bool active = 6;
+}
+
+// ShippingMethodInput carries the mutable fields shared by create + update.
+message ShippingMethodInput {
+  string name = 1;
+  string description = 2;
+  int64 price_cents = 3;
+  int32 sort_order = 4;
+  bool active = 5;
+}
+
+message ListShippingMethodsRequest {
+  bool active_only = 1; // true at checkout; false for the admin list
+}
+message ListShippingMethodsResponse {
+  repeated ShippingMethod methods = 1;
+}
+
+message CreateShippingMethodRequest {
+  ShippingMethodInput method = 1;
+}
+message CreateShippingMethodResponse {
+  ShippingMethod method = 1;
+}
+
+message UpdateShippingMethodRequest {
+  string id = 1;
+  ShippingMethodInput method = 2;
+}
+message UpdateShippingMethodResponse {
+  ShippingMethod method = 1;
+}
+
+message DeleteShippingMethodRequest {
+  string id = 1;
+}
+message DeleteShippingMethodResponse {}
 
 message OrderItem {
   string product_id = 1;
