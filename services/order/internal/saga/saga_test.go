@@ -125,6 +125,12 @@ func (fakeUser) RefreshToken(context.Context, *userv1.RefreshTokenRequest, ...gr
 func (fakeUser) Logout(context.Context, *userv1.LogoutRequest, ...grpc.CallOption) (*userv1.LogoutResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (fakeUser) VerifyEmail(context.Context, *userv1.VerifyEmailRequest, ...grpc.CallOption) (*userv1.VerifyEmailResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
+func (fakeUser) ResendVerification(context.Context, *userv1.ResendVerificationRequest, ...grpc.CallOption) (*userv1.ResendVerificationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 
 // --- harness ---
 
