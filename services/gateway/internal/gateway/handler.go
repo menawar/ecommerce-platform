@@ -112,6 +112,7 @@ func (h *Handler) Router() http.Handler {
 		pr.Use(h.requireAuth)
 		pr.Use(h.rateLimit) // after requireAuth → keyed PER USER
 		pr.Get("/me", h.me)
+		pr.Get("/me/export", h.exportData) // NDPR/GDPR data export (self-service)
 		pr.Post("/auth/resend-verification", h.resendVerification)
 
 		// Cart is per-user: every handler reads the user_id from the validated

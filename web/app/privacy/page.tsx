@@ -54,8 +54,12 @@ export default function PrivacyPage() {
         </p>
         <ul style={{ margin: "8px 0 0", paddingLeft: 22 }}>
           <li>
-            <b>Access / portability</b> — export a machine-readable copy of your data (profile,
-            addresses, orders, notifications).
+            <b>Access / portability</b> — download a machine-readable copy of your data (profile,
+            addresses, orders) yourself from your{" "}
+            <Link href="/account" style={{ color: "var(--plt-green-text)" }}>
+              account page
+            </Link>
+            .
           </li>
           <li>
             <b>Erasure</b> — delete your account. We anonymise your personal data across our services;
