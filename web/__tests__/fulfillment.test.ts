@@ -11,7 +11,7 @@ vi.mock("@/lib/gateway", () => ({
   gatewayFetch: (...args: unknown[]) => gatewayFetch(...args),
 }));
 
-import { listAllOrders, markShipped, markDelivered } from "@/lib/orders";
+import { listAllOrders, markShipped, markDelivered, refundOrder } from "@/lib/orders";
 
 beforeEach(() => gatewayFetch.mockReset());
 
@@ -40,5 +40,11 @@ describe("lib/orders admin fulfillment", () => {
     gatewayFetch.mockResolvedValue(undefined);
     await markDelivered("o-1");
     expect(gatewayFetch).toHaveBeenCalledWith("/orders/o-1/deliver", { method: "POST" });
+  });
+
+  it("refundOrder POSTs to the refund sub-route", async () => {
+    gatewayFetch.mockResolvedValue(undefined);
+    await refundOrder("o-1");
+    expect(gatewayFetch).toHaveBeenCalledWith("/orders/o-1/refund", { method: "POST" });
   });
 });

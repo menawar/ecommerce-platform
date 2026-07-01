@@ -18,6 +18,12 @@ RETURNING *;
 -- name: GetPaymentByProviderRef :one
 SELECT * FROM payments WHERE provider_ref = $1;
 
+-- MarkPaymentRefunded flips a succeeded charge to refunded. The status precondition
+-- makes it an atomic compare-and-set: only a currently-succeeded payment refunds,
+-- and a concurrent second refund matches 0 rows.
+-- name: MarkPaymentRefunded :one
+UPDATE payments SET status = 'refunded' WHERE id = $1 AND status = 'succeeded' RETURNING *;
+
 -- Outbox: events written in the same tx as a payment status change, drained to
 -- NATS by the shared poller (see pkg/outbox).
 

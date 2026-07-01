@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { GatewayError } from "@/lib/gateway";
-import { markShipped, markDelivered } from "@/lib/orders";
+import { markShipped, markDelivered, refundOrder } from "@/lib/orders";
 
 // shipOrderAction / deliverOrderAction advance fulfillment from the admin orders
 // page. The gateway enforces the admin role; here we just map auth failures.
@@ -29,6 +29,18 @@ export async function deliverOrderAction(formData: FormData) {
   } catch (err) {
     if (err instanceof GatewayError && err.status === 401) redirect("/login");
     throw err;
+  }
+  revalidatePath("/admin/orders");
+}
+
+export async function refundOrderAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  try {
+    await refundOrder(id);
+  } catch (err) {
+    if (err instanceof GatewayError && err.status === 401) redirect("/login");
+    throw err; // 403 / 422 (non-refundable) surface on the error boundary
   }
   revalidatePath("/admin/orders");
 }

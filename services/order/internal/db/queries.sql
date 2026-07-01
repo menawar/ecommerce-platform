@@ -39,6 +39,14 @@ SET status = 'DELIVERED', delivered_at = now(), updated_at = now()
 WHERE id = $1 AND status = 'SHIPPED'
 RETURNING *;
 
+-- MarkOrderRefunded is an atomic compare-and-set from any refundable (paid) state,
+-- so a concurrent refund can't fire twice.
+-- name: MarkOrderRefunded :one
+UPDATE orders
+SET status = 'REFUNDED', updated_at = now()
+WHERE id = $1 AND status IN ('PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED')
+RETURNING *;
+
 -- name: UpdateOrderStatus :one
 UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING *;
 

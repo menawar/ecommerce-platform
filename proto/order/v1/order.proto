@@ -22,6 +22,9 @@ service OrderService {
   rpc MarkShipped(MarkShippedRequest) returns (MarkShippedResponse);
   rpc MarkDelivered(MarkDeliveredRequest) returns (MarkDeliveredResponse);
   rpc ListAllOrders(ListAllOrdersRequest) returns (ListAllOrdersResponse);
+  // RefundOrder refunds a paid order (admin-only): reverses the charge via the
+  // Payment service, then marks the order REFUNDED. Idempotent.
+  rpc RefundOrder(RefundOrderRequest) returns (RefundOrderResponse);
 }
 
 message ShippingMethod {
@@ -164,4 +167,11 @@ message ListAllOrdersRequest {
 }
 message ListAllOrdersResponse {
   repeated Order orders = 1;
+}
+
+message RefundOrderRequest {
+  string order_id = 1;
+}
+message RefundOrderResponse {
+  Order order = 1;
 }

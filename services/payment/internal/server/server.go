@@ -203,6 +203,52 @@ func writeOutbox(ctx context.Context, q *db.Queries, topic string, data paymentE
 	return q.InsertOutbox(ctx, db.InsertOutboxParams{Topic: topic, Payload: payload})
 }
 
+const statusRefunded = "refunded"
+
+// RefundPayment reverses a succeeded charge synchronously. It is idempotent: an
+// already-refunded payment returns success without calling the provider again.
+// (No event is emitted here — the Order service, which drives refunds, emits
+// order.refunded once it marks the order REFUNDED.)
+func (s *Server) RefundPayment(ctx context.Context, req *paymentv1.RefundPaymentRequest) (*paymentv1.RefundPaymentResponse, error) {
+	if s.async == nil {
+		return nil, status.Error(codes.Unimplemented, "async payment provider not configured")
+	}
+	id, err := uuid.Parse(req.GetPaymentId())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "payment_id must be a UUID")
+	}
+	p, err := s.q.GetPaymentByID(ctx, pgtype.UUID{Bytes: id, Valid: true})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "payment not found")
+		}
+		return nil, s.internal(ctx, "get payment", err)
+	}
+	if p.Status == statusRefunded {
+		return &paymentv1.RefundPaymentResponse{Status: statusRefunded}, nil // idempotent
+	}
+	if p.Status != statusSucceeded {
+		return nil, status.Errorf(codes.FailedPrecondition, "payment is %s, not refundable", p.Status)
+	}
+	if p.ProviderRef == nil || *p.ProviderRef == "" {
+		return nil, s.internal(ctx, "refund payment", errors.New("payment has no provider reference"))
+	}
+
+	// Reverse the funds at the PSP (synchronous). Note: a genuinely-concurrent
+	// double refund could call the provider twice — acceptable for the admin-driven
+	// flow; the idempotent status check above collapses the common retry case.
+	if err := s.async.Refund(ctx, *p.ProviderRef, p.AmountCents); err != nil {
+		return nil, s.internal(ctx, "provider refund", err)
+	}
+	// Atomic compare-and-set (WHERE status='succeeded'); ErrNoRows means a concurrent
+	// refund already flipped it — still success, don't error.
+	if _, err := s.q.MarkPaymentRefunded(ctx, p.ID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, s.internal(ctx, "mark refunded", err)
+	}
+	s.log.InfoContext(ctx, "payment refunded", "payment_id", uuidStr(p.ID))
+	return &paymentv1.RefundPaymentResponse{Status: statusRefunded}, nil
+}
+
 func (s *Server) GetPayment(ctx context.Context, req *paymentv1.GetPaymentRequest) (*paymentv1.GetPaymentResponse, error) {
 	id, err := uuid.Parse(req.GetPaymentId())
 	if err != nil {

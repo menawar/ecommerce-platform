@@ -24,13 +24,18 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   }
 
   const isCancelled = order.status === "CANCELLED";
+  const isRefunded = order.status === "REFUNDED";
   // CONFIRMED/SHIPPED/DELIVERED are all successful, post-payment states.
   const isSuccess = order.status === "CONFIRMED" || order.status === "SHIPPED" || order.status === "DELIVERED";
-  const isPending = !isCancelled && !isSuccess; // PAYMENT_PENDING and pre-payment
+  const isPending = !isCancelled && !isRefunded && !isSuccess; // PAYMENT_PENDING and pre-payment
   const heading =
-    { CONFIRMED: "Order confirmed", SHIPPED: "Order shipped", DELIVERED: "Order delivered", CANCELLED: "Order cancelled" }[
-      order.status
-    ] ?? "Awaiting payment";
+    {
+      CONFIRMED: "Order confirmed",
+      SHIPPED: "Order shipped",
+      DELIVERED: "Order delivered",
+      CANCELLED: "Order cancelled",
+      REFUNDED: "Order refunded",
+    }[order.status] ?? "Awaiting payment";
 
   return (
     <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px" }}>
@@ -65,7 +70,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             margin: "0 auto 20px",
           }}
         >
-          {order.status === "DELIVERED" ? "📦" : order.status === "SHIPPED" ? "🚚" : isSuccess ? "✓" : isCancelled ? "✕" : "⏳"}
+          {order.status === "DELIVERED" ? "📦" : order.status === "SHIPPED" ? "🚚" : isSuccess ? "✓" : isRefunded ? "↩" : isCancelled ? "✕" : "⏳"}
         </div>
 
         {/* While the order awaits its payment outcome, poll until it settles. */}
@@ -94,6 +99,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             </>
           )}
           {order.status === "DELIVERED" && <>Delivered. Enjoy your harvest!</>}
+          {isRefunded && <>This order was refunded — the funds have been returned to your payment method.</>}
           {isCancelled && (
             <>
               Your order was cancelled (payment declined). You were not charged

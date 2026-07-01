@@ -12,7 +12,8 @@ const (
 	StatusPaid           Status = "PAID"           // charge succeeded, stock committed
 	StatusConfirmed      Status = "CONFIRMED"      // paid + confirmed, awaiting fulfillment
 	StatusShipped        Status = "SHIPPED"        // handed to delivery (has tracking)
-	StatusDelivered      Status = "DELIVERED"      // terminal success
+	StatusDelivered      Status = "DELIVERED"      // fulfilled (still refundable — returns)
+	StatusRefunded       Status = "REFUNDED"       // terminal: charge reversed
 	StatusPaymentFailed  Status = "PAYMENT_FAILED" // charge declined
 	StatusCancelled      Status = "CANCELLED"      // terminal failure (compensated)
 )
@@ -24,10 +25,13 @@ var transitions = map[Status][]Status{
 	StatusPending:        {StatusStockReserved, StatusCancelled},
 	StatusStockReserved:  {StatusPaymentPending, StatusCancelled},
 	StatusPaymentPending: {StatusPaid, StatusPaymentFailed},
-	StatusPaid:           {StatusConfirmed},
-	StatusConfirmed:      {StatusShipped}, // fulfillment begins
-	StatusShipped:        {StatusDelivered},
-	StatusDelivered:      {}, // terminal
+	// Money is captured from PAID onward, so every such state is refundable — incl.
+	// a PAID order whose confirm step stalled, and one already delivered (returns).
+	StatusPaid:           {StatusConfirmed, StatusRefunded},
+	StatusConfirmed:      {StatusShipped, StatusRefunded},
+	StatusShipped:        {StatusDelivered, StatusRefunded},
+	StatusDelivered:      {StatusRefunded},
+	StatusRefunded:       {}, // terminal
 	StatusPaymentFailed:  {StatusCancelled},
 	StatusCancelled:      {}, // terminal
 }
@@ -46,7 +50,7 @@ func (s Status) CanTransitionTo(next Status) bool {
 
 // IsTerminal reports whether the order has reached an end state (no further work).
 func (s Status) IsTerminal() bool {
-	return s == StatusDelivered || s == StatusCancelled
+	return s == StatusRefunded || s == StatusCancelled
 }
 
 // IsPostPayment reports whether the order's payment outcome is already settled —
@@ -55,7 +59,7 @@ func (s Status) IsTerminal() bool {
 // and CancelOrder refuses them (a paid order can only be refunded, never cancelled).
 func (s Status) IsPostPayment() bool {
 	switch s {
-	case StatusConfirmed, StatusShipped, StatusDelivered, StatusCancelled:
+	case StatusConfirmed, StatusShipped, StatusDelivered, StatusRefunded, StatusCancelled:
 		return true
 	default:
 		return false

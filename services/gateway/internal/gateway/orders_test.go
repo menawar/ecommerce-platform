@@ -30,6 +30,7 @@ type fakeOrderClient struct {
 	markShippedFn    func(*orderv1.MarkShippedRequest) (*orderv1.MarkShippedResponse, error)
 	markDeliveredFn  func(*orderv1.MarkDeliveredRequest) (*orderv1.MarkDeliveredResponse, error)
 	listAllOrdersFn  func(*orderv1.ListAllOrdersRequest) (*orderv1.ListAllOrdersResponse, error)
+	refundOrderFn    func(*orderv1.RefundOrderRequest) (*orderv1.RefundOrderResponse, error)
 }
 
 var _ orderv1.OrderServiceClient = (*fakeOrderClient)(nil)
@@ -85,6 +86,12 @@ func (f *fakeOrderClient) MarkDelivered(_ context.Context, in *orderv1.MarkDeliv
 func (f *fakeOrderClient) ListAllOrders(_ context.Context, in *orderv1.ListAllOrdersRequest, _ ...grpc.CallOption) (*orderv1.ListAllOrdersResponse, error) {
 	if f.listAllOrdersFn != nil {
 		return f.listAllOrdersFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) RefundOrder(_ context.Context, in *orderv1.RefundOrderRequest, _ ...grpc.CallOption) (*orderv1.RefundOrderResponse, error) {
+	if f.refundOrderFn != nil {
+		return f.refundOrderFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "unused")
 }

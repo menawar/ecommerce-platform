@@ -145,6 +145,16 @@ func (h *Handler) markDelivered(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toOrderDTO(resp.GetOrder()))
 }
 
+// refundOrder: admin refunds a paid order (reverses the charge + marks REFUNDED).
+func (h *Handler) refundOrder(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.orders.RefundOrder(r.Context(), &orderv1.RefundOrderRequest{OrderId: chi.URLParam(r, "id")})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toOrderDTO(resp.GetOrder()))
+}
+
 // listAllOrders is the admin view of every order (requireAdmin gates the route).
 func (h *Handler) listAllOrders(w http.ResponseWriter, r *http.Request) {
 	qs := r.URL.Query()

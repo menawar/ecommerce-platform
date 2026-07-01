@@ -607,6 +607,48 @@ func (q *Queries) MarkOrderPaymentPending(ctx context.Context, arg MarkOrderPaym
 	return i, err
 }
 
+const markOrderRefunded = `-- name: MarkOrderRefunded :one
+UPDATE orders
+SET status = 'REFUNDED', updated_at = now()
+WHERE id = $1 AND status IN ('PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED')
+RETURNING id, user_id, status, total_cents, currency, reservation_id, payment_id, idempotency_key, created_at, updated_at, authorization_url, shipping_method_id, shipping_method_name, shipping_cents, ship_recipient, ship_phone, ship_line1, ship_line2, ship_city, ship_state, ship_postal_code, ship_country, tracking_number, shipped_at, delivered_at
+`
+
+// MarkOrderRefunded is an atomic compare-and-set from any refundable (paid) state,
+// so a concurrent refund can't fire twice.
+func (q *Queries) MarkOrderRefunded(ctx context.Context, id pgtype.UUID) (Order, error) {
+	row := q.db.QueryRow(ctx, markOrderRefunded, id)
+	var i Order
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.TotalCents,
+		&i.Currency,
+		&i.ReservationID,
+		&i.PaymentID,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AuthorizationUrl,
+		&i.ShippingMethodID,
+		&i.ShippingMethodName,
+		&i.ShippingCents,
+		&i.ShipRecipient,
+		&i.ShipPhone,
+		&i.ShipLine1,
+		&i.ShipLine2,
+		&i.ShipCity,
+		&i.ShipState,
+		&i.ShipPostalCode,
+		&i.ShipCountry,
+		&i.TrackingNumber,
+		&i.ShippedAt,
+		&i.DeliveredAt,
+	)
+	return i, err
+}
+
 const markOrderShipped = `-- name: MarkOrderShipped :one
 UPDATE orders
 SET status = 'SHIPPED', tracking_number = $2, shipped_at = now(), updated_at = now()

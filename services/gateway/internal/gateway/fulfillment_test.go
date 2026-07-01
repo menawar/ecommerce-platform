@@ -84,6 +84,51 @@ func TestMarkShipped_IllegalTransitionMapsTo422(t *testing.T) {
 	}
 }
 
+func TestRefundOrder_AdminGateAndForwarding(t *testing.T) {
+	var got *orderv1.RefundOrderRequest
+	oc := &fakeOrderClient{
+		refundOrderFn: func(in *orderv1.RefundOrderRequest) (*orderv1.RefundOrderResponse, error) {
+			got = in
+			return &orderv1.RefundOrderResponse{Order: &orderv1.Order{Id: in.GetOrderId(), Status: "REFUNDED"}}, nil
+		},
+	}
+	ts := newShippingTestServer(t, oc)
+
+	t.Run("admin refunds (200, forwards id)", func(t *testing.T) {
+		resp := doReq(t, http.MethodPost, ts.URL+"/orders/o-1/refund", "admin-token", "")
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d, want 200", resp.StatusCode)
+		}
+		if got.GetOrderId() != "o-1" {
+			t.Errorf("forwarded id = %q, want o-1", got.GetOrderId())
+		}
+	})
+
+	t.Run("customer forbidden (403)", func(t *testing.T) {
+		resp := doReq(t, http.MethodPost, ts.URL+"/orders/o-1/refund", "cust-token", "")
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("status = %d, want 403", resp.StatusCode)
+		}
+	})
+}
+
+func TestRefundOrder_NonRefundableMapsTo422(t *testing.T) {
+	oc := &fakeOrderClient{
+		refundOrderFn: func(*orderv1.RefundOrderRequest) (*orderv1.RefundOrderResponse, error) {
+			return nil, status.Error(codes.FailedPrecondition, "order in PAYMENT_PENDING cannot be refunded")
+		},
+	}
+	ts := newShippingTestServer(t, oc)
+
+	resp := doReq(t, http.MethodPost, ts.URL+"/orders/o-1/refund", "admin-token", "")
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want 422", resp.StatusCode)
+	}
+}
+
 func TestListAllOrders_AdminOnly(t *testing.T) {
 	oc := &fakeOrderClient{
 		listAllOrdersFn: func(*orderv1.ListAllOrdersRequest) (*orderv1.ListAllOrdersResponse, error) {

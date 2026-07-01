@@ -40,6 +40,9 @@ type AsyncProvider interface {
 	// Verify returns the current status of a transaction by its provider reference:
 	// StatusSucceeded, StatusFailed, or StatusPending.
 	Verify(ctx context.Context, providerRef string) (statusValue string, err error)
+	// Refund reverses a previously-succeeded charge by its provider reference. It is
+	// synchronous (unlike Initialize): a nil error means the funds were returned.
+	Refund(ctx context.Context, providerRef string, amountCents int64) error
 }
 
 // Mock is a deterministic AsyncProvider for local/dev and tests — it lets the saga
@@ -83,4 +86,14 @@ func (Mock) Verify(_ context.Context, providerRef string) (string, error) {
 		return StatusFailed, nil
 	}
 	return StatusSucceeded, nil
+}
+
+// Refund always succeeds for the mock — a refund only ever runs against an
+// already-succeeded charge, so there's no decline rule to model here. It just
+// validates the reference is one we minted.
+func (Mock) Refund(_ context.Context, providerRef string, _ int64) error {
+	if !strings.HasPrefix(providerRef, mockRefPrefix) {
+		return fmt.Errorf("mock refund: unrecognized reference %q", providerRef)
+	}
+	return nil
 }

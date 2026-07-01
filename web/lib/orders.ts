@@ -82,3 +82,7 @@ export async function markShipped(id: string, trackingNumber: string): Promise<v
 export async function markDelivered(id: string): Promise<void> {
   await gatewayFetch<void>(`/orders/${encodeURIComponent(id)}/deliver`, { method: "POST" });
 }
+
+export async function refundOrder(id: string): Promise<void> {
+  await gatewayFetch<void>(`/orders/${encodeURIComponent(id)}/refund`, { method: "POST" });
+}
