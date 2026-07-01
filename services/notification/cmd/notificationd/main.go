@@ -92,8 +92,11 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	}
 	handler := notify.NewHandler(pool, userv1.NewUserServiceClient(userConn), sender, log)
 	// Start the durable consumer. It runs in its own goroutines; we stop it on
-	// shutdown.
-	cc, err := events.Consume(ctx, js, events.StreamName, "notification", log, handler.Handle)
+	// shutdown. Unlimited JetStream redelivery: the handler owns the terminal
+	// decision — it dead-letters only after the SEND has failed maxSendAttempts
+	// times, and retries infrastructure failures (DB/User down) until they recover,
+	// so a notification is never dropped by JetStream giving up first.
+	cc, err := events.Consume(ctx, js, events.StreamName, "notification", log, handler.Handle, events.WithMaxDeliver(-1))
 	if err != nil {
 		return fmt.Errorf("start consumer: %w", err)
 	}

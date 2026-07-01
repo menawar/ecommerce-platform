@@ -8,9 +8,11 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -19,6 +21,18 @@ import (
 	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/notification/internal/db"
 )
+
+// maxSendAttempts caps delivery retries; on the last attempt a failed send is
+// dead-lettered (status='failed') instead of retried forever. Kept in step with the
+// JetStream consumer's MaxDeliver so the app makes the terminal decision.
+const maxSendAttempts = 5
+
+// deadLettered counts notifications that exhausted their retries — an ops signal
+// (alert on rate > 0) that email delivery is broken.
+var deadLettered = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "notification_deadlettered_total",
+	Help: "Notifications that failed to send after the maximum number of attempts.",
+})
 
 // userLookup is the sliver of the User service the notifier needs: resolve a
 // recipient's email + name by id. Narrowing the dependency to one method keeps the
@@ -91,18 +105,37 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		return nil
 	}
 
+	// Claim the event in the delivery ledger FIRST — before any fallible external
+	// call — so every subsequent failure (resolve or send) has a row to record on
+	// and JetStream never terminates a message we haven't recorded. A brand-new
+	// event inserts a pending row; a redelivery of a not-yet-sent event returns it
+	// so we retry; a redelivery of an already-SENT event returns no row (ErrNoRows)
+	// and we skip. This folds the dedup gate into the retry ledger.
+	uid, _ := uuid.Parse(data.UserID)
+	pgEvent := pgtype.UUID{Bytes: eventID, Valid: true}
+	if _, err := h.q.ClaimNotificationForSend(ctx, db.ClaimNotificationForSendParams{
+		EventID:  pgEvent,
+		UserID:   pgtype.UUID{Bytes: uid, Valid: true},
+		Channel:  "email",
+		Template: template,
+		Payload:  env.Data,
+	}); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			h.log.InfoContext(ctx, "already handled (sent or dead-lettered); skipping", "event_id", env.EventID, "topic", env.Topic)
+			return nil // terminal state -> idempotent skip
+		}
+		return err // DB down -> nak; JetStream retries (unlimited) until it recovers
+	}
+
 	// Resolve the recipient authoritatively from the User service (db-per-service:
-	// the notification DB has no email). Do this BEFORE the dedup insert so a
-	// failure re-runs cleanly on redelivery instead of being swallowed by the dedup
-	// row. NotFound is permanent (deleted/unknown user) -> ack; other errors are
-	// transient -> nak/retry.
+	// the notification DB has no email). A permanent condition (unknown user, bad id)
+	// is dead-lettered; a transient one retries (JetStream is unlimited).
 	usr, err := h.users.GetUser(ctx, &userv1.GetUserRequest{UserId: data.UserID})
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			h.log.WarnContext(ctx, "recipient not found; dropping notification", "event_id", env.EventID, "user_id", data.UserID)
-			return nil
+		if code := status.Code(err); code == codes.NotFound || code == codes.InvalidArgument {
+			return h.deadLetter(ctx, pgEvent, env, "resolve recipient: "+err.Error())
 		}
-		return fmt.Errorf("resolve recipient %s: %w", data.UserID, err)
+		return fmt.Errorf("resolve recipient %s: %w", data.UserID, err) // nak: retry
 	}
 
 	subject, body := Render(template, TemplateData{
@@ -114,35 +147,38 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		TrackingNumber: data.TrackingNumber,
 	})
 
-	// The dedup gate: insert keyed by the UNIQUE event_id. A duplicate delivery
-	// fails here, and we treat that as "already handled" — the heart of an
-	// idempotent consumer.
-	uid, _ := uuid.Parse(data.UserID)
-	err = h.q.InsertNotification(ctx, db.InsertNotificationParams{
-		EventID:  pgtype.UUID{Bytes: eventID, Valid: true},
-		UserID:   pgtype.UUID{Bytes: uid, Valid: true},
-		Channel:  "email",
-		Template: template,
-		Payload:  env.Data,
-	})
-	if err != nil {
-		if isUniqueViolation(err) {
-			h.log.InfoContext(ctx, "duplicate event ignored", "event_id", env.EventID, "topic", env.Topic)
-			return nil // already processed
-		}
-		return err // transient (e.g. DB down) -> nak/retry
-	}
-
-	return h.sender.Send(ctx, Notification{
+	// Deliver. A failed send bumps the attempt count; once it reaches the cap we
+	// dead-letter (mark failed + ack) rather than retry forever.
+	if err := h.sender.Send(ctx, Notification{
 		EventID:  env.EventID,
 		Template: template,
 		To:       usr.GetEmail(),
 		Subject:  subject,
 		Body:     body,
-	})
+	}); err != nil {
+		msg := err.Error()
+		attempts, rerr := h.q.RecordNotificationError(ctx, db.RecordNotificationErrorParams{EventID: pgEvent, LastError: &msg})
+		if rerr != nil {
+			return rerr // couldn't record the failure -> nak/retry
+		}
+		if attempts >= maxSendAttempts {
+			return h.deadLetter(ctx, pgEvent, env, msg)
+		}
+		return fmt.Errorf("send notification %s: %w", env.EventID, err) // nak: retry
+	}
+
+	return h.q.MarkNotificationSent(ctx, pgEvent)
 }
 
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+// deadLetter records a permanently-failed notification (status='failed') and acks
+// so it stops being redelivered. If the DB write itself fails, it returns the error
+// so the caller naks and retries (JetStream is unlimited) — the dead-letter is never
+// lost.
+func (h *Handler) deadLetter(ctx context.Context, pgEvent pgtype.UUID, env events.Envelope, reason string) error {
+	if err := h.q.MarkNotificationFailed(ctx, db.MarkNotificationFailedParams{EventID: pgEvent, LastError: &reason}); err != nil {
+		return err
+	}
+	deadLettered.Inc()
+	h.log.ErrorContext(ctx, "notification dead-lettered", "event_id", env.EventID, "topic", env.Topic, "reason", reason)
+	return nil // ack
 }

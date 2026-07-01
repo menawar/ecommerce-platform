@@ -11,6 +11,44 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimNotificationForSend = `-- name: ClaimNotificationForSend :one
+INSERT INTO notifications (event_id, user_id, channel, template, payload, status)
+VALUES ($1, $2, $3, $4, $5, 'pending')
+ON CONFLICT (event_id) DO UPDATE
+    SET updated_at = now()
+    WHERE notifications.status NOT IN ('sent', 'failed')
+RETURNING event_id
+`
+
+type ClaimNotificationForSendParams struct {
+	EventID  pgtype.UUID
+	UserID   pgtype.UUID
+	Channel  string
+	Template string
+	Payload  []byte
+}
+
+// Claim an event for delivery, idempotently. First delivery inserts a pending row;
+// a redelivery of a not-yet-terminal event returns it so the caller retries. A
+// redelivery of an event already in a TERMINAL state (sent, or failed/dead-lettered)
+// matches the WHERE-false branch, updates nothing, and returns no row (ErrNoRows) —
+// the caller treats that as "already handled" and skips (idempotent, no reprocess or
+// double dead-letter). This is the dedup gate folded into the retry ledger. attempts
+// is NOT bumped here: it counts SEND failures (see RecordNotificationError),
+// decoupled from JetStream delivery count.
+func (q *Queries) ClaimNotificationForSend(ctx context.Context, arg ClaimNotificationForSendParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, claimNotificationForSend,
+		arg.EventID,
+		arg.UserID,
+		arg.Channel,
+		arg.Template,
+		arg.Payload,
+	)
+	var event_id pgtype.UUID
+	err := row.Scan(&event_id)
+	return event_id, err
+}
+
 const countByEventID = `-- name: CountByEventID :one
 SELECT count(*) FROM notifications WHERE event_id = $1
 `
@@ -22,33 +60,8 @@ func (q *Queries) CountByEventID(ctx context.Context, eventID pgtype.UUID) (int6
 	return count, err
 }
 
-const insertNotification = `-- name: InsertNotification :exec
-INSERT INTO notifications (event_id, user_id, channel, template, payload)
-VALUES ($1, $2, $3, $4, $5)
-`
-
-type InsertNotificationParams struct {
-	EventID  pgtype.UUID
-	UserID   pgtype.UUID
-	Channel  string
-	Template string
-	Payload  []byte
-}
-
-// Fails with a unique violation if event_id was already processed (the dedup gate).
-func (q *Queries) InsertNotification(ctx context.Context, arg InsertNotificationParams) error {
-	_, err := q.db.Exec(ctx, insertNotification,
-		arg.EventID,
-		arg.UserID,
-		arg.Channel,
-		arg.Template,
-		arg.Payload,
-	)
-	return err
-}
-
 const listByUser = `-- name: ListByUser :many
-SELECT id, event_id, user_id, channel, template, payload, sent_at FROM notifications WHERE user_id = $1 ORDER BY sent_at DESC LIMIT $2
+SELECT id, event_id, user_id, channel, template, payload, sent_at, status, attempts, last_error, updated_at FROM notifications WHERE user_id = $1 ORDER BY COALESCE(sent_at, updated_at) DESC LIMIT $2
 `
 
 type ListByUserParams struct {
@@ -73,6 +86,10 @@ func (q *Queries) ListByUser(ctx context.Context, arg ListByUserParams) ([]Notif
 			&i.Template,
 			&i.Payload,
 			&i.SentAt,
+			&i.Status,
+			&i.Attempts,
+			&i.LastError,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -82,4 +99,51 @@ func (q *Queries) ListByUser(ctx context.Context, arg ListByUserParams) ([]Notif
 		return nil, err
 	}
 	return items, nil
+}
+
+const markNotificationFailed = `-- name: MarkNotificationFailed :exec
+UPDATE notifications SET status = 'failed', last_error = $2, updated_at = now()
+WHERE event_id = $1
+`
+
+type MarkNotificationFailedParams struct {
+	EventID   pgtype.UUID
+	LastError *string
+}
+
+// Dead-letter: attempts exhausted, stop retrying.
+func (q *Queries) MarkNotificationFailed(ctx context.Context, arg MarkNotificationFailedParams) error {
+	_, err := q.db.Exec(ctx, markNotificationFailed, arg.EventID, arg.LastError)
+	return err
+}
+
+const markNotificationSent = `-- name: MarkNotificationSent :exec
+UPDATE notifications SET status = 'sent', sent_at = now(), last_error = NULL, updated_at = now()
+WHERE event_id = $1
+`
+
+func (q *Queries) MarkNotificationSent(ctx context.Context, eventID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markNotificationSent, eventID)
+	return err
+}
+
+const recordNotificationError = `-- name: RecordNotificationError :one
+UPDATE notifications SET attempts = attempts + 1, last_error = $2, updated_at = now()
+WHERE event_id = $1
+RETURNING attempts
+`
+
+type RecordNotificationErrorParams struct {
+	EventID   pgtype.UUID
+	LastError *string
+}
+
+// A failed SEND that will be retried: bump the attempt count, record the error,
+// leave status pending. Returns the new attempt count so the caller can decide
+// whether to dead-letter.
+func (q *Queries) RecordNotificationError(ctx context.Context, arg RecordNotificationErrorParams) (int32, error) {
+	row := q.db.QueryRow(ctx, recordNotificationError, arg.EventID, arg.LastError)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
 }
