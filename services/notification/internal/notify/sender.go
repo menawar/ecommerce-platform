@@ -31,7 +31,11 @@ type LogSender struct {
 }
 
 func (s LogSender) Send(ctx context.Context, n Notification) error {
+	// Log the BODY too: in log mode (dev/CI) the body carries the verification /
+	// password-reset link, so a developer can complete the flow without a real
+	// mailbox. This is a dev convenience — a live link in logs — never enable the
+	// LogSender in production.
 	s.Log.InfoContext(ctx, "notification sent (log)",
-		"event_id", n.EventID, "template", n.Template, "to", n.To, "subject", n.Subject)
+		"event_id", n.EventID, "template", n.Template, "to", n.To, "subject", n.Subject, "body", n.Body)
 	return nil
 }
