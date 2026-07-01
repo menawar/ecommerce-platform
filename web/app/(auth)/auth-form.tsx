@@ -6,6 +6,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 
+import { InlineFormError } from "@/app/form-error";
 import type { AuthState } from "./actions";
 
 export function AuthForm({
@@ -55,19 +56,7 @@ export function AuthForm({
         className="plt-input"
       />
 
-      {state.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state.error} />
 
       {!isRegister && (
         <div style={{ textAlign: "right", marginTop: -4 }}>

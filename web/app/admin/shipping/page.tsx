@@ -1,30 +1,14 @@
-import { redirect } from "next/navigation";
-
 import { GatewayError } from "@/lib/gateway";
-import { getMe } from "@/lib/session";
 import { listShippingMethods } from "@/lib/shipping";
 import { ErrorPanel } from "../../error-panel";
+import { adminGuard } from "../guard";
 import { ShippingManager } from "./shipping-manager";
 
-// Admin shipping-method management. Role-gated like the products admin page (the
-// gateway also enforces admin on the mutations; checking here avoids rendering a
-// form a non-admin can't use). As admin, listShippingMethods returns ALL methods.
+// Admin shipping-method management. adminGuard handles the role gate (the gateway
+// also enforces admin on the mutations). As admin, listShippingMethods returns ALL.
 export default async function AdminShippingPage() {
-  let role: string;
-  try {
-    role = (await getMe()).role;
-  } catch (err) {
-    if (err instanceof GatewayError && err.status === 401) redirect("/login");
-    throw err;
-  }
-
-  if (role !== "admin") {
-    return (
-      <main style={{ maxWidth: 720, margin: "0 auto", padding: "32px 20px" }}>
-        <ErrorPanel message="Admins only — you don't have access to this page." />
-      </main>
-    );
-  }
+  const deny = await adminGuard();
+  if (deny) return deny;
 
   let methods;
   try {

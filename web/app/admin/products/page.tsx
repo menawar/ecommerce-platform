@@ -1,35 +1,20 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 import { listProducts, GatewayError } from "@/lib/gateway";
-import { getMe } from "@/lib/session";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../../error-panel";
+import { adminGuard } from "../guard";
 import { ProductForm } from "./product-form";
 import { DeleteProductButton } from "./delete-button";
 
 const PAGE_SIZE = 100;
 
-// Admin catalog management. A Server Component that gates on the caller's role
-// before rendering anything: not logged in -> login; logged in but not admin ->
-// a clean "Admins only" panel (the gateway also enforces this, but checking here
-// avoids rendering a form a non-admin can't use).
+// Admin catalog management. adminGuard gates on the caller's role (not logged in ->
+// login; not admin -> "Admins only" panel); the gateway also enforces admin on the
+// mutations, but checking here avoids rendering a form a non-admin can't use.
 export default async function AdminProductsPage() {
-  let role: string;
-  try {
-    role = (await getMe()).role;
-  } catch (err) {
-    if (err instanceof GatewayError && err.status === 401) redirect("/login");
-    throw err;
-  }
-
-  if (role !== "admin") {
-    return (
-      <main style={{ maxWidth: 720, margin: "0 auto", padding: "32px 20px" }}>
-        <ErrorPanel message="Admins only — you don't have access to this page." />
-      </main>
-    );
-  }
+  const deny = await adminGuard();
+  if (deny) return deny;
 
   let products, total;
   try {

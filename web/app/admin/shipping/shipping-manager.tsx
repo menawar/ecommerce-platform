@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { InlineFormError } from "@/app/form-error";
+
 import { formatPrice } from "@/lib/format";
 import type { ShippingMethod } from "@/lib/shipping";
 import { saveShippingMethodAction, deleteShippingMethodAction, type ShippingFormState } from "./actions";
@@ -111,19 +113,7 @@ function ShippingForm({ method, onClose }: { method?: ShippingMethod; onClose: (
         Active (shown at checkout)
       </label>
 
-      {state.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state.error} />
 
       <div style={{ display: "flex", gap: 12 }}>
         <button disabled={pending} className="plt-btn-primary-lg" style={{ flex: 1 }}>

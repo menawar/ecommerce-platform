@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 
+import { InlineFormError } from "@/app/form-error";
+
 import { resetPasswordAction } from "@/app/(auth)/actions";
 
 // The token rides in a hidden field and the password is only sent on submit (a
@@ -21,19 +23,7 @@ export function ResetForm({ token }: { token: string }) {
         autoComplete="new-password"
         className="plt-input"
       />
-      {state.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state.error} />
       <button disabled={pending} className="plt-btn-primary-lg" style={{ width: "100%", marginTop: 4 }}>
         {pending ? "Updating…" : "Set new password"}
       </button>

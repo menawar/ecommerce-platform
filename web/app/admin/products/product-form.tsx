@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { InlineFormError } from "@/app/form-error";
 
 import { createProductAction, type CreateProductState } from "./actions";
 
@@ -19,20 +20,7 @@ export function ProductForm() {
 
   return (
     <form action={formAction} style={{ maxWidth: 460 }}>
-      {state?.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-            marginBottom: 14,
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state?.error} style={{ marginBottom: 14 }} />
 
       <div style={rowStyle}>
         <label htmlFor="name" style={labelStyle}>Name</label>
