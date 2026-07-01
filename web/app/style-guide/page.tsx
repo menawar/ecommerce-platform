@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
+import { DrawerDemo } from "./drawer-demo";
 
 export const metadata: Metadata = {
   title: "Style guide",
@@ -168,6 +169,10 @@ export default function StyleGuidePage() {
             <Input id="sg-coupon" invalid defaultValue="OLD2020" />
           </Field>
         </div>
+      </Section>
+
+      <Section title="Drawer">
+        <DrawerDemo />
       </Section>
 
       <Section title="Empty state">
