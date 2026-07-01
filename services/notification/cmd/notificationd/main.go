@@ -91,12 +91,27 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		log.Info("using SMTP sender", "addr", cfg.smtpAddr, "from", cfg.emailFrom)
 	}
 	handler := notify.NewHandler(pool, userv1.NewUserServiceClient(userConn), sender, log)
+
+	// This service has no gRPC surface, so it can't use the unary error-reporting
+	// interceptor. Wrap the consumer callback instead: report handler failures to
+	// the error sink (Sentry groups the retries of a transient failure, so this
+	// isn't noisy). No-op unless SENTRY_DSN is set.
+	reporter := observability.NewReporter(env("SENTRY_DSN", ""), "notification", env("ENVIRONMENT", "development"), log)
+	defer reporter.Close()
+	handle := func(hctx context.Context, e events.Envelope) error {
+		err := handler.Handle(hctx, e)
+		if err != nil {
+			reporter.Report(hctx, err, map[string]string{"topic": e.Topic, "event_id": e.EventID})
+		}
+		return err
+	}
+
 	// Start the durable consumer. It runs in its own goroutines; we stop it on
 	// shutdown. Unlimited JetStream redelivery: the handler owns the terminal
 	// decision — it dead-letters only after the SEND has failed maxSendAttempts
 	// times, and retries infrastructure failures (DB/User down) until they recover,
 	// so a notification is never dropped by JetStream giving up first.
-	cc, err := events.Consume(ctx, js, events.StreamName, "notification", log, handler.Handle, events.WithMaxDeliver(-1))
+	cc, err := events.Consume(ctx, js, events.StreamName, "notification", log, handle, events.WithMaxDeliver(-1))
 	if err != nil {
 		return fmt.Errorf("start consumer: %w", err)
 	}

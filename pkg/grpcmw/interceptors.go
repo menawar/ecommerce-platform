@@ -62,6 +62,41 @@ func UnaryRecovery(log *slog.Logger) grpc.UnaryServerInterceptor {
 	}
 }
 
+// errorReporter is the sliver of observability.Reporter this package needs, kept as
+// a local interface so grpcmw doesn't import observability (avoids an import cycle
+// and keeps the dependency explicit).
+type errorReporter interface {
+	Report(ctx context.Context, err error, tags map[string]string)
+}
+
+// UnaryErrorReporting sends server-fault RPC failures (the same codes logged at
+// Error level) to the reporter — the external error-tracking sink. Client-fault
+// codes (bad input, unauthenticated, not-found) are NOT reported: they're normal,
+// and would drown real bugs in noise. It sits OUTSIDE recovery so a panic that
+// recovery turns into codes.Internal is reported too.
+func UnaryErrorReporting(r errorReporter) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		resp, err := handler(ctx, req)
+		if err != nil && isServerFault(status.Code(err)) {
+			r.Report(ctx, err, map[string]string{"method": info.FullMethod})
+		}
+		return resp, err
+	}
+}
+
+// isServerFault reports whether a code means "our bug" (worth capturing) vs a
+// client-caused outcome. It's the Error-level set from levelForCode MINUS
+// Unavailable — a transient dependency blip logs at Error but shouldn't spam the
+// error tracker as if it were a code defect.
+func isServerFault(code codes.Code) bool {
+	switch code {
+	case codes.Internal, codes.Unknown, codes.DataLoss:
+		return true
+	default:
+		return false
+	}
+}
+
 // levelForCode picks a log level from the RPC outcome: success is Info, our-fault
 // codes are Error, and client-fault codes (bad input, unauthenticated) are Warn —
 // so an alert on Error noise isn't triggered by users typing wrong passwords.

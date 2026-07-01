@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportError } from "@/lib/report-error";
+
 // error.tsx MUST be a Client Component — error boundaries need React state and an
 // onClick handler. It now catches only UNEXPECTED throws: the page handles
 // GatewayError inline (and shows the gateway requestId there). Note `error.digest`
@@ -9,6 +12,9 @@
 // logs). That's exactly why the gateway requestId is surfaced via inline
 // catch-and-render, not here.
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    reportError(error, { boundary: "products", digest: error.digest });
+  }, [error]);
   return (
     <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px" }}>
       <div

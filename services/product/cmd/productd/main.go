@@ -78,12 +78,15 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		log.Info("opentelemetry tracing enabled", "endpoint", cfg.otelEndpoint)
 	}
 
+	reporter := observability.NewReporter(env("SENTRY_DSN", ""), "product", env("ENVIRONMENT", "development"), log)
+	defer reporter.Close()
 	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "product")
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
 			grpcmw.UnaryMetrics(metrics),
+			grpcmw.UnaryErrorReporting(reporter),
 			grpcmw.UnaryRecovery(log),
 		),
 	)

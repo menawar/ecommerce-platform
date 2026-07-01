@@ -133,12 +133,15 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	// (inner) wraps the handler — so logging and metrics both record the final status
 	// even when recovery has turned a panic into an Internal error. Metrics registers
 	// against the default registry, which is exactly what /metrics (promhttp) serves.
+	reporter := observability.NewReporter(env("SENTRY_DSN", ""), "user", env("ENVIRONMENT", "development"), log)
+	defer reporter.Close()
 	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "user")
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			grpcmw.UnaryLogging(log),
 			grpcmw.UnaryMetrics(metrics),
+			grpcmw.UnaryErrorReporting(reporter),
 			grpcmw.UnaryRecovery(log),
 		),
 	)
