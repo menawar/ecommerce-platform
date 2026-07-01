@@ -6,16 +6,16 @@ package order
 type Status string
 
 const (
-	StatusPending        Status = "PENDING"        // created, nothing reserved yet
-	StatusStockReserved  Status = "STOCK_RESERVED" // Product.ReserveStock succeeded
+	StatusPending        Status = "PENDING"         // created, nothing reserved yet
+	StatusStockReserved  Status = "STOCK_RESERVED"  // Product.ReserveStock succeeded
 	StatusPaymentPending Status = "PAYMENT_PENDING" // charge in flight
-	StatusPaid           Status = "PAID"           // charge succeeded, stock committed
-	StatusConfirmed      Status = "CONFIRMED"      // paid + confirmed, awaiting fulfillment
-	StatusShipped        Status = "SHIPPED"        // handed to delivery (has tracking)
-	StatusDelivered      Status = "DELIVERED"      // fulfilled (still refundable — returns)
-	StatusRefunded       Status = "REFUNDED"       // terminal: charge reversed
-	StatusPaymentFailed  Status = "PAYMENT_FAILED" // charge declined
-	StatusCancelled      Status = "CANCELLED"      // terminal failure (compensated)
+	StatusPaid           Status = "PAID"            // charge succeeded, stock committed
+	StatusConfirmed      Status = "CONFIRMED"       // paid + confirmed, awaiting fulfillment
+	StatusShipped        Status = "SHIPPED"         // handed to delivery (has tracking)
+	StatusDelivered      Status = "DELIVERED"       // fulfilled (still refundable — returns)
+	StatusRefunded       Status = "REFUNDED"        // terminal: charge reversed
+	StatusPaymentFailed  Status = "PAYMENT_FAILED"  // charge declined
+	StatusCancelled      Status = "CANCELLED"       // terminal failure (compensated)
 )
 
 // transitions is the allowed-next-states table. Encoding the state machine as
@@ -27,13 +27,13 @@ var transitions = map[Status][]Status{
 	StatusPaymentPending: {StatusPaid, StatusPaymentFailed},
 	// Money is captured from PAID onward, so every such state is refundable — incl.
 	// a PAID order whose confirm step stalled, and one already delivered (returns).
-	StatusPaid:           {StatusConfirmed, StatusRefunded},
-	StatusConfirmed:      {StatusShipped, StatusRefunded},
-	StatusShipped:        {StatusDelivered, StatusRefunded},
-	StatusDelivered:      {StatusRefunded},
-	StatusRefunded:       {}, // terminal
-	StatusPaymentFailed:  {StatusCancelled},
-	StatusCancelled:      {}, // terminal
+	StatusPaid:          {StatusConfirmed, StatusRefunded},
+	StatusConfirmed:     {StatusShipped, StatusRefunded},
+	StatusShipped:       {StatusDelivered, StatusRefunded},
+	StatusDelivered:     {StatusRefunded},
+	StatusRefunded:      {}, // terminal
+	StatusPaymentFailed: {StatusCancelled},
+	StatusCancelled:     {}, // terminal
 }
 
 // CanTransitionTo reports whether moving from s to next is a legal step. The saga

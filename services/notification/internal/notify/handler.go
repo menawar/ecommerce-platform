@@ -4,16 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/menawar/ecommerce-platform/pkg/events"
+	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/notification/internal/db"
 )
+
+// userLookup is the sliver of the User service the notifier needs: resolve a
+// recipient's email + name by id. Narrowing the dependency to one method keeps the
+// test fake tiny and documents exactly what we call. The generated
+// userv1.UserServiceClient satisfies it.
+type userLookup interface {
+	GetUser(ctx context.Context, in *userv1.GetUserRequest, opts ...grpc.CallOption) (*userv1.GetUserResponse, error)
+}
 
 // topicTemplates maps event topics to notification templates. Topics not listed
 // are simply ignored (acked, never turned into a notification).
@@ -31,12 +44,13 @@ var topicTemplates = map[string]string{
 
 type Handler struct {
 	q      *db.Queries
+	users  userLookup // resolves recipient email/name (db-per-service)
 	sender Sender
 	log    *slog.Logger
 }
 
-func NewHandler(pool *pgxpool.Pool, sender Sender, log *slog.Logger) *Handler {
-	return &Handler{q: db.New(pool), sender: sender, log: log}
+func NewHandler(pool *pgxpool.Pool, users userLookup, sender Sender, log *slog.Logger) *Handler {
+	return &Handler{q: db.New(pool), users: users, sender: sender, log: log}
 }
 
 // Handle processes one event IDEMPOTENTLY. It returns nil on success or on a
@@ -55,31 +69,58 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		return nil // unparseable id -> drop (ack), retrying won't help
 	}
 
-	// Every payload we handle carries user_id; transactional-link emails (verify,
-	// password reset) also carry a generic action_url. Extract best-effort.
+	// The union of fields our event payloads carry: user_id (all), action_url
+	// (verify/reset), and order fields (order.*). Fields absent for a topic stay zero.
 	var data struct {
 		UserID    string `json:"user_id"`
 		ActionURL string `json:"action_url"`
 		// verify_url is the pre-rename field name; read it as a fallback so events
 		// already in the stream during a rolling deploy still carry their link.
 		// TODO: remove one release after the action_url rename ships.
-		VerifyURL string `json:"verify_url"`
+		VerifyURL      string `json:"verify_url"`
+		OrderID        string `json:"order_id"`
+		TotalCents     int64  `json:"total_cents"`
+		TrackingNumber string `json:"tracking_number"`
 	}
 	_ = json.Unmarshal(env.Data, &data)
 	if data.ActionURL == "" {
 		data.ActionURL = data.VerifyURL
 	}
-	var userID pgtype.UUID
-	if uid, perr := uuid.Parse(data.UserID); perr == nil {
-		userID = pgtype.UUID{Bytes: uid, Valid: true}
+	if data.UserID == "" {
+		h.log.WarnContext(ctx, "event has no user_id; nothing to email", "event_id", env.EventID, "topic", env.Topic)
+		return nil
 	}
+
+	// Resolve the recipient authoritatively from the User service (db-per-service:
+	// the notification DB has no email). Do this BEFORE the dedup insert so a
+	// failure re-runs cleanly on redelivery instead of being swallowed by the dedup
+	// row. NotFound is permanent (deleted/unknown user) -> ack; other errors are
+	// transient -> nak/retry.
+	usr, err := h.users.GetUser(ctx, &userv1.GetUserRequest{UserId: data.UserID})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			h.log.WarnContext(ctx, "recipient not found; dropping notification", "event_id", env.EventID, "user_id", data.UserID)
+			return nil
+		}
+		return fmt.Errorf("resolve recipient %s: %w", data.UserID, err)
+	}
+
+	subject, body := Render(template, TemplateData{
+		RecipientName:  usr.GetFullName(),
+		ActionURL:      data.ActionURL,
+		OrderID:        data.OrderID,
+		TotalCents:     data.TotalCents,
+		Currency:       "NGN",
+		TrackingNumber: data.TrackingNumber,
+	})
 
 	// The dedup gate: insert keyed by the UNIQUE event_id. A duplicate delivery
 	// fails here, and we treat that as "already handled" — the heart of an
 	// idempotent consumer.
+	uid, _ := uuid.Parse(data.UserID)
 	err = h.q.InsertNotification(ctx, db.InsertNotificationParams{
 		EventID:  pgtype.UUID{Bytes: eventID, Valid: true},
-		UserID:   userID,
+		UserID:   pgtype.UUID{Bytes: uid, Valid: true},
 		Channel:  "email",
 		Template: template,
 		Payload:  env.Data,
@@ -92,15 +133,12 @@ func (h *Handler) Handle(ctx context.Context, env events.Envelope) error {
 		return err // transient (e.g. DB down) -> nak/retry
 	}
 
-	// Deliver (mock logs). Note: we record-then-send, so the dedup is on the record;
-	// a real sender that can fail would also need send-side idempotency — out of v1
-	// scope (the mock never fails).
 	return h.sender.Send(ctx, Notification{
 		EventID:  env.EventID,
-		UserID:   data.UserID,
-		Channel:  "email",
 		Template: template,
-		Link:     data.ActionURL,
+		To:       usr.GetEmail(),
+		Subject:  subject,
+		Body:     body,
 	})
 }
 

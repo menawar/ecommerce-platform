@@ -8,35 +8,30 @@ import (
 	"log/slog"
 )
 
-// Notification is the thing being sent.
+// Notification is a rendered message ready to deliver: a recipient, subject, and
+// body, plus metadata for logging/correlation. Template rendering happens in the
+// handler (see Render); the Sender only transports.
 type Notification struct {
 	EventID  string
-	UserID   string
-	Channel  string
 	Template string
-	Link     string // optional action link (e.g. the email-verification URL)
+	To       string // recipient email
+	Subject  string
+	Body     string
 }
 
-// Sender delivers a notification over some channel.
+// Sender delivers a rendered notification over some channel (email here).
 type Sender interface {
 	Send(ctx context.Context, n Notification) error
 }
 
-// LogSender is the v1 "send": a structured log line. Swapping in a real email/SMS
-// adapter is a new implementation of this interface, no handler changes.
+// LogSender is the dev/CI transport: it logs the rendered email instead of sending
+// it. The real transport (SMTPSender, Phase 13.2) implements the same interface.
 type LogSender struct {
 	Log *slog.Logger
 }
 
 func (s LogSender) Send(ctx context.Context, n Notification) error {
-	attrs := []any{"channel", n.Channel, "template", n.Template, "user_id", n.UserID, "event_id", n.EventID}
-	// DEV ONLY: logging the action link (e.g. the verification token URL) is a
-	// convenience for local testing — it is a live credential and must not reach
-	// real logs. The real Sender (SendGrid/Twilio) arrives in Phase 13 and emails
-	// the link instead of logging it.
-	if n.Link != "" {
-		attrs = append(attrs, "link", n.Link)
-	}
-	s.Log.InfoContext(ctx, "notification sent", attrs...)
+	s.Log.InfoContext(ctx, "notification sent (log)",
+		"event_id", n.EventID, "template", n.Template, "to", n.To, "subject", n.Subject)
 	return nil
 }
