@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Rating } from "@/components/ui/rating";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input, Select } from "@/components/ui/input";
+import { Field } from "@/components/ui/field";
 
 export const metadata: Metadata = {
   title: "Style guide",
@@ -104,6 +106,7 @@ export default function StyleGuidePage() {
       <Section title="Buttons">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="primary">Primary</Button>
+          <Button variant="hero">Hero</Button>
           <Button variant="gold">Gold</Button>
           <Button variant="outline">Outline</Button>
           <Button variant="ghost">Ghost</Button>
@@ -146,6 +149,24 @@ export default function StyleGuidePage() {
           <Skeleton className="h-32 w-full" />
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-1/3" />
+        </div>
+      </Section>
+
+      <Section title="Form fields">
+        <div className="grid max-w-md gap-4">
+          <Field label="Email" htmlFor="sg-email" hint="We'll never share it.">
+            <Input id="sg-email" type="email" placeholder="you@example.com" />
+          </Field>
+          <Field label="Quantity" htmlFor="sg-qty">
+            <Select id="sg-qty" defaultValue="1">
+              <option>1</option>
+              <option>2</option>
+              <option>3</option>
+            </Select>
+          </Field>
+          <Field label="Coupon" htmlFor="sg-coupon" error="That code has expired.">
+            <Input id="sg-coupon" invalid defaultValue="OLD2020" />
+          </Field>
         </div>
       </Section>
 

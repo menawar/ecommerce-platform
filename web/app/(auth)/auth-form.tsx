@@ -7,6 +7,8 @@ import { useActionState } from "react";
 import Link from "next/link";
 
 import { InlineFormError } from "@/app/form-error";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import type { AuthState } from "./actions";
 
 export function AuthForm({
@@ -21,89 +23,54 @@ export function AuthForm({
   const isRegister = mode === "register";
 
   return (
-    <form
-      action={formAction}
-      style={{
-        marginTop: 24,
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
-    >
+    <form action={formAction} className="mt-6 flex flex-col gap-3">
       {isRegister && (
-        <input
-          name="full_name"
-          required
-          placeholder="Full name"
-          className="plt-input"
-        />
+        <Input name="full_name" required placeholder="Full name" aria-label="Full name" autoComplete="name" />
       )}
-      <input
+      <Input
         name="email"
         type="email"
         required
         placeholder="Email"
+        aria-label="Email"
         autoComplete="email"
-        className="plt-input"
       />
-      <input
+      <Input
         name="password"
         type="password"
         required
         minLength={8}
         placeholder="Password (min 8 chars)"
+        aria-label="Password"
         autoComplete={isRegister ? "new-password" : "current-password"}
-        className="plt-input"
       />
 
       <InlineFormError message={state.error} />
 
       {!isRegister && (
-        <div style={{ textAlign: "right", marginTop: -4 }}>
-          <Link href="/forgot-password" style={{ fontSize: 13, color: "var(--plt-terracotta)", fontWeight: 600 }}>
+        <div className="-mt-1 text-right">
+          <Link href="/forgot-password" className="text-sm font-semibold text-accent">
             Forgot password?
           </Link>
         </div>
       )}
 
-      <button
-        disabled={pending}
-        className="plt-btn-primary-lg"
-        style={{ width: "100%", marginTop: 4 }}
-      >
-        {pending ? "Please wait…" : isRegister ? "Create account" : "Sign in"}
-      </button>
+      <Button type="submit" size="lg" fullWidth loading={pending} className="mt-1">
+        {isRegister ? "Create account" : "Sign in"}
+      </Button>
 
-      <p
-        style={{
-          fontSize: 13,
-          color: "var(--plt-text-secondary)",
-          textAlign: "center",
-        }}
-      >
+      <p className="text-center text-sm text-fg-muted">
         {isRegister ? (
           <>
             Already have an account?{" "}
-            <Link
-              href="/login"
-              style={{
-                color: "var(--plt-terracotta)",
-                fontWeight: 600,
-              }}
-            >
+            <Link href="/login" className="font-semibold text-accent">
               Sign in
             </Link>
           </>
         ) : (
           <>
             New here?{" "}
-            <Link
-              href="/register"
-              style={{
-                color: "var(--plt-terracotta)",
-                fontWeight: 600,
-              }}
-            >
+            <Link href="/register" className="font-semibold text-accent">
               Create an account
             </Link>
           </>

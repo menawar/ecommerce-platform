@@ -2,7 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { Spinner } from "./spinner";
 
-export type ButtonVariant = "primary" | "gold" | "outline" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "hero" | "gold" | "outline" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const base =
@@ -11,8 +11,10 @@ const base =
   "disabled:cursor-not-allowed disabled:opacity-60";
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: "bg-brand text-white hover:bg-brand-deep",
-  gold: "bg-gold text-brand-deep hover:brightness-95",
+  // The design's primary CTA is terracotta; the hero/brand CTA is deep green.
+  primary: "bg-accent text-white hover:opacity-90",
+  hero: "bg-brand-deep text-white hover:opacity-90",
+  gold: "bg-gold text-fg hover:opacity-90",
   outline: "border border-border-strong bg-card text-fg hover:bg-surface",
   ghost: "text-fg hover:bg-surface",
   danger: "border border-danger text-danger hover:bg-danger-bg",

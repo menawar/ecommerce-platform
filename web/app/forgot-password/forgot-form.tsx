@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-
-import { InlineFormError } from "@/app/form-error";
 import Link from "next/link";
 
+import { InlineFormError } from "@/app/form-error";
+import { Input } from "@/components/ui/input";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { forgotPasswordAction } from "@/app/(auth)/actions";
 
 export function ForgotForm() {
@@ -12,16 +13,11 @@ export function ForgotForm() {
 
   if (state.sent) {
     return (
-      <div style={{ textAlign: "center" }}>
-        <p style={{ fontSize: 14, color: "var(--plt-text-secondary)", margin: 0 }}>
-          If an account exists for that email, we’ve sent a password-reset link.
-          Check your inbox.
+      <div className="text-center">
+        <p className="m-0 text-sm text-fg-muted">
+          If an account exists for that email, we’ve sent a password-reset link. Check your inbox.
         </p>
-        <Link
-          href="/login"
-          className="plt-btn-primary-lg"
-          style={{ display: "block", textDecoration: "none", marginTop: 24 }}
-        >
+        <Link href="/login" className={buttonVariants({ size: "lg" }) + " mt-6 w-full"}>
           Back to sign in
         </Link>
       </div>
@@ -29,15 +25,15 @@ export function ForgotForm() {
   }
 
   return (
-    <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <input name="email" type="email" required placeholder="Email" autoComplete="email" className="plt-input" />
+    <form action={formAction} className="flex flex-col gap-3">
+      <Input name="email" type="email" required placeholder="Email" aria-label="Email" autoComplete="email" />
       <InlineFormError message={state.error} />
-      <button disabled={pending} className="plt-btn-primary-lg" style={{ width: "100%", marginTop: 4 }}>
-        {pending ? "Sending…" : "Send reset link"}
-      </button>
-      <p style={{ fontSize: 13, color: "var(--plt-text-secondary)", textAlign: "center" }}>
+      <Button type="submit" size="lg" fullWidth loading={pending} className="mt-1">
+        Send reset link
+      </Button>
+      <p className="text-center text-sm text-fg-muted">
         Remembered it?{" "}
-        <Link href="/login" style={{ color: "var(--plt-terracotta)", fontWeight: 600 }}>
+        <Link href="/login" className="font-semibold text-accent">
           Sign in
         </Link>
       </p>
