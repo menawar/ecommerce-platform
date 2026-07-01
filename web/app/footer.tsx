@@ -1,100 +1,50 @@
 import Link from "next/link";
+import { Container } from "@/components/ui/container";
 
 export function Footer() {
   return (
-    <footer
-      style={{
-        background: "var(--plt-green-deep)",
-        color: "var(--plt-footer-text)",
-        padding: "40px 24px 30px",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1180,
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "1.6fr 1fr 1fr 1fr",
-          gap: 26,
-        }}
-      >
+    <footer className="bg-brand-deep pb-8 pt-10 text-[color:var(--plt-footer-text)]">
+      <Container className="grid grid-cols-2 gap-7 md:grid-cols-[1.6fr_1fr_1fr_1fr]">
         {/* Brand column */}
-        <div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 12,
-            }}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 32 32"
-              fill="none"
-            >
-              <path
-                d="M1 25 L11 10 L17 18.5 L22 11 L31 25 Z"
-                fill="#7fb56a"
-              />
+        <div className="col-span-2 md:col-span-1">
+          <div className="mb-3 flex items-center gap-2">
+            <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden>
+              <path d="M1 25 L11 10 L17 18.5 L22 11 L31 25 Z" fill="#7fb56a" />
               <circle cx="24.5" cy="8" r="3.2" fill="#f3b73f" />
             </svg>
-            <span style={{ fontWeight: 800, fontSize: 20, color: "#fff" }}>
-              plateau<span style={{ color: "#e0894f" }}>.</span>
+            <span className="text-xl font-extrabold text-white">
+              plateau<span className="text-[#e0894f]">.</span>
             </span>
           </div>
-          <div
-            style={{
-              fontSize: 13,
-              lineHeight: 1.7,
-              color: "var(--plt-footer-muted)",
-              maxWidth: 270,
-            }}
-          >
-            Raw food materials, fresh from the Jos Plateau. Connecting Plateau
-            farms and co-ops directly to your kitchen.
-          </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: "var(--plt-footer-dim)",
-              marginTop: 14,
-            }}
-          >
+          <p className="max-w-[270px] text-[13px] leading-relaxed text-[color:var(--plt-footer-muted)]">
+            Raw food materials, fresh from the Jos Plateau. Connecting Plateau farms and co-ops
+            directly to your kitchen.
+          </p>
+          <p className="mt-3.5 text-xs text-[color:var(--plt-footer-dim)]">
             Farin Gada Market, Jos North, Plateau State
-          </div>
+          </p>
         </div>
 
         {/* Shop column */}
-        <div style={{ fontSize: 13, lineHeight: 2.3 }}>
-          <b style={{ color: "#fff" }}>Shop</b>
+        <nav className="text-[13px] leading-8" aria-label="Shop">
+          <b className="text-white">Shop</b>
           <br />
-          <Link
-            href="/products"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
+          <Link href="/products" className="hover:underline">
             This week&apos;s harvest
           </Link>
           <br />
-          <Link
-            href="/products"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
+          <Link href="/products" className="hover:underline">
             Bulk orders
           </Link>
           <br />
-          <Link
-            href="/products"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
+          <Link href="/products" className="hover:underline">
             All produce
           </Link>
-        </div>
+        </nav>
 
         {/* Farms column */}
-        <div style={{ fontSize: 13, lineHeight: 2.3 }}>
-          <b style={{ color: "#fff" }}>Our farms</b>
+        <div className="text-[13px] leading-8">
+          <b className="text-white">Our farms</b>
           <br />
           Vom Farms
           <br />
@@ -104,48 +54,32 @@ export function Footer() {
         </div>
 
         {/* Help column */}
-        <div style={{ fontSize: 13, lineHeight: 2.3 }}>
-          <b style={{ color: "#fff" }}>Help</b>
+        <nav className="text-[13px] leading-8" aria-label="Help">
+          <b className="text-white">Help</b>
           <br />
-          <Link
-            href="/orders"
-            style={{ color: "inherit", textDecoration: "none" }}
-          >
+          <Link href="/orders" className="hover:underline">
             Track order
           </Link>
           <br />
           Delivery areas
           <br />
           Contact
-        </div>
-      </div>
+        </nav>
+      </Container>
 
       {/* Copyright bar */}
-      <div
-        style={{
-          maxWidth: 1180,
-          margin: "18px auto 0",
-          borderTop: "1px solid var(--plt-footer-rule)",
-          paddingTop: 16,
-          fontSize: 12,
-          color: "var(--plt-footer-dim)",
-          display: "flex",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 8,
-        }}
-      >
+      <Container className="mt-4 flex flex-wrap justify-between gap-2 border-t border-[color:var(--plt-footer-rule)] pt-4 text-xs text-[color:var(--plt-footer-dim)]">
         <span>© 2026 Plateau · Home of Peace &amp; Tourism</span>
-        <span style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <Link href="/terms" style={{ color: "inherit", textDecoration: "underline" }}>
+        <span className="flex flex-wrap gap-4">
+          <Link href="/terms" className="underline">
             Terms
           </Link>
-          <Link href="/privacy" style={{ color: "inherit", textDecoration: "underline" }}>
+          <Link href="/privacy" className="underline">
             Privacy
           </Link>
           <span>Naira (₦) · Delivering across Jos &amp; Plateau</span>
         </span>
-      </div>
+      </Container>
     </footer>
   );
 }
