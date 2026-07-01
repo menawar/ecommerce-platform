@@ -28,19 +28,25 @@ import (
 )
 
 type config struct {
-	httpAddr string
-	dbURL    string
-	natsURL  string
-	userAddr string
+	httpAddr  string
+	dbURL     string
+	natsURL   string
+	userAddr  string
+	sender    string // "log" (default) | "smtp"
+	smtpAddr  string
+	emailFrom string
 }
 
 func main() {
 	log := observability.NewLogger("notification")
 	cfg := config{
-		httpAddr: env("NOTIFICATION_HTTP_ADDR", ":2117"),
-		dbURL:    env("NOTIFICATION_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/notificationdb?sslmode=disable"),
-		natsURL:  env("NATS_URL", "nats://localhost:4222"),
-		userAddr: env("USER_GRPC_ADDR", "localhost:50051"),
+		httpAddr:  env("NOTIFICATION_HTTP_ADDR", ":2117"),
+		dbURL:     env("NOTIFICATION_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/notificationdb?sslmode=disable"),
+		natsURL:   env("NATS_URL", "nats://localhost:4222"),
+		userAddr:  env("USER_GRPC_ADDR", "localhost:50051"),
+		sender:    env("NOTIFY_SENDER", "log"),
+		smtpAddr:  env("SMTP_ADDR", "localhost:1025"),
+		emailFrom: env("EMAIL_FROM", "Plateau <no-reply@plateau.example>"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -78,7 +84,13 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	defer func() { _ = userConn.Close() }()
 	log.Info("connected to notificationdb, nats, and user service")
 
-	handler := notify.NewHandler(pool, userv1.NewUserServiceClient(userConn), notify.LogSender{Log: log}, log)
+	// Pick the transport: SMTP for a real relay (Mailpit locally), else log.
+	var sender notify.Sender = notify.LogSender{Log: log}
+	if cfg.sender == "smtp" {
+		sender = notify.NewSMTPSender(cfg.smtpAddr, cfg.emailFrom)
+		log.Info("using SMTP sender", "addr", cfg.smtpAddr, "from", cfg.emailFrom)
+	}
+	handler := notify.NewHandler(pool, userv1.NewUserServiceClient(userConn), sender, log)
 	// Start the durable consumer. It runs in its own goroutines; we stop it on
 	// shutdown.
 	cc, err := events.Consume(ctx, js, events.StreamName, "notification", log, handler.Handle)

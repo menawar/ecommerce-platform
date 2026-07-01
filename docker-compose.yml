@@ -132,6 +132,10 @@ services:
       NOTIFICATION_DB_URL: "postgres://ecommerce:ecommerce@postgres:5432/notificationdb?sslmode=disable"
       NATS_URL: "nats://nats:4222"
       OTEL_ENDPOINT: "jaeger:4317"
+      USER_GRPC_ADDR: "user:50051"
+      NOTIFY_SENDER: "smtp"
+      SMTP_ADDR: "mailpit:1025"
+      EMAIL_FROM: "Plateau <no-reply@plateau.example>"
     healthcheck:
       test: ["CMD", "/healthcheck", "http://localhost:2117/healthz"]
       interval: 5s
@@ -142,6 +146,20 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      user:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    networks:
+      - ecommerce
+
+  # Mailpit: a local SMTP catcher. Emails land in its web UI (http://localhost:8025)
+  # instead of a real inbox — the email analog of the mock-PSP simulator.
+  mailpit:
+    image: axllent/mailpit:v1.20
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
     networks:
       - ecommerce
 
