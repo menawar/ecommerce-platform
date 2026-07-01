@@ -20,6 +20,25 @@ SELECT * FROM orders WHERE idempotency_key = $1;
 -- name: ListOrdersByUser :many
 SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3;
 
+-- name: ListAllOrders :many
+-- Admin view: every order, newest first (the Gateway enforces the admin role).
+SELECT * FROM orders ORDER BY created_at DESC LIMIT $1 OFFSET $2;
+
+-- MarkOrderShipped/Delivered are atomic compare-and-set: the status precondition in
+-- WHERE means two concurrent callers can't both win — the loser matches 0 rows
+-- (pgx.ErrNoRows), so only one order.shipped/delivered event is ever written.
+-- name: MarkOrderShipped :one
+UPDATE orders
+SET status = 'SHIPPED', tracking_number = $2, shipped_at = now(), updated_at = now()
+WHERE id = $1 AND status = 'CONFIRMED'
+RETURNING *;
+
+-- name: MarkOrderDelivered :one
+UPDATE orders
+SET status = 'DELIVERED', delivered_at = now(), updated_at = now()
+WHERE id = $1 AND status = 'SHIPPED'
+RETURNING *;
+
 -- name: UpdateOrderStatus :one
 UPDATE orders SET status = $2, updated_at = now() WHERE id = $1 RETURNING *;
 

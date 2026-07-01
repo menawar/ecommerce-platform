@@ -22,6 +22,9 @@ type orderDTO struct {
 	ShippingCents      int64               `json:"shipping_cents"`
 	ShippingMethodName string              `json:"shipping_method_name"`
 	ShippingAddress    *shippingAddressDTO `json:"shipping_address,omitempty"`
+	TrackingNumber     string              `json:"tracking_number"`
+	ShippedAt          int64               `json:"shipped_at"`
+	DeliveredAt        int64               `json:"delivered_at"`
 	Currency           string              `json:"currency"`
 	PaymentID          string              `json:"payment_id"`
 	CreatedAt          int64               `json:"created_at"`
@@ -46,6 +49,9 @@ func toOrderDTO(o *orderv1.Order) orderDTO {
 		TotalCents:         o.GetTotalCents(),
 		ShippingCents:      o.GetShippingCents(),
 		ShippingMethodName: o.GetShippingMethodName(),
+		TrackingNumber:     o.GetTrackingNumber(),
+		ShippedAt:          o.GetShippedAt(),
+		DeliveredAt:        o.GetDeliveredAt(),
 		Currency:           o.GetCurrency(),
 		PaymentID:          o.GetPaymentId(),
 		CreatedAt:          o.GetCreatedAt(),
@@ -106,6 +112,55 @@ func (h *Handler) placeOrder(w http.ResponseWriter, r *http.Request) {
 		"status":            resp.GetStatus(),
 		"authorization_url": resp.GetAuthorizationUrl(),
 	})
+}
+
+type markShippedBody struct {
+	TrackingNumber string `json:"tracking_number"`
+}
+
+// markShipped: admin marks a CONFIRMED order shipped (optional tracking). Admin
+// authz is enforced by the requireAdmin middleware on this route group.
+func (h *Handler) markShipped(w http.ResponseWriter, r *http.Request) {
+	var body markShippedBody
+	if err := decodeJSON(w, r, &body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	resp, err := h.orders.MarkShipped(r.Context(), &orderv1.MarkShippedRequest{
+		OrderId: chi.URLParam(r, "id"), TrackingNumber: body.TrackingNumber,
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toOrderDTO(resp.GetOrder()))
+}
+
+func (h *Handler) markDelivered(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.orders.MarkDelivered(r.Context(), &orderv1.MarkDeliveredRequest{OrderId: chi.URLParam(r, "id")})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toOrderDTO(resp.GetOrder()))
+}
+
+// listAllOrders is the admin view of every order (requireAdmin gates the route).
+func (h *Handler) listAllOrders(w http.ResponseWriter, r *http.Request) {
+	qs := r.URL.Query()
+	resp, err := h.orders.ListAllOrders(r.Context(), &orderv1.ListAllOrdersRequest{
+		Page:     int32(atoiOrZero(qs.Get("page"))),
+		PageSize: int32(atoiOrZero(qs.Get("page_size"))),
+	})
+	if err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	orders := make([]orderDTO, 0, len(resp.GetOrders()))
+	for _, o := range resp.GetOrders() {
+		orders = append(orders, toOrderDTO(o))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"orders": orders})
 }
 
 func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {

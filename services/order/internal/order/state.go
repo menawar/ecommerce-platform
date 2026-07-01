@@ -6,13 +6,15 @@ package order
 type Status string
 
 const (
-	StatusPending        Status = "PENDING"         // created, nothing reserved yet
-	StatusStockReserved  Status = "STOCK_RESERVED"  // Product.ReserveStock succeeded
-	StatusPaymentPending Status = "PAYMENT_PENDING"  // charge in flight
-	StatusPaid           Status = "PAID"            // charge succeeded, stock committed
-	StatusConfirmed      Status = "CONFIRMED"       // terminal success
-	StatusPaymentFailed  Status = "PAYMENT_FAILED"  // charge declined
-	StatusCancelled      Status = "CANCELLED"       // terminal failure (compensated)
+	StatusPending        Status = "PENDING"        // created, nothing reserved yet
+	StatusStockReserved  Status = "STOCK_RESERVED" // Product.ReserveStock succeeded
+	StatusPaymentPending Status = "PAYMENT_PENDING" // charge in flight
+	StatusPaid           Status = "PAID"           // charge succeeded, stock committed
+	StatusConfirmed      Status = "CONFIRMED"      // paid + confirmed, awaiting fulfillment
+	StatusShipped        Status = "SHIPPED"        // handed to delivery (has tracking)
+	StatusDelivered      Status = "DELIVERED"      // terminal success
+	StatusPaymentFailed  Status = "PAYMENT_FAILED" // charge declined
+	StatusCancelled      Status = "CANCELLED"      // terminal failure (compensated)
 )
 
 // transitions is the allowed-next-states table. Encoding the state machine as
@@ -23,8 +25,10 @@ var transitions = map[Status][]Status{
 	StatusStockReserved:  {StatusPaymentPending, StatusCancelled},
 	StatusPaymentPending: {StatusPaid, StatusPaymentFailed},
 	StatusPaid:           {StatusConfirmed},
+	StatusConfirmed:      {StatusShipped}, // fulfillment begins
+	StatusShipped:        {StatusDelivered},
+	StatusDelivered:      {}, // terminal
 	StatusPaymentFailed:  {StatusCancelled},
-	StatusConfirmed:      {}, // terminal
 	StatusCancelled:      {}, // terminal
 }
 
@@ -40,8 +44,20 @@ func (s Status) CanTransitionTo(next Status) bool {
 	return false
 }
 
-// IsTerminal reports whether the order has reached an end state (no further saga
-// work). Used to short-circuit and to gate CancelOrder.
+// IsTerminal reports whether the order has reached an end state (no further work).
 func (s Status) IsTerminal() bool {
-	return s == StatusConfirmed || s == StatusCancelled
+	return s == StatusDelivered || s == StatusCancelled
+}
+
+// IsPostPayment reports whether the order's payment outcome is already settled —
+// i.e. it has reached CONFIRMED (or beyond) or been CANCELLED. The payment-resume
+// consumer short-circuits on these (a late/duplicate payment event is a no-op),
+// and CancelOrder refuses them (a paid order can only be refunded, never cancelled).
+func (s Status) IsPostPayment() bool {
+	switch s {
+	case StatusConfirmed, StatusShipped, StatusDelivered, StatusCancelled:
+		return true
+	default:
+		return false
+	}
 }

@@ -319,6 +319,12 @@ export async function Nav() {
                 >
                   Shipping
                 </Link>
+                <Link
+                  href="/admin/orders"
+                  style={{ color: "#ffd98a", textDecoration: "none", fontWeight: 700 }}
+                >
+                  Fulfillment
+                </Link>
               </>
             )}
           </>

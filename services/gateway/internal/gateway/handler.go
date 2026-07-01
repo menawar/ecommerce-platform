@@ -153,6 +153,11 @@ func (h *Handler) Router() http.Handler {
 		ar.Post("/shipping-methods", h.createShippingMethod)
 		ar.Patch("/shipping-methods/{id}", h.updateShippingMethod)
 		ar.Delete("/shipping-methods/{id}", h.deleteShippingMethod)
+
+		// Fulfillment: admin views all orders and advances them CONFIRMED->SHIPPED->DELIVERED.
+		ar.Get("/admin/orders", h.listAllOrders)
+		ar.Post("/orders/{id}/ship", h.markShipped)
+		ar.Post("/orders/{id}/deliver", h.markDelivered)
 	})
 
 	return r

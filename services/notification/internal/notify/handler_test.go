@@ -137,7 +137,7 @@ func TestHandle_IgnoresUnknownTopic(t *testing.T) {
 	pool := testPool(t)
 	sender := &countingSender{}
 	h := notify.NewHandler(pool, sender, discard())
-	env := event(t, "order.shipped") // not in topicTemplates
+	env := event(t, "order.archived") // not in topicTemplates
 
 	if err := h.Handle(ctx, env); err != nil {
 		t.Fatalf("Handle: %v", err)
@@ -161,6 +161,8 @@ func TestHandle_TemplatesByTopic(t *testing.T) {
 		"order.confirmed":             "order_confirmation",
 		"order.cancelled":             "order_cancelled",
 		"order.paid":                  "payment_received",
+		"order.shipped":               "order_shipped",
+		"order.delivered":             "order_delivered",
 	}
 	for topic, wantTemplate := range cases {
 		env := event(t, topic)

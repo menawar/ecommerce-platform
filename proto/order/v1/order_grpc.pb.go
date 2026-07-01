@@ -27,6 +27,9 @@ const (
 	OrderService_CreateShippingMethod_FullMethodName = "/order.v1.OrderService/CreateShippingMethod"
 	OrderService_UpdateShippingMethod_FullMethodName = "/order.v1.OrderService/UpdateShippingMethod"
 	OrderService_DeleteShippingMethod_FullMethodName = "/order.v1.OrderService/DeleteShippingMethod"
+	OrderService_MarkShipped_FullMethodName          = "/order.v1.OrderService/MarkShipped"
+	OrderService_MarkDelivered_FullMethodName        = "/order.v1.OrderService/MarkDelivered"
+	OrderService_ListAllOrders_FullMethodName        = "/order.v1.OrderService/ListAllOrders"
 )
 
 // OrderServiceClient is the client API for OrderService service.
@@ -47,6 +50,10 @@ type OrderServiceClient interface {
 	CreateShippingMethod(ctx context.Context, in *CreateShippingMethodRequest, opts ...grpc.CallOption) (*CreateShippingMethodResponse, error)
 	UpdateShippingMethod(ctx context.Context, in *UpdateShippingMethodRequest, opts ...grpc.CallOption) (*UpdateShippingMethodResponse, error)
 	DeleteShippingMethod(ctx context.Context, in *DeleteShippingMethodRequest, opts ...grpc.CallOption) (*DeleteShippingMethodResponse, error)
+	// --- Fulfillment (admin-only; the Gateway enforces the role). ---
+	MarkShipped(ctx context.Context, in *MarkShippedRequest, opts ...grpc.CallOption) (*MarkShippedResponse, error)
+	MarkDelivered(ctx context.Context, in *MarkDeliveredRequest, opts ...grpc.CallOption) (*MarkDeliveredResponse, error)
+	ListAllOrders(ctx context.Context, in *ListAllOrdersRequest, opts ...grpc.CallOption) (*ListAllOrdersResponse, error)
 }
 
 type orderServiceClient struct {
@@ -137,6 +144,36 @@ func (c *orderServiceClient) DeleteShippingMethod(ctx context.Context, in *Delet
 	return out, nil
 }
 
+func (c *orderServiceClient) MarkShipped(ctx context.Context, in *MarkShippedRequest, opts ...grpc.CallOption) (*MarkShippedResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkShippedResponse)
+	err := c.cc.Invoke(ctx, OrderService_MarkShipped_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderServiceClient) MarkDelivered(ctx context.Context, in *MarkDeliveredRequest, opts ...grpc.CallOption) (*MarkDeliveredResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(MarkDeliveredResponse)
+	err := c.cc.Invoke(ctx, OrderService_MarkDelivered_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *orderServiceClient) ListAllOrders(ctx context.Context, in *ListAllOrdersRequest, opts ...grpc.CallOption) (*ListAllOrdersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListAllOrdersResponse)
+	err := c.cc.Invoke(ctx, OrderService_ListAllOrders_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrderServiceServer is the server API for OrderService service.
 // All implementations must embed UnimplementedOrderServiceServer
 // for forward compatibility.
@@ -155,6 +192,10 @@ type OrderServiceServer interface {
 	CreateShippingMethod(context.Context, *CreateShippingMethodRequest) (*CreateShippingMethodResponse, error)
 	UpdateShippingMethod(context.Context, *UpdateShippingMethodRequest) (*UpdateShippingMethodResponse, error)
 	DeleteShippingMethod(context.Context, *DeleteShippingMethodRequest) (*DeleteShippingMethodResponse, error)
+	// --- Fulfillment (admin-only; the Gateway enforces the role). ---
+	MarkShipped(context.Context, *MarkShippedRequest) (*MarkShippedResponse, error)
+	MarkDelivered(context.Context, *MarkDeliveredRequest) (*MarkDeliveredResponse, error)
+	ListAllOrders(context.Context, *ListAllOrdersRequest) (*ListAllOrdersResponse, error)
 	mustEmbedUnimplementedOrderServiceServer()
 }
 
@@ -188,6 +229,15 @@ func (UnimplementedOrderServiceServer) UpdateShippingMethod(context.Context, *Up
 }
 func (UnimplementedOrderServiceServer) DeleteShippingMethod(context.Context, *DeleteShippingMethodRequest) (*DeleteShippingMethodResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteShippingMethod not implemented")
+}
+func (UnimplementedOrderServiceServer) MarkShipped(context.Context, *MarkShippedRequest) (*MarkShippedResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MarkShipped not implemented")
+}
+func (UnimplementedOrderServiceServer) MarkDelivered(context.Context, *MarkDeliveredRequest) (*MarkDeliveredResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MarkDelivered not implemented")
+}
+func (UnimplementedOrderServiceServer) ListAllOrders(context.Context, *ListAllOrdersRequest) (*ListAllOrdersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListAllOrders not implemented")
 }
 func (UnimplementedOrderServiceServer) mustEmbedUnimplementedOrderServiceServer() {}
 func (UnimplementedOrderServiceServer) testEmbeddedByValue()                      {}
@@ -354,6 +404,60 @@ func _OrderService_DeleteShippingMethod_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrderService_MarkShipped_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkShippedRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).MarkShipped(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_MarkShipped_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).MarkShipped(ctx, req.(*MarkShippedRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrderService_MarkDelivered_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MarkDeliveredRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).MarkDelivered(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_MarkDelivered_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).MarkDelivered(ctx, req.(*MarkDeliveredRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _OrderService_ListAllOrders_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListAllOrdersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).ListAllOrders(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_ListAllOrders_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).ListAllOrders(ctx, req.(*ListAllOrdersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OrderService_ServiceDesc is the grpc.ServiceDesc for OrderService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -392,6 +496,18 @@ var OrderService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteShippingMethod",
 			Handler:    _OrderService_DeleteShippingMethod_Handler,
+		},
+		{
+			MethodName: "MarkShipped",
+			Handler:    _OrderService_MarkShipped_Handler,
+		},
+		{
+			MethodName: "MarkDelivered",
+			Handler:    _OrderService_MarkDelivered_Handler,
+		},
+		{
+			MethodName: "ListAllOrders",
+			Handler:    _OrderService_ListAllOrders_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

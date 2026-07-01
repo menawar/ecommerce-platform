@@ -27,6 +27,9 @@ export type Order = {
   shipping_cents: number;
   shipping_method_name: string;
   shipping_address?: ShippingAddress;
+  tracking_number: string;
+  shipped_at: number; // unix seconds; 0 until shipped
+  delivered_at: number; // unix seconds; 0 until delivered
   currency: string;
   payment_id: string;
   created_at: number;
@@ -59,4 +62,23 @@ export async function getOrder(id: string): Promise<Order> {
 export async function listOrders(): Promise<Order[]> {
   const { orders } = await gatewayFetch<{ orders: Order[] }>("/orders");
   return orders;
+}
+
+// --- Admin fulfillment (gateway enforces the admin role) ---
+
+// listAllOrders returns every order (admin view).
+export async function listAllOrders(): Promise<Order[]> {
+  const { orders } = await gatewayFetch<{ orders: Order[] }>("/admin/orders");
+  return orders ?? [];
+}
+
+export async function markShipped(id: string, trackingNumber: string): Promise<void> {
+  await gatewayFetch<void>(`/orders/${encodeURIComponent(id)}/ship`, {
+    method: "POST",
+    body: JSON.stringify({ tracking_number: trackingNumber }),
+  });
+}
+
+export async function markDelivered(id: string): Promise<void> {
+  await gatewayFetch<void>(`/orders/${encodeURIComponent(id)}/deliver`, { method: "POST" });
 }

@@ -492,6 +492,105 @@ func TestSaga_BadShippingOrAddressRejected(t *testing.T) {
 	})
 }
 
+// confirmedOrder drives a fresh order all the way to CONFIRMED and returns its id.
+func confirmedOrder(t *testing.T, s *saga.Saga, pool *pgxpool.Pool) string {
+	t.Helper()
+	res, err := s.PlaceOrder(context.Background(), uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	resume(t, s, res.OrderID, true)
+	if orderStatus(t, pool, res.OrderID) != "CONFIRMED" {
+		t.Fatalf("setup: order not CONFIRMED")
+	}
+	return res.OrderID
+}
+
+func fulfillmentSaga(t *testing.T, pool *pgxpool.Pool) *saga.Saga {
+	t.Helper()
+	pid, ci, prod := cartItem(2500)
+	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
+	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
+	return saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
+}
+
+// TestSaga_ShipThenDeliver: CONFIRMED -> SHIPPED (tracking + order.shipped) ->
+// DELIVERED (order.delivered).
+func TestSaga_ShipThenDeliver(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	s := fulfillmentSaga(t, pool)
+	oid := confirmedOrder(t, s, pool)
+
+	shipped, err := s.MarkShipped(ctx, oid, "TRACK-123")
+	if err != nil {
+		t.Fatalf("MarkShipped: %v", err)
+	}
+	if shipped.Status != "SHIPPED" || shipped.TrackingNumber != "TRACK-123" || !shipped.ShippedAt.Valid {
+		t.Errorf("after ship: %+v", shipped)
+	}
+	if !contains(outboxTopics(t, pool), "order.shipped") {
+		t.Error("expected order.shipped event")
+	}
+
+	delivered, err := s.MarkDelivered(ctx, oid)
+	if err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	if delivered.Status != "DELIVERED" || !delivered.DeliveredAt.Valid {
+		t.Errorf("after deliver: %+v", delivered)
+	}
+	if !contains(outboxTopics(t, pool), "order.delivered") {
+		t.Error("expected order.delivered event")
+	}
+}
+
+func TestSaga_IllegalFulfillmentTransitions(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	s := fulfillmentSaga(t, pool)
+
+	t.Run("ship a not-yet-confirmed order", func(t *testing.T) {
+		// PlaceOrder pauses at PAYMENT_PENDING — not shippable.
+		res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
+		if err != nil {
+			t.Fatalf("PlaceOrder: %v", err)
+		}
+		if _, err := s.MarkShipped(ctx, res.OrderID, ""); status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("ship PAYMENT_PENDING: want FailedPrecondition, got %v", err)
+		}
+	})
+	t.Run("deliver a not-yet-shipped order", func(t *testing.T) {
+		oid := confirmedOrder(t, s, pool)
+		if _, err := s.MarkDelivered(ctx, oid); status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("deliver CONFIRMED: want FailedPrecondition, got %v", err)
+		}
+	})
+	t.Run("ship an unknown order", func(t *testing.T) {
+		if _, err := s.MarkShipped(ctx, uuid.NewString(), ""); status.Code(err) != codes.NotFound {
+			t.Errorf("ship unknown: want NotFound, got %v", err)
+		}
+	})
+}
+
+// TestSaga_DuplicatePaymentAfterShipped: a redelivered payment.succeeded on an
+// already-SHIPPED order must be a no-op (the broadened post-payment guard) — it
+// must NOT drag the order back to CONFIRMED.
+func TestSaga_DuplicatePaymentAfterShipped(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	s := fulfillmentSaga(t, pool)
+	oid := confirmedOrder(t, s, pool)
+	if _, err := s.MarkShipped(ctx, oid, "TRACK-1"); err != nil {
+		t.Fatalf("MarkShipped: %v", err)
+	}
+
+	resume(t, s, oid, true) // duplicate payment.succeeded
+	if got := orderStatus(t, pool, oid); got != "SHIPPED" {
+		t.Errorf("status after duplicate payment = %s, want SHIPPED (unchanged)", got)
+	}
+}
+
 func TestSaga_EmptyCart(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)

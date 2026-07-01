@@ -31,6 +31,9 @@ type Order struct {
 	ShipState          string
 	ShipPostalCode     string
 	ShipCountry        string
+	TrackingNumber     string
+	ShippedAt          pgtype.Timestamptz
+	DeliveredAt        pgtype.Timestamptz
 }
 
 type OrderItem struct {

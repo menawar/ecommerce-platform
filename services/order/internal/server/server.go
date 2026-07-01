@@ -108,6 +108,48 @@ func (s *Server) CancelOrder(ctx context.Context, req *orderv1.CancelOrderReques
 	return &orderv1.CancelOrderResponse{Status: string(st)}, nil
 }
 
+// MarkShipped / MarkDelivered delegate to the saga (which guards the transition and
+// emits the event). The saga returns gRPC status errors, passed through.
+func (s *Server) MarkShipped(ctx context.Context, req *orderv1.MarkShippedRequest) (*orderv1.MarkShippedResponse, error) {
+	o, err := s.saga.MarkShipped(ctx, req.GetOrderId(), req.GetTrackingNumber())
+	if err != nil {
+		return nil, err
+	}
+	return &orderv1.MarkShippedResponse{Order: toProtoOrder(o, nil)}, nil
+}
+
+func (s *Server) MarkDelivered(ctx context.Context, req *orderv1.MarkDeliveredRequest) (*orderv1.MarkDeliveredResponse, error) {
+	o, err := s.saga.MarkDelivered(ctx, req.GetOrderId())
+	if err != nil {
+		return nil, err
+	}
+	return &orderv1.MarkDeliveredResponse{Order: toProtoOrder(o, nil)}, nil
+}
+
+// ListAllOrders is the admin view of every order (the Gateway enforces the role).
+func (s *Server) ListAllOrders(ctx context.Context, req *orderv1.ListAllOrdersRequest) (*orderv1.ListAllOrdersResponse, error) {
+	page := req.GetPage()
+	if page < 1 {
+		page = 1
+	}
+	size := req.GetPageSize()
+	if size < 1 {
+		size = defaultPageSize
+	}
+	if size > maxPageSize {
+		size = maxPageSize
+	}
+	rows, err := s.q.ListAllOrders(ctx, db.ListAllOrdersParams{Limit: size, Offset: (page - 1) * size})
+	if err != nil {
+		return nil, s.internal(ctx, "list all orders", err)
+	}
+	orders := make([]*orderv1.Order, 0, len(rows))
+	for _, o := range rows {
+		orders = append(orders, toProtoOrder(o, nil)) // summary: no items
+	}
+	return &orderv1.ListAllOrdersResponse{Orders: orders}, nil
+}
+
 func (s *Server) internal(ctx context.Context, msg string, err error) error {
 	s.log.ErrorContext(ctx, msg, "err", err)
 	return status.Error(codes.Internal, "internal error")
@@ -145,6 +187,13 @@ func toProtoOrder(o db.Order, items []db.OrderItem) *orderv1.Order {
 	}
 	if o.CreatedAt.Valid {
 		out.CreatedAt = o.CreatedAt.Time.Unix()
+	}
+	out.TrackingNumber = o.TrackingNumber
+	if o.ShippedAt.Valid {
+		out.ShippedAt = o.ShippedAt.Time.Unix()
+	}
+	if o.DeliveredAt.Valid {
+		out.DeliveredAt = o.DeliveredAt.Time.Unix()
 	}
 	for _, it := range items {
 		out.Items = append(out.Items, &orderv1.OrderItem{
