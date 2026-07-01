@@ -87,7 +87,11 @@ func (f *fakeProduct) ListProducts(context.Context, *productv1.ListProductsReque
 	return nil, status.Error(codes.Unimplemented, "")
 }
 
-type fakePayment struct{ initCalls int }
+type fakePayment struct {
+	initCalls   int
+	refundCalls int
+	refundErr   error // when set, RefundPayment fails (models a PSP refund rejection)
+}
 
 // InitializePayment models the async PSP: it never decides the outcome — it just
 // starts the charge and returns 'pending' + a hosted-checkout URL. The success/
@@ -102,6 +106,13 @@ func (f *fakePayment) InitializePayment(_ context.Context, in *paymentv1.Initial
 }
 func (f *fakePayment) GetPayment(context.Context, *paymentv1.GetPaymentRequest, ...grpc.CallOption) (*paymentv1.GetPaymentResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakePayment) RefundPayment(_ context.Context, _ *paymentv1.RefundPaymentRequest, _ ...grpc.CallOption) (*paymentv1.RefundPaymentResponse, error) {
+	f.refundCalls++
+	if f.refundErr != nil {
+		return nil, f.refundErr
+	}
+	return &paymentv1.RefundPaymentResponse{Status: "refunded"}, nil
 }
 
 // fakeUser resolves a customer's email (for payment) and address (for the order
@@ -589,6 +600,101 @@ func TestSaga_DuplicatePaymentAfterShipped(t *testing.T) {
 	if got := orderStatus(t, pool, oid); got != "SHIPPED" {
 		t.Errorf("status after duplicate payment = %s, want SHIPPED (unchanged)", got)
 	}
+}
+
+func refundSaga(t *testing.T, pool *pgxpool.Pool) (*saga.Saga, *fakePayment) {
+	t.Helper()
+	pid, ci, prod := cartItem(2500)
+	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
+	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
+	pay := &fakePayment{}
+	return saga.New(pool, cart, product, pay, fakeUser{}, discard()), pay
+}
+
+// TestSaga_RefundOrder: a CONFIRMED order refunds — payment reversed, order
+// REFUNDED, order.refunded emitted; a second refund is an idempotent no-op.
+func TestSaga_RefundOrder(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	s, pay := refundSaga(t, pool)
+	oid := confirmedOrder(t, s, pool)
+
+	o, err := s.RefundOrder(ctx, oid)
+	if err != nil {
+		t.Fatalf("RefundOrder: %v", err)
+	}
+	if o.Status != "REFUNDED" {
+		t.Errorf("status = %s, want REFUNDED", o.Status)
+	}
+	if pay.refundCalls != 1 {
+		t.Errorf("payment refunds = %d, want 1", pay.refundCalls)
+	}
+	if !contains(outboxTopics(t, pool), "order.refunded") {
+		t.Error("expected order.refunded event")
+	}
+
+	// Idempotent: refunding again is a no-op and does not re-call the PSP.
+	if _, err := s.RefundOrder(ctx, oid); err != nil {
+		t.Fatalf("second RefundOrder: %v", err)
+	}
+	if pay.refundCalls != 1 {
+		t.Errorf("payment refunds after replay = %d, want 1", pay.refundCalls)
+	}
+}
+
+func TestSaga_RefundFromDelivered(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	s, _ := refundSaga(t, pool)
+	oid := confirmedOrder(t, s, pool)
+	if _, err := s.MarkShipped(ctx, oid, "T1"); err != nil {
+		t.Fatalf("MarkShipped: %v", err)
+	}
+	if _, err := s.MarkDelivered(ctx, oid); err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	o, err := s.RefundOrder(ctx, oid)
+	if err != nil || o.Status != "REFUNDED" {
+		t.Errorf("refund from DELIVERED: status=%s err=%v", o.Status, err)
+	}
+}
+
+func TestSaga_RefundGuards(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+
+	t.Run("non-refundable state (payment pending)", func(t *testing.T) {
+		s, pay := refundSaga(t, pool)
+		res, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
+		if err != nil {
+			t.Fatalf("PlaceOrder: %v", err)
+		}
+		if _, err := s.RefundOrder(ctx, res.OrderID); status.Code(err) != codes.FailedPrecondition {
+			t.Errorf("refund PAYMENT_PENDING: want FailedPrecondition, got %v", err)
+		}
+		if pay.refundCalls != 0 {
+			t.Error("PSP must not be called for a non-refundable order")
+		}
+	})
+
+	t.Run("unknown order", func(t *testing.T) {
+		s, _ := refundSaga(t, pool)
+		if _, err := s.RefundOrder(ctx, uuid.NewString()); status.Code(err) != codes.NotFound {
+			t.Errorf("refund unknown: want NotFound, got %v", err)
+		}
+	})
+
+	t.Run("PSP refund failure leaves the order unchanged", func(t *testing.T) {
+		s, pay := refundSaga(t, pool)
+		pay.refundErr = status.Error(codes.Internal, "psp down")
+		oid := confirmedOrder(t, s, pool)
+		if _, err := s.RefundOrder(ctx, oid); err == nil {
+			t.Fatal("expected an error when the PSP refund fails")
+		}
+		if got := orderStatus(t, pool, oid); got != "CONFIRMED" {
+			t.Errorf("status after failed refund = %s, want CONFIRMED (unchanged)", got)
+		}
+	})
 }
 
 func TestSaga_EmptyCart(t *testing.T) {

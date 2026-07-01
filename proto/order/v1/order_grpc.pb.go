@@ -30,6 +30,7 @@ const (
 	OrderService_MarkShipped_FullMethodName          = "/order.v1.OrderService/MarkShipped"
 	OrderService_MarkDelivered_FullMethodName        = "/order.v1.OrderService/MarkDelivered"
 	OrderService_ListAllOrders_FullMethodName        = "/order.v1.OrderService/ListAllOrders"
+	OrderService_RefundOrder_FullMethodName          = "/order.v1.OrderService/RefundOrder"
 )
 
 // OrderServiceClient is the client API for OrderService service.
@@ -54,6 +55,9 @@ type OrderServiceClient interface {
 	MarkShipped(ctx context.Context, in *MarkShippedRequest, opts ...grpc.CallOption) (*MarkShippedResponse, error)
 	MarkDelivered(ctx context.Context, in *MarkDeliveredRequest, opts ...grpc.CallOption) (*MarkDeliveredResponse, error)
 	ListAllOrders(ctx context.Context, in *ListAllOrdersRequest, opts ...grpc.CallOption) (*ListAllOrdersResponse, error)
+	// RefundOrder refunds a paid order (admin-only): reverses the charge via the
+	// Payment service, then marks the order REFUNDED. Idempotent.
+	RefundOrder(ctx context.Context, in *RefundOrderRequest, opts ...grpc.CallOption) (*RefundOrderResponse, error)
 }
 
 type orderServiceClient struct {
@@ -174,6 +178,16 @@ func (c *orderServiceClient) ListAllOrders(ctx context.Context, in *ListAllOrder
 	return out, nil
 }
 
+func (c *orderServiceClient) RefundOrder(ctx context.Context, in *RefundOrderRequest, opts ...grpc.CallOption) (*RefundOrderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RefundOrderResponse)
+	err := c.cc.Invoke(ctx, OrderService_RefundOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // OrderServiceServer is the server API for OrderService service.
 // All implementations must embed UnimplementedOrderServiceServer
 // for forward compatibility.
@@ -196,6 +210,9 @@ type OrderServiceServer interface {
 	MarkShipped(context.Context, *MarkShippedRequest) (*MarkShippedResponse, error)
 	MarkDelivered(context.Context, *MarkDeliveredRequest) (*MarkDeliveredResponse, error)
 	ListAllOrders(context.Context, *ListAllOrdersRequest) (*ListAllOrdersResponse, error)
+	// RefundOrder refunds a paid order (admin-only): reverses the charge via the
+	// Payment service, then marks the order REFUNDED. Idempotent.
+	RefundOrder(context.Context, *RefundOrderRequest) (*RefundOrderResponse, error)
 	mustEmbedUnimplementedOrderServiceServer()
 }
 
@@ -238,6 +255,9 @@ func (UnimplementedOrderServiceServer) MarkDelivered(context.Context, *MarkDeliv
 }
 func (UnimplementedOrderServiceServer) ListAllOrders(context.Context, *ListAllOrdersRequest) (*ListAllOrdersResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListAllOrders not implemented")
+}
+func (UnimplementedOrderServiceServer) RefundOrder(context.Context, *RefundOrderRequest) (*RefundOrderResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RefundOrder not implemented")
 }
 func (UnimplementedOrderServiceServer) mustEmbedUnimplementedOrderServiceServer() {}
 func (UnimplementedOrderServiceServer) testEmbeddedByValue()                      {}
@@ -458,6 +478,24 @@ func _OrderService_ListAllOrders_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _OrderService_RefundOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefundOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(OrderServiceServer).RefundOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: OrderService_RefundOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(OrderServiceServer).RefundOrder(ctx, req.(*RefundOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // OrderService_ServiceDesc is the grpc.ServiceDesc for OrderService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -508,6 +546,10 @@ var OrderService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListAllOrders",
 			Handler:    _OrderService_ListAllOrders_Handler,
+		},
+		{
+			MethodName: "RefundOrder",
+			Handler:    _OrderService_RefundOrder_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

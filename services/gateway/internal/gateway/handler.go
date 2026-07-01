@@ -158,6 +158,7 @@ func (h *Handler) Router() http.Handler {
 		ar.Get("/admin/orders", h.listAllOrders)
 		ar.Post("/orders/{id}/ship", h.markShipped)
 		ar.Post("/orders/{id}/deliver", h.markDelivered)
+		ar.Post("/orders/{id}/refund", h.refundOrder)
 	})
 
 	return r

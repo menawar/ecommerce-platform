@@ -52,3 +52,15 @@ func TestMockVerify_BadRef(t *testing.T) {
 		t.Fatal("Verify: want error for unrecognized reference, got nil")
 	}
 }
+
+// TestMockRefund: succeeds for a mock-minted reference, errors for an unknown one.
+func TestMockRefund(t *testing.T) {
+	m := provider.NewMock()
+	_, ref, _ := m.Initialize(context.Background(), 2500, "NGN", "r", "e@x.com")
+	if err := m.Refund(context.Background(), ref, 2500); err != nil {
+		t.Errorf("Refund(minted ref): unexpected error %v", err)
+	}
+	if err := m.Refund(context.Background(), "not-a-mock-ref", 2500); err == nil {
+		t.Error("Refund(unknown ref): want error, got nil")
+	}
+}

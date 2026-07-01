@@ -126,6 +126,23 @@ func (p *Paystack) Verify(ctx context.Context, providerRef string) (string, erro
 	}
 }
 
+// Refund reverses a charge via Paystack's POST /refund. The transaction is
+// referenced by the reference we stored; amount is in the minor unit (kobo). A
+// non-2xx or status=false surfaces as an error (funds not returned).
+func (p *Paystack) Refund(ctx context.Context, providerRef string, amountCents int64) error {
+	body, err := json.Marshal(map[string]any{
+		"transaction": providerRef,
+		"amount":      amountCents,
+	})
+	if err != nil {
+		return fmt.Errorf("paystack refund: marshal request: %w", err)
+	}
+	if _, err := p.do(ctx, http.MethodPost, "/refund", body); err != nil {
+		return err
+	}
+	return nil
+}
+
 // do performs an authenticated Paystack request and unwraps the standard
 // envelope, turning a non-2xx response or status=false into an error so callers
 // only deal with the happy data payload.

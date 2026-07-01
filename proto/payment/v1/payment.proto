@@ -1,3 +1,4 @@
+
 syntax = "proto3";
 
 package payment.v1;
@@ -12,6 +13,9 @@ service PaymentService {
   // payment in 'pending'. The real outcome arrives later via webhook.
   rpc InitializePayment(InitializePaymentRequest) returns (InitializePaymentResponse);
   rpc GetPayment(GetPaymentRequest) returns (GetPaymentResponse);
+  // RefundPayment reverses a succeeded charge (synchronous). Idempotent: refunding
+  // an already-refunded payment returns success.
+  rpc RefundPayment(RefundPaymentRequest) returns (RefundPaymentResponse);
 }
 
 message Payment {
@@ -43,4 +47,11 @@ message GetPaymentRequest {
 }
 message GetPaymentResponse {
   Payment payment = 1;
+}
+
+message RefundPaymentRequest {
+  string payment_id = 1;
+}
+message RefundPaymentResponse {
+  string status = 1; // refunded
 }

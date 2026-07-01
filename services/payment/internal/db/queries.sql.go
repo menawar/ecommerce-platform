@@ -169,6 +169,30 @@ func (q *Queries) MarkOutboxPublished(ctx context.Context, id pgtype.UUID) error
 	return err
 }
 
+const markPaymentRefunded = `-- name: MarkPaymentRefunded :one
+UPDATE payments SET status = 'refunded' WHERE id = $1 AND status = 'succeeded' RETURNING id, order_id, amount_cents, currency, status, provider, provider_ref, idempotency_key, created_at
+`
+
+// MarkPaymentRefunded flips a succeeded charge to refunded. The status precondition
+// makes it an atomic compare-and-set: only a currently-succeeded payment refunds,
+// and a concurrent second refund matches 0 rows.
+func (q *Queries) MarkPaymentRefunded(ctx context.Context, id pgtype.UUID) (Payment, error) {
+	row := q.db.QueryRow(ctx, markPaymentRefunded, id)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.AmountCents,
+		&i.Currency,
+		&i.Status,
+		&i.Provider,
+		&i.ProviderRef,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const updatePaymentResult = `-- name: UpdatePaymentResult :one
 UPDATE payments
 SET status = $2, provider_ref = $3

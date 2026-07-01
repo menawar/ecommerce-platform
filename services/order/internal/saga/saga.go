@@ -361,6 +361,70 @@ func (s *Saga) advanceFulfillment(ctx context.Context, orderID string, to order.
 	return updated, nil
 }
 
+// RefundOrder refunds a paid order: it reverses the charge via the Payment service
+// (synchronous, idempotent), then marks the order REFUNDED and emits order.refunded
+// in one tx. Admin-only (gateway-enforced). Idempotent: an already-REFUNDED order
+// is a no-op. Money is returned; stock is NOT auto-restocked (returns are a
+// separate flow).
+func (s *Saga) RefundOrder(ctx context.Context, orderID string) (db.Order, error) {
+	oid, err := uuid.Parse(orderID)
+	if err != nil {
+		return db.Order{}, status.Error(codes.InvalidArgument, "order_id must be a UUID")
+	}
+	o, err := s.q.GetOrder(ctx, pgUUID(oid))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return db.Order{}, status.Error(codes.NotFound, "order not found")
+		}
+		return db.Order{}, s.internal(ctx, "get order", err)
+	}
+	if order.Status(o.Status) == order.StatusRefunded {
+		return o, nil // idempotent
+	}
+	if !order.Status(o.Status).CanTransitionTo(order.StatusRefunded) {
+		return db.Order{}, status.Errorf(codes.FailedPrecondition, "order in %s cannot be refunded", o.Status)
+	}
+	if !o.PaymentID.Valid {
+		return db.Order{}, status.Error(codes.FailedPrecondition, "order has no payment to refund")
+	}
+
+	// Reverse the charge first — only mark the order refunded once the money is back.
+	if _, err := s.payments.RefundPayment(ctx, &paymentv1.RefundPaymentRequest{PaymentId: uuidStr(o.PaymentID)}); err != nil {
+		// Pass the payment service's gRPC status through (e.g. FailedPrecondition).
+		return db.Order{}, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return db.Order{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	updated, err := q.MarkOrderRefunded(ctx, pgUUID(oid))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Concurrent refund won the race; the money is already back. Re-read the
+			// now-REFUNDED row (via the pool, not this to-be-rolled-back tx) so we
+			// return the real status, not the stale pre-refund snapshot.
+			if cur, gerr := s.q.GetOrder(ctx, pgUUID(oid)); gerr == nil {
+				return cur, nil
+			}
+			return o, nil
+		}
+		return db.Order{}, s.internal(ctx, "mark refunded", err)
+	}
+	ev := orderEvent{OrderID: orderID, UserID: uuidStr(o.UserID), TotalCents: o.TotalCents, Status: string(order.StatusRefunded)}
+	if err := writeOutbox(ctx, q, "order.refunded", ev); err != nil {
+		return db.Order{}, s.internal(ctx, "write order.refunded", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return db.Order{}, s.internal(ctx, "commit refund", err)
+	}
+	s.log.InfoContext(ctx, "order refunded", "order_id", orderID)
+	return updated, nil
+}
+
 // paymentEventData mirrors the payment service's payment.succeeded/payment.failed
 // payload. We only need the order id to correlate; the topic carries the outcome.
 type paymentEventData struct {

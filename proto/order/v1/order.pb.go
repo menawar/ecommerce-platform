@@ -1542,6 +1542,94 @@ func (x *ListAllOrdersResponse) GetOrders() []*Order {
 	return nil
 }
 
+type RefundOrderRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefundOrderRequest) Reset() {
+	*x = RefundOrderRequest{}
+	mi := &file_order_v1_order_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefundOrderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefundOrderRequest) ProtoMessage() {}
+
+func (x *RefundOrderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_order_v1_order_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefundOrderRequest.ProtoReflect.Descriptor instead.
+func (*RefundOrderRequest) Descriptor() ([]byte, []int) {
+	return file_order_v1_order_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *RefundOrderRequest) GetOrderId() string {
+	if x != nil {
+		return x.OrderId
+	}
+	return ""
+}
+
+type RefundOrderResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Order         *Order                 `protobuf:"bytes,1,opt,name=order,proto3" json:"order,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefundOrderResponse) Reset() {
+	*x = RefundOrderResponse{}
+	mi := &file_order_v1_order_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefundOrderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefundOrderResponse) ProtoMessage() {}
+
+func (x *RefundOrderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_order_v1_order_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefundOrderResponse.ProtoReflect.Descriptor instead.
+func (*RefundOrderResponse) Descriptor() ([]byte, []int) {
+	return file_order_v1_order_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *RefundOrderResponse) GetOrder() *Order {
+	if x != nil {
+		return x.Order
+	}
+	return nil
+}
+
 var File_order_v1_order_proto protoreflect.FileDescriptor
 
 const file_order_v1_order_proto_rawDesc = "" +
@@ -1655,7 +1743,11 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\x04page\x18\x01 \x01(\x05R\x04page\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\"@\n" +
 	"\x15ListAllOrdersResponse\x12'\n" +
-	"\x06orders\x18\x01 \x03(\v2\x0f.order.v1.OrderR\x06orders2\xb8\a\n" +
+	"\x06orders\x18\x01 \x03(\v2\x0f.order.v1.OrderR\x06orders\"/\n" +
+	"\x12RefundOrderRequest\x12\x19\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"<\n" +
+	"\x13RefundOrderResponse\x12%\n" +
+	"\x05order\x18\x01 \x01(\v2\x0f.order.v1.OrderR\x05order2\x84\b\n" +
 	"\fOrderService\x12G\n" +
 	"\n" +
 	"PlaceOrder\x12\x1b.order.v1.PlaceOrderRequest\x1a\x1c.order.v1.PlaceOrderResponse\x12A\n" +
@@ -1669,7 +1761,8 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\x14DeleteShippingMethod\x12%.order.v1.DeleteShippingMethodRequest\x1a&.order.v1.DeleteShippingMethodResponse\x12J\n" +
 	"\vMarkShipped\x12\x1c.order.v1.MarkShippedRequest\x1a\x1d.order.v1.MarkShippedResponse\x12P\n" +
 	"\rMarkDelivered\x12\x1e.order.v1.MarkDeliveredRequest\x1a\x1f.order.v1.MarkDeliveredResponse\x12P\n" +
-	"\rListAllOrders\x12\x1e.order.v1.ListAllOrdersRequest\x1a\x1f.order.v1.ListAllOrdersResponseB\x99\x01\n" +
+	"\rListAllOrders\x12\x1e.order.v1.ListAllOrdersRequest\x1a\x1f.order.v1.ListAllOrdersResponse\x12J\n" +
+	"\vRefundOrder\x12\x1c.order.v1.RefundOrderRequest\x1a\x1d.order.v1.RefundOrderResponseB\x99\x01\n" +
 	"\fcom.order.v1B\n" +
 	"OrderProtoP\x01Z<github.com/menawar/ecommerce-platform/proto/order/v1;orderv1\xa2\x02\x03OXX\xaa\x02\bOrder.V1\xca\x02\bOrder\\V1\xe2\x02\x14Order\\V1\\GPBMetadata\xea\x02\tOrder::V1b\x06proto3"
 
@@ -1685,7 +1778,7 @@ func file_order_v1_order_proto_rawDescGZIP() []byte {
 	return file_order_v1_order_proto_rawDescData
 }
 
-var file_order_v1_order_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_order_v1_order_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_order_v1_order_proto_goTypes = []any{
 	(*ShippingMethod)(nil),               // 0: order.v1.ShippingMethod
 	(*ShippingMethodInput)(nil),          // 1: order.v1.ShippingMethodInput
@@ -1714,6 +1807,8 @@ var file_order_v1_order_proto_goTypes = []any{
 	(*MarkDeliveredResponse)(nil),        // 24: order.v1.MarkDeliveredResponse
 	(*ListAllOrdersRequest)(nil),         // 25: order.v1.ListAllOrdersRequest
 	(*ListAllOrdersResponse)(nil),        // 26: order.v1.ListAllOrdersResponse
+	(*RefundOrderRequest)(nil),           // 27: order.v1.RefundOrderRequest
+	(*RefundOrderResponse)(nil),          // 28: order.v1.RefundOrderResponse
 }
 var file_order_v1_order_proto_depIdxs = []int32{
 	0,  // 0: order.v1.ListShippingMethodsResponse.methods:type_name -> order.v1.ShippingMethod
@@ -1728,33 +1823,36 @@ var file_order_v1_order_proto_depIdxs = []int32{
 	12, // 9: order.v1.MarkShippedResponse.order:type_name -> order.v1.Order
 	12, // 10: order.v1.MarkDeliveredResponse.order:type_name -> order.v1.Order
 	12, // 11: order.v1.ListAllOrdersResponse.orders:type_name -> order.v1.Order
-	13, // 12: order.v1.OrderService.PlaceOrder:input_type -> order.v1.PlaceOrderRequest
-	15, // 13: order.v1.OrderService.GetOrder:input_type -> order.v1.GetOrderRequest
-	17, // 14: order.v1.OrderService.ListOrders:input_type -> order.v1.ListOrdersRequest
-	19, // 15: order.v1.OrderService.CancelOrder:input_type -> order.v1.CancelOrderRequest
-	2,  // 16: order.v1.OrderService.ListShippingMethods:input_type -> order.v1.ListShippingMethodsRequest
-	4,  // 17: order.v1.OrderService.CreateShippingMethod:input_type -> order.v1.CreateShippingMethodRequest
-	6,  // 18: order.v1.OrderService.UpdateShippingMethod:input_type -> order.v1.UpdateShippingMethodRequest
-	8,  // 19: order.v1.OrderService.DeleteShippingMethod:input_type -> order.v1.DeleteShippingMethodRequest
-	21, // 20: order.v1.OrderService.MarkShipped:input_type -> order.v1.MarkShippedRequest
-	23, // 21: order.v1.OrderService.MarkDelivered:input_type -> order.v1.MarkDeliveredRequest
-	25, // 22: order.v1.OrderService.ListAllOrders:input_type -> order.v1.ListAllOrdersRequest
-	14, // 23: order.v1.OrderService.PlaceOrder:output_type -> order.v1.PlaceOrderResponse
-	16, // 24: order.v1.OrderService.GetOrder:output_type -> order.v1.GetOrderResponse
-	18, // 25: order.v1.OrderService.ListOrders:output_type -> order.v1.ListOrdersResponse
-	20, // 26: order.v1.OrderService.CancelOrder:output_type -> order.v1.CancelOrderResponse
-	3,  // 27: order.v1.OrderService.ListShippingMethods:output_type -> order.v1.ListShippingMethodsResponse
-	5,  // 28: order.v1.OrderService.CreateShippingMethod:output_type -> order.v1.CreateShippingMethodResponse
-	7,  // 29: order.v1.OrderService.UpdateShippingMethod:output_type -> order.v1.UpdateShippingMethodResponse
-	9,  // 30: order.v1.OrderService.DeleteShippingMethod:output_type -> order.v1.DeleteShippingMethodResponse
-	22, // 31: order.v1.OrderService.MarkShipped:output_type -> order.v1.MarkShippedResponse
-	24, // 32: order.v1.OrderService.MarkDelivered:output_type -> order.v1.MarkDeliveredResponse
-	26, // 33: order.v1.OrderService.ListAllOrders:output_type -> order.v1.ListAllOrdersResponse
-	23, // [23:34] is the sub-list for method output_type
-	12, // [12:23] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	12, // 12: order.v1.RefundOrderResponse.order:type_name -> order.v1.Order
+	13, // 13: order.v1.OrderService.PlaceOrder:input_type -> order.v1.PlaceOrderRequest
+	15, // 14: order.v1.OrderService.GetOrder:input_type -> order.v1.GetOrderRequest
+	17, // 15: order.v1.OrderService.ListOrders:input_type -> order.v1.ListOrdersRequest
+	19, // 16: order.v1.OrderService.CancelOrder:input_type -> order.v1.CancelOrderRequest
+	2,  // 17: order.v1.OrderService.ListShippingMethods:input_type -> order.v1.ListShippingMethodsRequest
+	4,  // 18: order.v1.OrderService.CreateShippingMethod:input_type -> order.v1.CreateShippingMethodRequest
+	6,  // 19: order.v1.OrderService.UpdateShippingMethod:input_type -> order.v1.UpdateShippingMethodRequest
+	8,  // 20: order.v1.OrderService.DeleteShippingMethod:input_type -> order.v1.DeleteShippingMethodRequest
+	21, // 21: order.v1.OrderService.MarkShipped:input_type -> order.v1.MarkShippedRequest
+	23, // 22: order.v1.OrderService.MarkDelivered:input_type -> order.v1.MarkDeliveredRequest
+	25, // 23: order.v1.OrderService.ListAllOrders:input_type -> order.v1.ListAllOrdersRequest
+	27, // 24: order.v1.OrderService.RefundOrder:input_type -> order.v1.RefundOrderRequest
+	14, // 25: order.v1.OrderService.PlaceOrder:output_type -> order.v1.PlaceOrderResponse
+	16, // 26: order.v1.OrderService.GetOrder:output_type -> order.v1.GetOrderResponse
+	18, // 27: order.v1.OrderService.ListOrders:output_type -> order.v1.ListOrdersResponse
+	20, // 28: order.v1.OrderService.CancelOrder:output_type -> order.v1.CancelOrderResponse
+	3,  // 29: order.v1.OrderService.ListShippingMethods:output_type -> order.v1.ListShippingMethodsResponse
+	5,  // 30: order.v1.OrderService.CreateShippingMethod:output_type -> order.v1.CreateShippingMethodResponse
+	7,  // 31: order.v1.OrderService.UpdateShippingMethod:output_type -> order.v1.UpdateShippingMethodResponse
+	9,  // 32: order.v1.OrderService.DeleteShippingMethod:output_type -> order.v1.DeleteShippingMethodResponse
+	22, // 33: order.v1.OrderService.MarkShipped:output_type -> order.v1.MarkShippedResponse
+	24, // 34: order.v1.OrderService.MarkDelivered:output_type -> order.v1.MarkDeliveredResponse
+	26, // 35: order.v1.OrderService.ListAllOrders:output_type -> order.v1.ListAllOrdersResponse
+	28, // 36: order.v1.OrderService.RefundOrder:output_type -> order.v1.RefundOrderResponse
+	25, // [25:37] is the sub-list for method output_type
+	13, // [13:25] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_order_v1_order_proto_init() }
@@ -1768,7 +1866,7 @@ func file_order_v1_order_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_order_v1_order_proto_rawDesc), len(file_order_v1_order_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

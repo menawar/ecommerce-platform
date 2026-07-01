@@ -126,6 +126,16 @@ func (s *Server) MarkDelivered(ctx context.Context, req *orderv1.MarkDeliveredRe
 	return &orderv1.MarkDeliveredResponse{Order: toProtoOrder(o, nil)}, nil
 }
 
+// RefundOrder refunds a paid order (admin). Delegates to the saga (which reverses
+// the charge via the Payment service, then marks the order REFUNDED).
+func (s *Server) RefundOrder(ctx context.Context, req *orderv1.RefundOrderRequest) (*orderv1.RefundOrderResponse, error) {
+	o, err := s.saga.RefundOrder(ctx, req.GetOrderId())
+	if err != nil {
+		return nil, err
+	}
+	return &orderv1.RefundOrderResponse{Order: toProtoOrder(o, nil)}, nil
+}
+
 // ListAllOrders is the admin view of every order (the Gateway enforces the role).
 func (s *Server) ListAllOrders(ctx context.Context, req *orderv1.ListAllOrdersRequest) (*orderv1.ListAllOrdersResponse, error) {
 	page := req.GetPage()

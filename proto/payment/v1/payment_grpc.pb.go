@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	PaymentService_InitializePayment_FullMethodName = "/payment.v1.PaymentService/InitializePayment"
 	PaymentService_GetPayment_FullMethodName        = "/payment.v1.PaymentService/GetPayment"
+	PaymentService_RefundPayment_FullMethodName     = "/payment.v1.PaymentService/RefundPayment"
 )
 
 // PaymentServiceClient is the client API for PaymentService service.
@@ -37,6 +38,9 @@ type PaymentServiceClient interface {
 	// payment in 'pending'. The real outcome arrives later via webhook.
 	InitializePayment(ctx context.Context, in *InitializePaymentRequest, opts ...grpc.CallOption) (*InitializePaymentResponse, error)
 	GetPayment(ctx context.Context, in *GetPaymentRequest, opts ...grpc.CallOption) (*GetPaymentResponse, error)
+	// RefundPayment reverses a succeeded charge (synchronous). Idempotent: refunding
+	// an already-refunded payment returns success.
+	RefundPayment(ctx context.Context, in *RefundPaymentRequest, opts ...grpc.CallOption) (*RefundPaymentResponse, error)
 }
 
 type paymentServiceClient struct {
@@ -67,6 +71,16 @@ func (c *paymentServiceClient) GetPayment(ctx context.Context, in *GetPaymentReq
 	return out, nil
 }
 
+func (c *paymentServiceClient) RefundPayment(ctx context.Context, in *RefundPaymentRequest, opts ...grpc.CallOption) (*RefundPaymentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RefundPaymentResponse)
+	err := c.cc.Invoke(ctx, PaymentService_RefundPayment_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PaymentServiceServer is the server API for PaymentService service.
 // All implementations must embed UnimplementedPaymentServiceServer
 // for forward compatibility.
@@ -81,6 +95,9 @@ type PaymentServiceServer interface {
 	// payment in 'pending'. The real outcome arrives later via webhook.
 	InitializePayment(context.Context, *InitializePaymentRequest) (*InitializePaymentResponse, error)
 	GetPayment(context.Context, *GetPaymentRequest) (*GetPaymentResponse, error)
+	// RefundPayment reverses a succeeded charge (synchronous). Idempotent: refunding
+	// an already-refunded payment returns success.
+	RefundPayment(context.Context, *RefundPaymentRequest) (*RefundPaymentResponse, error)
 	mustEmbedUnimplementedPaymentServiceServer()
 }
 
@@ -96,6 +113,9 @@ func (UnimplementedPaymentServiceServer) InitializePayment(context.Context, *Ini
 }
 func (UnimplementedPaymentServiceServer) GetPayment(context.Context, *GetPaymentRequest) (*GetPaymentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPayment not implemented")
+}
+func (UnimplementedPaymentServiceServer) RefundPayment(context.Context, *RefundPaymentRequest) (*RefundPaymentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RefundPayment not implemented")
 }
 func (UnimplementedPaymentServiceServer) mustEmbedUnimplementedPaymentServiceServer() {}
 func (UnimplementedPaymentServiceServer) testEmbeddedByValue()                        {}
@@ -154,6 +174,24 @@ func _PaymentService_GetPayment_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PaymentService_RefundPayment_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RefundPaymentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PaymentServiceServer).RefundPayment(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PaymentService_RefundPayment_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PaymentServiceServer).RefundPayment(ctx, req.(*RefundPaymentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PaymentService_ServiceDesc is the grpc.ServiceDesc for PaymentService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -168,6 +206,10 @@ var PaymentService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPayment",
 			Handler:    _PaymentService_GetPayment_Handler,
+		},
+		{
+			MethodName: "RefundPayment",
+			Handler:    _PaymentService_RefundPayment_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -5,7 +5,7 @@ import { getMe } from "@/lib/session";
 import { listAllOrders } from "@/lib/orders";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../../error-panel";
-import { shipOrderAction, deliverOrderAction } from "./actions";
+import { shipOrderAction, deliverOrderAction, refundOrderAction } from "./actions";
 
 // Admin fulfillment console: every order, with ship/deliver actions on the ones in
 // the right state. Role-gated like the other admin pages (the gateway also enforces
@@ -85,6 +85,12 @@ export default async function AdminOrdersPage() {
                   <form action={deliverOrderAction}>
                     <input type="hidden" name="id" value={o.id} />
                     <button className="plt-btn-outline">Mark delivered</button>
+                  </form>
+                )}
+                {(o.status === "PAID" || o.status === "CONFIRMED" || o.status === "SHIPPED" || o.status === "DELIVERED") && (
+                  <form action={refundOrderAction}>
+                    <input type="hidden" name="id" value={o.id} />
+                    <button className="plt-btn-outline" style={{ color: "var(--plt-error)" }}>Refund</button>
                   </form>
                 )}
               </div>

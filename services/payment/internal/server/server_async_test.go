@@ -16,6 +16,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/menawar/ecommerce-platform/pkg/postgres"
 	paymentv1 "github.com/menawar/ecommerce-platform/proto/payment/v1"
@@ -180,5 +182,35 @@ func TestWebhook_BadSignatureRejected(t *testing.T) {
 	_ = pool.QueryRow(context.Background(), "SELECT status FROM payments WHERE provider_ref=$1", ref).Scan(&status)
 	if status != "pending" {
 		t.Errorf("status = %q after forged webhook, want pending", status)
+	}
+}
+
+func TestRefundPayment(t *testing.T) {
+	srv, pool := newAsyncServer(t)
+	ctx := context.Background()
+	pid, _ := initPayment(t, srv, pool, 2500)
+
+	// A pending charge is not refundable.
+	if _, err := srv.RefundPayment(ctx, &paymentv1.RefundPaymentRequest{PaymentId: pid}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("refund pending: want FailedPrecondition, got %v", err)
+	}
+
+	// Drive it to succeeded (a webhook would normally do this), then refund.
+	if _, err := pool.Exec(ctx, "UPDATE payments SET status='succeeded' WHERE id=$1", pid); err != nil {
+		t.Fatalf("mark succeeded: %v", err)
+	}
+	resp, err := srv.RefundPayment(ctx, &paymentv1.RefundPaymentRequest{PaymentId: pid})
+	if err != nil || resp.GetStatus() != "refunded" {
+		t.Fatalf("RefundPayment: status=%q err=%v", resp.GetStatus(), err)
+	}
+	var st string
+	_ = pool.QueryRow(ctx, "SELECT status FROM payments WHERE id=$1", pid).Scan(&st)
+	if st != "refunded" {
+		t.Errorf("db status = %q, want refunded", st)
+	}
+
+	// Idempotent: refunding again succeeds without error.
+	if r2, err := srv.RefundPayment(ctx, &paymentv1.RefundPaymentRequest{PaymentId: pid}); err != nil || r2.GetStatus() != "refunded" {
+		t.Errorf("idempotent refund: status=%q err=%v", r2.GetStatus(), err)
 	}
 }

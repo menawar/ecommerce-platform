@@ -26,6 +26,7 @@ var topicTemplates = map[string]string{
 	"order.cancelled":               "order_cancelled",
 	"order.shipped":                 "order_shipped",
 	"order.delivered":               "order_delivered",
+	"order.refunded":                "order_refunded",
 }
 
 type Handler struct {
