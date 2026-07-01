@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { InlineFormError } from "@/app/form-error";
 import Link from "next/link";
 
 import { formatPrice } from "@/lib/format";
@@ -138,20 +139,7 @@ export function CheckoutForm({
           <input type="hidden" name="idempotency_key" value={idempotencyKey} />
           <input type="hidden" name="address_id" value={addressID} />
           <input type="hidden" name="shipping_method_id" value={shipID} />
-          {state?.error && (
-            <div
-              style={{
-                fontSize: 13,
-                color: "var(--plt-error)",
-                background: "var(--plt-error-bg)",
-                padding: "10px 12px",
-                borderRadius: "var(--plt-radius-sm)",
-                marginBottom: 12,
-              }}
-            >
-              {state.error}
-            </div>
-          )}
+          <InlineFormError message={state?.error} style={{ marginBottom: 12 }} />
           <button disabled={pending} className="plt-btn-gold" style={{ width: "100%" }}>
             {pending ? "Placing order…" : "Place order"}
           </button>

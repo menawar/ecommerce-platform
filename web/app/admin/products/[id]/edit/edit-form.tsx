@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { InlineFormError } from "@/app/form-error";
 
 import type { Product } from "@/lib/types";
 import { updateProductAction, type EditProductState } from "./actions";
@@ -25,20 +26,7 @@ export function EditForm({ product }: { product: Product }) {
       <input type="hidden" name="current_image_url" value={product.image_url} />
       <input type="hidden" name="category_id" value={product.category_id} />
 
-      {state?.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-            marginBottom: 14,
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state?.error} style={{ marginBottom: 14 }} />
 
       <div style={rowStyle}>
         <label htmlFor="sku" style={labelStyle}>SKU (cannot be changed)</label>

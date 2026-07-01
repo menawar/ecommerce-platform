@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useState } from "react";
 
+import { InlineFormError } from "@/app/form-error";
+
 import type { Address } from "@/lib/addresses";
 import {
   saveAddressAction,
@@ -153,19 +155,7 @@ function AddressForm({ address, onClose }: { address?: Address; onClose: () => v
         </label>
       )}
 
-      {state.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state.error} />
 
       <div style={{ display: "flex", gap: 12 }}>
         <button disabled={pending} className="plt-btn-primary-lg" style={{ flex: 1 }}>

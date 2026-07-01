@@ -1,30 +1,15 @@
-import { redirect } from "next/navigation";
-
 import { GatewayError } from "@/lib/gateway";
-import { getMe } from "@/lib/session";
 import { listAllOrders } from "@/lib/orders";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../../error-panel";
+import { adminGuard } from "../guard";
 import { shipOrderAction, deliverOrderAction, refundOrderAction } from "./actions";
 
-// Admin fulfillment console: every order, with ship/deliver actions on the ones in
-// the right state. Role-gated like the other admin pages (the gateway also enforces
-// admin on the mutations).
+// Admin fulfillment console: every order, with ship/deliver/refund actions on the
+// ones in the right state. adminGuard handles the role gate.
 export default async function AdminOrdersPage() {
-  let role: string;
-  try {
-    role = (await getMe()).role;
-  } catch (err) {
-    if (err instanceof GatewayError && err.status === 401) redirect("/login");
-    throw err;
-  }
-  if (role !== "admin") {
-    return (
-      <main style={{ maxWidth: 720, margin: "0 auto", padding: "32px 20px" }}>
-        <ErrorPanel message="Admins only — you don't have access to this page." />
-      </main>
-    );
-  }
+  const deny = await adminGuard();
+  if (deny) return deny;
 
   let orders;
   try {

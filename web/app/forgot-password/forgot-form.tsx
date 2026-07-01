@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
+
+import { InlineFormError } from "@/app/form-error";
 import Link from "next/link";
 
 import { forgotPasswordAction } from "@/app/(auth)/actions";
@@ -29,19 +31,7 @@ export function ForgotForm() {
   return (
     <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <input name="email" type="email" required placeholder="Email" autoComplete="email" className="plt-input" />
-      {state.error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: "var(--plt-error)",
-            background: "var(--plt-error-bg)",
-            padding: "10px 12px",
-            borderRadius: "var(--plt-radius-sm)",
-          }}
-        >
-          {state.error}
-        </div>
-      )}
+      <InlineFormError message={state.error} />
       <button disabled={pending} className="plt-btn-primary-lg" style={{ width: "100%", marginTop: 4 }}>
         {pending ? "Sending…" : "Send reset link"}
       </button>
