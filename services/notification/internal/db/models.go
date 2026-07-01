@@ -9,11 +9,15 @@ import (
 )
 
 type Notification struct {
-	ID       pgtype.UUID
-	EventID  pgtype.UUID
-	UserID   pgtype.UUID
-	Channel  string
-	Template string
-	Payload  []byte
-	SentAt   pgtype.Timestamptz
+	ID        pgtype.UUID
+	EventID   pgtype.UUID
+	UserID    pgtype.UUID
+	Channel   string
+	Template  string
+	Payload   []byte
+	SentAt    pgtype.Timestamptz
+	Status    string
+	Attempts  int32
+	LastError *string
+	UpdatedAt pgtype.Timestamptz
 }

@@ -2,6 +2,7 @@ package notify_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -51,6 +52,36 @@ type capturingSender struct{ last notify.Notification }
 func (s *capturingSender) Send(_ context.Context, n notify.Notification) error {
 	s.last = n
 	return nil
+}
+
+// flakySender fails its first failN sends, then succeeds — to exercise retry.
+type flakySender struct {
+	failN, calls int
+}
+
+func (s *flakySender) Send(context.Context, notify.Notification) error {
+	s.calls++
+	if s.calls <= s.failN {
+		return errors.New("smtp down")
+	}
+	return nil
+}
+
+// failSender always fails — to exercise dead-lettering.
+type failSender struct{ calls int }
+
+func (s *failSender) Send(context.Context, notify.Notification) error {
+	s.calls++
+	return errors.New("smtp down")
+}
+
+func statusFor(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+	id, _ := uuid.Parse(eventID)
+	var s string
+	_ = pool.QueryRow(context.Background(), "SELECT status FROM notifications WHERE event_id=$1",
+		pgtype.UUID{Bytes: id, Valid: true}).Scan(&s)
+	return s
 }
 
 func testPool(t *testing.T) *pgxpool.Pool {
@@ -158,9 +189,9 @@ func TestHandle_RendersEmailWithLink(t *testing.T) {
 	}
 }
 
-// TestHandle_ResolveFailureRetries: a transient GetUser failure must NOT record a
-// dedup row (or the redelivery would be swallowed and the email lost) — it returns
-// an error so JetStream retries, and nothing is inserted.
+// TestHandle_ResolveFailureRetries: a transient GetUser failure naks (retry) and
+// leaves the ledger row pending (not sent, not dead-lettered) so the redelivery
+// re-attempts it — the email is never lost.
 func TestHandle_ResolveFailureRetries(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
@@ -171,16 +202,16 @@ func TestHandle_ResolveFailureRetries(t *testing.T) {
 	if err := h.Handle(ctx, env); err == nil {
 		t.Fatal("transient resolve failure should return an error (nak/retry)")
 	}
-	if got := countFor(t, pool, env.EventID); got != 0 {
-		t.Errorf("no dedup row should be written on resolve failure; got %d", got)
+	if got := statusFor(t, pool, env.EventID); got != "pending" {
+		t.Errorf("after transient resolve failure status = %s, want pending (will retry)", got)
 	}
 	if atomic.LoadInt32(&sender.calls) != 0 {
 		t.Error("sender must not be called when resolve fails")
 	}
 }
 
-// TestHandle_UnknownRecipientDropped: a NotFound recipient is permanent — ack (no
-// error, no infinite retry), no send.
+// TestHandle_UnknownRecipientDropped: a NotFound recipient is permanent — the row
+// is dead-lettered (status=failed) and acked (no error, no infinite retry), no send.
 func TestHandle_UnknownRecipientDropped(t *testing.T) {
 	ctx := context.Background()
 	pool := testPool(t)
@@ -190,6 +221,9 @@ func TestHandle_UnknownRecipientDropped(t *testing.T) {
 
 	if err := h.Handle(ctx, env); err != nil {
 		t.Fatalf("NotFound recipient should ack (nil), got %v", err)
+	}
+	if got := statusFor(t, pool, env.EventID); got != "failed" {
+		t.Errorf("unknown recipient status = %s, want failed (dead-lettered)", got)
 	}
 	if atomic.LoadInt32(&sender.calls) != 0 {
 		t.Error("sender must not be called for an unknown recipient")
@@ -214,6 +248,94 @@ func TestHandle_ShippedIncludesTracking(t *testing.T) {
 	}
 	if !strings.Contains(sender.last.Body, "TRK-9") {
 		t.Errorf("shipped email should include tracking; got %q", sender.last.Body)
+	}
+}
+
+// TestHandle_RetriesFailedSend is the Phase 13.3 headline: a send that fails is
+// NOT lost. The first delivery fails (naks, row stays pending); the redelivery
+// re-attempts the same row and succeeds — one row, exactly-once eventual delivery.
+func TestHandle_RetriesFailedSend(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	sender := &flakySender{failN: 1}
+	h := notify.NewHandler(pool, fakeUser{}, sender, discard())
+	env := event(t, "order.confirmed")
+
+	if err := h.Handle(ctx, env); err == nil {
+		t.Fatal("first send fails -> Handle should return an error (nak)")
+	}
+	if got := statusFor(t, pool, env.EventID); got != "pending" {
+		t.Errorf("after failed send status = %s, want pending", got)
+	}
+	if err := h.Handle(ctx, env); err != nil { // redelivery
+		t.Fatalf("retry should succeed: %v", err)
+	}
+	if got := statusFor(t, pool, env.EventID); got != "sent" {
+		t.Errorf("after retry status = %s, want sent", got)
+	}
+	if sender.calls != 2 {
+		t.Errorf("sends = %d, want 2 (fail then succeed)", sender.calls)
+	}
+	if countFor(t, pool, env.EventID) != 1 {
+		t.Error("retry must reuse the one ledger row, not create a second")
+	}
+}
+
+// TestHandle_DeadLettersAfterMax: a permanently-failing send is retried up to the
+// cap, then dead-lettered (status=failed, ack) instead of retried forever.
+func TestHandle_DeadLettersAfterMax(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	sender := &failSender{}
+	h := notify.NewHandler(pool, fakeUser{}, sender, discard())
+	env := event(t, "order.confirmed")
+
+	const maxAttempts = 5 // matches notify.maxSendAttempts / JetStream MaxDeliver
+	for i := 1; i <= maxAttempts; i++ {
+		err := h.Handle(ctx, env)
+		if i < maxAttempts && err == nil {
+			t.Fatalf("attempt %d should nak (return error)", i)
+		}
+		if i == maxAttempts && err != nil {
+			t.Fatalf("final attempt should ack (dead-letter), got %v", err)
+		}
+	}
+	if got := statusFor(t, pool, env.EventID); got != "failed" {
+		t.Errorf("status = %s, want failed (dead-lettered)", got)
+	}
+	if sender.calls != maxAttempts {
+		t.Errorf("sends = %d, want %d", sender.calls, maxAttempts)
+	}
+}
+
+// TestHandle_DeadLetterIsTerminal: once dead-lettered, a redelivery is skipped —
+// not reprocessed/re-sent — even if the sender would now succeed.
+func TestHandle_DeadLetterIsTerminal(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	failing := &failSender{}
+	h := notify.NewHandler(pool, fakeUser{}, failing, discard())
+	env := event(t, "order.confirmed")
+
+	const maxAttempts = 5
+	for range maxAttempts {
+		_ = h.Handle(ctx, env)
+	}
+	if got := statusFor(t, pool, env.EventID); got != "failed" {
+		t.Fatalf("precondition: status = %s, want failed", got)
+	}
+
+	// Redeliver to a now-healthy sender: must be skipped (terminal), not re-sent.
+	healthy := &countingSender{}
+	h2 := notify.NewHandler(pool, fakeUser{}, healthy, discard())
+	if err := h2.Handle(ctx, env); err != nil {
+		t.Fatalf("redelivery of a dead-lettered event should ack, got %v", err)
+	}
+	if atomic.LoadInt32(&healthy.calls) != 0 {
+		t.Error("a dead-lettered event must not be re-sent on redelivery")
+	}
+	if got := statusFor(t, pool, env.EventID); got != "failed" {
+		t.Errorf("status = %s, want failed (still terminal)", got)
 	}
 }
 
