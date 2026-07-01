@@ -148,7 +148,7 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 	// Resume consumer: the saga's "start" half leaves orders at PAYMENT_PENDING;
 	// this durable consumer drives them to CONFIRMED/CANCELLED when the payment
 	// service emits payment.succeeded/payment.failed. The handler is idempotent.
-	resumeConsumer, err := events.Consume(ctx, js, events.StreamName, "order-saga", log, sg.HandlePaymentEvent)
+	resumeConsumer, err := events.Consume(ctx, js, events.StreamName, "order-saga", log, sg.HandleEvent)
 	if err != nil {
 		return fmt.Errorf("start payment-event consumer: %w", err)
 	}

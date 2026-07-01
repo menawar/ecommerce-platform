@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const anonymizeUserOrders = `-- name: AnonymizeUserOrders :exec
+UPDATE orders
+SET ship_recipient = '', ship_phone = '', ship_line1 = '', ship_line2 = '',
+    ship_city = '', ship_state = '', ship_postal_code = '',
+    updated_at = now()
+WHERE user_id = $1
+`
+
+// On user.deleted, blank the PII snapshotted onto the user's orders (recipient,
+// phone, address) while KEEPING the order records (totals/status) for accounting.
+// Idempotent: re-running blanks already-blank fields.
+func (q *Queries) AnonymizeUserOrders(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, anonymizeUserOrders, userID)
+	return err
+}
+
 const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (
     id, user_id, status, total_cents, currency, reservation_id, idempotency_key,
