@@ -18,3 +18,9 @@ export type DataExport = {
 export function exportMyData(): Promise<DataExport> {
   return gatewayFetch<DataExport>("/me/export");
 }
+
+// deleteMyAccount triggers erasure (NDPR/GDPR right to erasure). The gateway
+// anonymises the account and revokes sessions; the caller then clears cookies.
+export async function deleteMyAccount(): Promise<void> {
+  await gatewayFetch<void>("/me/delete", { method: "POST" });
+}

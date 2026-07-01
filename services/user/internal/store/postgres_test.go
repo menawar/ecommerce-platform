@@ -97,3 +97,58 @@ func TestPostgres_NotFound(t *testing.T) {
 		t.Errorf("GetByID(malformed): want ErrNotFound, got %v", err)
 	}
 }
+
+func TestPostgres_DeleteAccount(t *testing.T) {
+	ctx := context.Background()
+	pool := userPool(t)
+	if _, err := pool.Exec(ctx, "TRUNCATE addresses, refresh_tokens, verification_tokens, password_reset_tokens"); err != nil {
+		t.Skipf("skipping (related tables unavailable): %v", err)
+	}
+	repo := store.NewPostgres(pool)
+	addrs := store.NewPostgresAddresses(pool)
+
+	u := dbUser("erase-me@x.com")
+	if err := repo.Create(ctx, u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := addrs.Create(ctx, store.Address{
+		UserID: u.ID, Recipient: "Ada", Phone: "080", Line1: "1 Rayfield", City: "Jos", State: "Plateau", Country: "NG",
+	}); err != nil {
+		t.Fatalf("seed address: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO refresh_tokens (jti, user_id, expires_at) VALUES ($1,$2, now()+interval '1 hour')", uuid.NewString(), u.ID); err != nil {
+		t.Fatalf("seed refresh token: %v", err)
+	}
+
+	deleted, err := repo.DeleteAccount(ctx, u.ID)
+	if err != nil || !deleted {
+		t.Fatalf("DeleteAccount = %v, %v; want true, nil", deleted, err)
+	}
+
+	// PII is tombstoned.
+	got, err := repo.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("GetByID after delete: %v", err)
+	}
+	if got.FullName != "" || got.PasswordHash != "" || got.Email == u.Email {
+		t.Errorf("user not anonymised: %+v", got)
+	}
+	// The original email is freed and can't be used to log in.
+	if _, err := repo.GetByEmail(ctx, "erase-me@x.com"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("GetByEmail after delete = %v, want ErrNotFound", err)
+	}
+	// Addresses and refresh tokens are purged.
+	if list, _ := addrs.ListByUser(ctx, u.ID); len(list) != 0 {
+		t.Errorf("addresses not purged: %d remain", len(list))
+	}
+	var n int
+	_ = pool.QueryRow(ctx, "SELECT count(*) FROM refresh_tokens WHERE user_id=$1", u.ID).Scan(&n)
+	if n != 0 {
+		t.Errorf("refresh tokens not purged: %d remain", n)
+	}
+
+	// Idempotent: a second delete is a no-op success (no event).
+	if again, err := repo.DeleteAccount(ctx, u.ID); err != nil || again {
+		t.Errorf("second DeleteAccount = %v, %v; want false, nil", again, err)
+	}
+}

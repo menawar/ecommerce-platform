@@ -156,6 +156,9 @@ func (fakeUser) ResendVerification(context.Context, *userv1.ResendVerificationRe
 func (fakeUser) RequestPasswordReset(context.Context, *userv1.RequestPasswordResetRequest, ...grpc.CallOption) (*userv1.RequestPasswordResetResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }
+func (fakeUser) DeleteUser(context.Context, *userv1.DeleteUserRequest, ...grpc.CallOption) (*userv1.DeleteUserResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "")
+}
 func (fakeUser) ResetPassword(context.Context, *userv1.ResetPasswordRequest, ...grpc.CallOption) (*userv1.ResetPasswordResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "")
 }

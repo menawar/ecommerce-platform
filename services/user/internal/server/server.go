@@ -414,6 +414,61 @@ func (s *Server) ResetPassword(ctx context.Context, req *userv1.ResetPasswordReq
 	return &userv1.ResetPasswordResponse{}, nil
 }
 
+// DeleteUser erases the caller's account: anonymise the users row and purge their
+// addresses + tokens (one tx in the store), then emit user.deleted so other
+// services anonymise their copies. Idempotent — a second call is a success no-op
+// and emits nothing. user_id is supplied by the Gateway from the validated JWT.
+//
+// Sessions: refresh tokens are purged (no renewal), and the BFF clears the session
+// cookie immediately. The already-issued ACCESS token is a stateless JWT, so it
+// stays valid until it expires (~15m) — standard for stateless auth without a
+// per-request denylist. The short TTL bounds the residual window.
+func (s *Server) DeleteUser(ctx context.Context, req *userv1.DeleteUserRequest) (*userv1.DeleteUserResponse, error) {
+	if _, err := uuid.Parse(req.GetUserId()); err != nil {
+		return nil, status.Error(codes.InvalidArgument, "valid user_id is required")
+	}
+	deleted, err := s.repo.DeleteAccount(ctx, req.GetUserId())
+	if err != nil {
+		return nil, s.internal(ctx, "delete account", err)
+	}
+	if deleted {
+		s.log.InfoContext(ctx, "account deleted", "user_id", req.GetUserId())
+		s.publishUserDeleted(ctx, req.GetUserId())
+	}
+	return &userv1.DeleteUserResponse{}, nil
+}
+
+type userDeleted struct {
+	UserID string `json:"user_id"`
+}
+
+// publishUserDeleted best-effort emits user.deleted so consumers (e.g. Order)
+// anonymise their PII snapshots. The authoritative erasure (User's own PII) already
+// committed, so a publish failure is logged, not returned. LIMITATION: this is a
+// direct publish, not a transactional outbox — if NATS is down at this instant the
+// event is lost and downstream snapshots stay un-anonymised until reconciled. The
+// error log below is the reconciliation signal; a transactional outbox for User
+// would close the gap (tracked as future hardening).
+func (s *Server) publishUserDeleted(ctx context.Context, userID string) {
+	if s.publisher == nil {
+		return
+	}
+	env, err := events.New("user.deleted", userDeleted{UserID: userID})
+	if err != nil {
+		s.log.ErrorContext(ctx, "build user.deleted", "err", err)
+		return
+	}
+	payload, err := env.Marshal()
+	if err != nil {
+		s.log.ErrorContext(ctx, "marshal user.deleted", "err", err)
+		return
+	}
+	if err := s.publisher.Publish(ctx, "user.deleted", payload); err != nil {
+		// Loud marker: the account is erased but downstream anonymisation didn't fire.
+		s.log.ErrorContext(ctx, "publish user.deleted FAILED — downstream anonymisation needs reconciliation", "err", err, "user_id", userID)
+	}
+}
+
 type userRegistered struct {
 	UserID string `json:"user_id"`
 	Email  string `json:"email"`

@@ -55,6 +55,11 @@ type Repository interface {
 	SetEmailVerified(ctx context.Context, userID string) error
 	// UpdatePassword replaces the account's password hash (used by password reset).
 	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	// DeleteAccount erases the account: it anonymises the users row (PII tombstoned)
+	// and purges the user's addresses and tokens in one transaction. It is
+	// idempotent — the returned bool is true only if THIS call performed the
+	// erasure (false = already deleted), so the caller emits user.deleted once.
+	DeleteAccount(ctx context.Context, userID string) (bool, error)
 }
 
 // RefreshToken is a persisted, revocable refresh-token record. We store only the

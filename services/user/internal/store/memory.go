@@ -21,6 +21,7 @@ type Memory struct {
 	mu      sync.RWMutex
 	byID    map[string]User
 	byEmail map[string]string // lowercased email -> id
+	deleted map[string]bool   // ids that have been erased (idempotency marker)
 }
 
 // NewMemory returns an initialized, empty in-memory repository. Returning the
@@ -30,6 +31,7 @@ func NewMemory() *Memory {
 	return &Memory{
 		byID:    make(map[string]User),
 		byEmail: make(map[string]string),
+		deleted: make(map[string]bool),
 	}
 }
 
@@ -52,6 +54,28 @@ func (m *Memory) Create(_ context.Context, u User) error {
 	m.byID[u.ID] = u
 	m.byEmail[key] = u.ID
 	return nil
+}
+
+// DeleteAccount anonymises the user and frees their email (so login by it fails
+// and the address can be re-registered). Idempotent. The in-memory double only
+// tombstones the user record; the Postgres store additionally purges addresses and
+// tokens in one transaction.
+func (m *Memory) DeleteAccount(_ context.Context, id string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.byID[id]
+	if !ok || m.deleted[id] {
+		return false, nil // unknown or already deleted
+	}
+	delete(m.byEmail, normalizeEmail(u.Email))
+	u.Email = "deleted+" + id + "@deleted.invalid"
+	u.PasswordHash = ""
+	u.FullName = ""
+	u.EmailVerified = false
+	m.byID[id] = u
+	m.deleted[id] = true
+	return true, nil
 }
 
 func (m *Memory) GetByEmail(_ context.Context, email string) (User, error) {

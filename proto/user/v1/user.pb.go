@@ -1681,6 +1681,86 @@ func (*ResetPasswordResponse) Descriptor() ([]byte, []int) {
 	return file_user_v1_user_proto_rawDescGZIP(), []int{31}
 }
 
+type DeleteUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserRequest) Reset() {
+	*x = DeleteUserRequest{}
+	mi := &file_user_v1_user_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserRequest) ProtoMessage() {}
+
+func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserRequest.ProtoReflect.Descriptor instead.
+func (*DeleteUserRequest) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *DeleteUserRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+type DeleteUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserResponse) Reset() {
+	*x = DeleteUserResponse{}
+	mi := &file_user_v1_user_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserResponse) ProtoMessage() {}
+
+func (x *DeleteUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_user_v1_user_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserResponse.ProtoReflect.Descriptor instead.
+func (*DeleteUserResponse) Descriptor() ([]byte, []int) {
+	return file_user_v1_user_proto_rawDescGZIP(), []int{33}
+}
+
 type ValidateTokenRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -1690,7 +1770,7 @@ type ValidateTokenRequest struct {
 
 func (x *ValidateTokenRequest) Reset() {
 	*x = ValidateTokenRequest{}
-	mi := &file_user_v1_user_proto_msgTypes[32]
+	mi := &file_user_v1_user_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1702,7 +1782,7 @@ func (x *ValidateTokenRequest) String() string {
 func (*ValidateTokenRequest) ProtoMessage() {}
 
 func (x *ValidateTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_user_v1_user_proto_msgTypes[32]
+	mi := &file_user_v1_user_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1715,7 +1795,7 @@ func (x *ValidateTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateTokenRequest.ProtoReflect.Descriptor instead.
 func (*ValidateTokenRequest) Descriptor() ([]byte, []int) {
-	return file_user_v1_user_proto_rawDescGZIP(), []int{32}
+	return file_user_v1_user_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ValidateTokenRequest) GetToken() string {
@@ -1736,7 +1816,7 @@ type ValidateTokenResponse struct {
 
 func (x *ValidateTokenResponse) Reset() {
 	*x = ValidateTokenResponse{}
-	mi := &file_user_v1_user_proto_msgTypes[33]
+	mi := &file_user_v1_user_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1748,7 +1828,7 @@ func (x *ValidateTokenResponse) String() string {
 func (*ValidateTokenResponse) ProtoMessage() {}
 
 func (x *ValidateTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_user_v1_user_proto_msgTypes[33]
+	mi := &file_user_v1_user_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1761,7 +1841,7 @@ func (x *ValidateTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateTokenResponse.ProtoReflect.Descriptor instead.
 func (*ValidateTokenResponse) Descriptor() ([]byte, []int) {
-	return file_user_v1_user_proto_rawDescGZIP(), []int{33}
+	return file_user_v1_user_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ValidateTokenResponse) GetValid() bool {
@@ -1897,12 +1977,16 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x17\n" +
 	"\x15ResetPasswordResponse\",\n" +
+	"\x11DeleteUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\"\x14\n" +
+	"\x12DeleteUserResponse\",\n" +
 	"\x14ValidateTokenRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"Z\n" +
 	"\x15ValidateTokenResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
-	"\x04role\x18\x03 \x01(\tR\x04role2\xdd\t\n" +
+	"\x04role\x18\x03 \x01(\tR\x04role2\xa4\n" +
+	"\n" +
 	"\vUserService\x12?\n" +
 	"\bRegister\x12\x18.user.v1.RegisterRequest\x1a\x19.user.v1.RegisterResponse\x126\n" +
 	"\x05Login\x12\x15.user.v1.LoginRequest\x1a\x16.user.v1.LoginResponse\x12N\n" +
@@ -1913,7 +1997,9 @@ const file_user_v1_user_proto_rawDesc = "" +
 	"\vVerifyEmail\x12\x1b.user.v1.VerifyEmailRequest\x1a\x1c.user.v1.VerifyEmailResponse\x12]\n" +
 	"\x12ResendVerification\x12\".user.v1.ResendVerificationRequest\x1a#.user.v1.ResendVerificationResponse\x12c\n" +
 	"\x14RequestPasswordReset\x12$.user.v1.RequestPasswordResetRequest\x1a%.user.v1.RequestPasswordResetResponse\x12N\n" +
-	"\rResetPassword\x12\x1d.user.v1.ResetPasswordRequest\x1a\x1e.user.v1.ResetPasswordResponse\x12N\n" +
+	"\rResetPassword\x12\x1d.user.v1.ResetPasswordRequest\x1a\x1e.user.v1.ResetPasswordResponse\x12E\n" +
+	"\n" +
+	"DeleteUser\x12\x1a.user.v1.DeleteUserRequest\x1a\x1b.user.v1.DeleteUserResponse\x12N\n" +
 	"\rCreateAddress\x12\x1d.user.v1.CreateAddressRequest\x1a\x1e.user.v1.CreateAddressResponse\x12N\n" +
 	"\rListAddresses\x12\x1d.user.v1.ListAddressesRequest\x1a\x1e.user.v1.ListAddressesResponse\x12E\n" +
 	"\n" +
@@ -1935,7 +2021,7 @@ func file_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_user_v1_user_proto_rawDescData
 }
 
-var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_user_v1_user_proto_goTypes = []any{
 	(*Address)(nil),                      // 0: user.v1.Address
 	(*AddressInput)(nil),                 // 1: user.v1.AddressInput
@@ -1969,8 +2055,10 @@ var file_user_v1_user_proto_goTypes = []any{
 	(*RequestPasswordResetResponse)(nil), // 29: user.v1.RequestPasswordResetResponse
 	(*ResetPasswordRequest)(nil),         // 30: user.v1.ResetPasswordRequest
 	(*ResetPasswordResponse)(nil),        // 31: user.v1.ResetPasswordResponse
-	(*ValidateTokenRequest)(nil),         // 32: user.v1.ValidateTokenRequest
-	(*ValidateTokenResponse)(nil),        // 33: user.v1.ValidateTokenResponse
+	(*DeleteUserRequest)(nil),            // 32: user.v1.DeleteUserRequest
+	(*DeleteUserResponse)(nil),           // 33: user.v1.DeleteUserResponse
+	(*ValidateTokenRequest)(nil),         // 34: user.v1.ValidateTokenRequest
+	(*ValidateTokenResponse)(nil),        // 35: user.v1.ValidateTokenResponse
 }
 var file_user_v1_user_proto_depIdxs = []int32{
 	1,  // 0: user.v1.CreateAddressRequest.address:type_name -> user.v1.AddressInput
@@ -1980,7 +2068,7 @@ var file_user_v1_user_proto_depIdxs = []int32{
 	1,  // 4: user.v1.UpdateAddressRequest.address:type_name -> user.v1.AddressInput
 	14, // 5: user.v1.UserService.Register:input_type -> user.v1.RegisterRequest
 	16, // 6: user.v1.UserService.Login:input_type -> user.v1.LoginRequest
-	32, // 7: user.v1.UserService.ValidateToken:input_type -> user.v1.ValidateTokenRequest
+	34, // 7: user.v1.UserService.ValidateToken:input_type -> user.v1.ValidateTokenRequest
 	22, // 8: user.v1.UserService.GetUser:input_type -> user.v1.GetUserRequest
 	18, // 9: user.v1.UserService.RefreshToken:input_type -> user.v1.RefreshTokenRequest
 	20, // 10: user.v1.UserService.Logout:input_type -> user.v1.LogoutRequest
@@ -1988,30 +2076,32 @@ var file_user_v1_user_proto_depIdxs = []int32{
 	26, // 12: user.v1.UserService.ResendVerification:input_type -> user.v1.ResendVerificationRequest
 	28, // 13: user.v1.UserService.RequestPasswordReset:input_type -> user.v1.RequestPasswordResetRequest
 	30, // 14: user.v1.UserService.ResetPassword:input_type -> user.v1.ResetPasswordRequest
-	2,  // 15: user.v1.UserService.CreateAddress:input_type -> user.v1.CreateAddressRequest
-	4,  // 16: user.v1.UserService.ListAddresses:input_type -> user.v1.ListAddressesRequest
-	6,  // 17: user.v1.UserService.GetAddress:input_type -> user.v1.GetAddressRequest
-	8,  // 18: user.v1.UserService.UpdateAddress:input_type -> user.v1.UpdateAddressRequest
-	10, // 19: user.v1.UserService.DeleteAddress:input_type -> user.v1.DeleteAddressRequest
-	12, // 20: user.v1.UserService.SetDefaultAddress:input_type -> user.v1.SetDefaultAddressRequest
-	15, // 21: user.v1.UserService.Register:output_type -> user.v1.RegisterResponse
-	17, // 22: user.v1.UserService.Login:output_type -> user.v1.LoginResponse
-	33, // 23: user.v1.UserService.ValidateToken:output_type -> user.v1.ValidateTokenResponse
-	23, // 24: user.v1.UserService.GetUser:output_type -> user.v1.GetUserResponse
-	19, // 25: user.v1.UserService.RefreshToken:output_type -> user.v1.RefreshTokenResponse
-	21, // 26: user.v1.UserService.Logout:output_type -> user.v1.LogoutResponse
-	25, // 27: user.v1.UserService.VerifyEmail:output_type -> user.v1.VerifyEmailResponse
-	27, // 28: user.v1.UserService.ResendVerification:output_type -> user.v1.ResendVerificationResponse
-	29, // 29: user.v1.UserService.RequestPasswordReset:output_type -> user.v1.RequestPasswordResetResponse
-	31, // 30: user.v1.UserService.ResetPassword:output_type -> user.v1.ResetPasswordResponse
-	3,  // 31: user.v1.UserService.CreateAddress:output_type -> user.v1.CreateAddressResponse
-	5,  // 32: user.v1.UserService.ListAddresses:output_type -> user.v1.ListAddressesResponse
-	7,  // 33: user.v1.UserService.GetAddress:output_type -> user.v1.GetAddressResponse
-	9,  // 34: user.v1.UserService.UpdateAddress:output_type -> user.v1.UpdateAddressResponse
-	11, // 35: user.v1.UserService.DeleteAddress:output_type -> user.v1.DeleteAddressResponse
-	13, // 36: user.v1.UserService.SetDefaultAddress:output_type -> user.v1.SetDefaultAddressResponse
-	21, // [21:37] is the sub-list for method output_type
-	5,  // [5:21] is the sub-list for method input_type
+	32, // 15: user.v1.UserService.DeleteUser:input_type -> user.v1.DeleteUserRequest
+	2,  // 16: user.v1.UserService.CreateAddress:input_type -> user.v1.CreateAddressRequest
+	4,  // 17: user.v1.UserService.ListAddresses:input_type -> user.v1.ListAddressesRequest
+	6,  // 18: user.v1.UserService.GetAddress:input_type -> user.v1.GetAddressRequest
+	8,  // 19: user.v1.UserService.UpdateAddress:input_type -> user.v1.UpdateAddressRequest
+	10, // 20: user.v1.UserService.DeleteAddress:input_type -> user.v1.DeleteAddressRequest
+	12, // 21: user.v1.UserService.SetDefaultAddress:input_type -> user.v1.SetDefaultAddressRequest
+	15, // 22: user.v1.UserService.Register:output_type -> user.v1.RegisterResponse
+	17, // 23: user.v1.UserService.Login:output_type -> user.v1.LoginResponse
+	35, // 24: user.v1.UserService.ValidateToken:output_type -> user.v1.ValidateTokenResponse
+	23, // 25: user.v1.UserService.GetUser:output_type -> user.v1.GetUserResponse
+	19, // 26: user.v1.UserService.RefreshToken:output_type -> user.v1.RefreshTokenResponse
+	21, // 27: user.v1.UserService.Logout:output_type -> user.v1.LogoutResponse
+	25, // 28: user.v1.UserService.VerifyEmail:output_type -> user.v1.VerifyEmailResponse
+	27, // 29: user.v1.UserService.ResendVerification:output_type -> user.v1.ResendVerificationResponse
+	29, // 30: user.v1.UserService.RequestPasswordReset:output_type -> user.v1.RequestPasswordResetResponse
+	31, // 31: user.v1.UserService.ResetPassword:output_type -> user.v1.ResetPasswordResponse
+	33, // 32: user.v1.UserService.DeleteUser:output_type -> user.v1.DeleteUserResponse
+	3,  // 33: user.v1.UserService.CreateAddress:output_type -> user.v1.CreateAddressResponse
+	5,  // 34: user.v1.UserService.ListAddresses:output_type -> user.v1.ListAddressesResponse
+	7,  // 35: user.v1.UserService.GetAddress:output_type -> user.v1.GetAddressResponse
+	9,  // 36: user.v1.UserService.UpdateAddress:output_type -> user.v1.UpdateAddressResponse
+	11, // 37: user.v1.UserService.DeleteAddress:output_type -> user.v1.DeleteAddressResponse
+	13, // 38: user.v1.UserService.SetDefaultAddress:output_type -> user.v1.SetDefaultAddressResponse
+	22, // [22:39] is the sub-list for method output_type
+	5,  // [5:22] is the sub-list for method input_type
 	5,  // [5:5] is the sub-list for extension type_name
 	5,  // [5:5] is the sub-list for extension extendee
 	0,  // [0:5] is the sub-list for field type_name
@@ -2028,7 +2118,7 @@ func file_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_user_v1_user_proto_rawDesc), len(file_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   34,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

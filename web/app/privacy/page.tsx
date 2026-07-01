@@ -62,9 +62,12 @@ export default function PrivacyPage() {
             .
           </li>
           <li>
-            <b>Erasure</b> — delete your account. We anonymise your personal data across our services;
-            records we must keep for legal/accounting reasons (e.g. order totals) are retained without
-            identifying you.
+            <b>Erasure</b> — delete your account yourself from your{" "}
+            <Link href="/account" style={{ color: "var(--plt-green-text)" }}>
+              account page
+            </Link>
+            . We anonymise your personal data across our services; records we must keep for
+            legal/accounting reasons (e.g. order totals) are retained without identifying you.
           </li>
           <li>
             <b>Rectification</b> — update your profile and addresses at any time.

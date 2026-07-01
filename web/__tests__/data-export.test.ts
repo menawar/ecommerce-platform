@@ -11,7 +11,7 @@ vi.mock("@/lib/gateway", () => ({
   gatewayFetch: (...args: unknown[]) => gatewayFetch(...args),
 }));
 
-import { exportMyData } from "@/lib/data-export";
+import { exportMyData, deleteMyAccount } from "@/lib/data-export";
 
 describe("exportMyData", () => {
   beforeEach(() => gatewayFetch.mockReset());
@@ -22,5 +22,15 @@ describe("exportMyData", () => {
     const out = await exportMyData();
     expect(gatewayFetch).toHaveBeenCalledWith("/me/export");
     expect(out).toBe(payload);
+  });
+});
+
+describe("deleteMyAccount", () => {
+  beforeEach(() => gatewayFetch.mockReset());
+
+  it("POSTs /me/delete", async () => {
+    gatewayFetch.mockResolvedValueOnce(undefined);
+    await deleteMyAccount();
+    expect(gatewayFetch).toHaveBeenCalledWith("/me/delete", { method: "POST" });
   });
 });
