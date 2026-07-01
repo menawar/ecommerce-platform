@@ -71,3 +71,49 @@ func TestUnaryLogging(t *testing.T) {
 		t.Errorf("log missing status code: %s", line)
 	}
 }
+
+// captureReporter records what UnaryErrorReporting sends to the error sink.
+type captureReporter struct {
+	calls int
+	last  error
+	tags  map[string]string
+}
+
+func (c *captureReporter) Report(_ context.Context, err error, tags map[string]string) {
+	c.calls++
+	c.last = err
+	c.tags = tags
+}
+
+func TestUnaryErrorReporting(t *testing.T) {
+	cases := []struct {
+		name       string
+		err        error
+		wantReport bool
+	}{
+		{"success", nil, false},
+		{"internal is our fault", status.Error(codes.Internal, "boom"), true},
+		{"unknown is our fault", status.Error(codes.Unknown, "?"), true},
+		{"invalid arg is the client's fault", status.Error(codes.InvalidArgument, "bad"), false},
+		{"not found is not reported", status.Error(codes.NotFound, "nope"), false},
+		{"unavailable is transient, not reported", status.Error(codes.Unavailable, "down"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rep := &captureReporter{}
+			interceptor := grpcmw.UnaryErrorReporting(rep)
+			_, err := interceptor(context.Background(), nil, info, func(context.Context, any) (any, error) {
+				return nil, tc.err
+			})
+			if status.Code(err) != status.Code(tc.err) {
+				t.Errorf("interceptor changed the error: %v", err)
+			}
+			if got := rep.calls > 0; got != tc.wantReport {
+				t.Errorf("reported=%v, want %v", got, tc.wantReport)
+			}
+			if tc.wantReport && rep.tags["method"] != info.FullMethod {
+				t.Errorf("missing method tag: %v", rep.tags)
+			}
+		})
+	}
+}

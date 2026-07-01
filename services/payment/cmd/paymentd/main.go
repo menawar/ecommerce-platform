@@ -114,10 +114,12 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 
 	poller := outbox.NewPoller(outboxstore.New(pool), events.NewNATSPublisher(js), log, outbox.WithInterval(time.Second))
 
+	reporter := observability.NewReporter(env("SENTRY_DSN", ""), "payment", env("ENVIRONMENT", "development"), log)
+	defer reporter.Close()
 	metrics := grpcmw.NewMetrics(prometheus.DefaultRegisterer, "payment")
 	grpcServer := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryRecovery(log)),
+		grpc.ChainUnaryInterceptor(grpcmw.UnaryLogging(log), grpcmw.UnaryMetrics(metrics), grpcmw.UnaryErrorReporting(reporter), grpcmw.UnaryRecovery(log)),
 	)
 	// The payment provider (mock|paystack) drives the async charge + webhook flow.
 	asyncName, asyncProv := buildAsyncProvider(cfg, log)
