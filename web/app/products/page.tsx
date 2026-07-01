@@ -4,6 +4,7 @@ import { listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../error-panel";
 import { SortSelect } from "./sort-select";
+import { Container } from "@/components/ui/container";
 
 export const metadata: Metadata = {
   title: "Shop",
@@ -45,7 +46,7 @@ export default async function ProductsPage({
   } catch (err) {
     if (err instanceof GatewayError) {
       return (
-        <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+        <Container as="main" className="pt-4 pb-12">
           <h1 style={{ fontSize: 20, fontWeight: 800 }}>Products</h1>
           <div style={{ marginTop: 24 }}>
             <ErrorPanel
@@ -53,7 +54,7 @@ export default async function ProductsPage({
               requestId={err.requestId}
             />
           </div>
-        </main>
+        </Container>
       );
     }
     throw err;
@@ -61,7 +62,7 @@ export default async function ProductsPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+    <Container as="main" className="pt-4 pb-12">
       {/* Breadcrumb */}
       <div
         style={{
@@ -413,7 +414,7 @@ export default async function ProductsPage({
           </nav>
         </div>
       </div>
-    </main>
+    </Container>
   );
 }
 
