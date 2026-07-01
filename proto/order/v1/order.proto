@@ -17,6 +17,11 @@ service OrderService {
   rpc CreateShippingMethod(CreateShippingMethodRequest) returns (CreateShippingMethodResponse);
   rpc UpdateShippingMethod(UpdateShippingMethodRequest) returns (UpdateShippingMethodResponse);
   rpc DeleteShippingMethod(DeleteShippingMethodRequest) returns (DeleteShippingMethodResponse);
+
+  // --- Fulfillment (admin-only; the Gateway enforces the role). ---
+  rpc MarkShipped(MarkShippedRequest) returns (MarkShippedResponse);
+  rpc MarkDelivered(MarkDeliveredRequest) returns (MarkDeliveredResponse);
+  rpc ListAllOrders(ListAllOrdersRequest) returns (ListAllOrdersResponse);
 }
 
 message ShippingMethod {
@@ -96,6 +101,9 @@ message Order {
   int64 shipping_cents = 9;
   string shipping_method_name = 10;
   ShippingAddress shipping_address = 11;
+  string tracking_number = 12;
+  int64 shipped_at = 13;   // unix seconds; 0 until shipped
+  int64 delivered_at = 14; // unix seconds; 0 until delivered
 }
 
 message PlaceOrderRequest {
@@ -133,4 +141,27 @@ message CancelOrderRequest {
 }
 message CancelOrderResponse {
   string status = 1;
+}
+
+message MarkShippedRequest {
+  string order_id = 1;
+  string tracking_number = 2; // optional
+}
+message MarkShippedResponse {
+  Order order = 1;
+}
+
+message MarkDeliveredRequest {
+  string order_id = 1;
+}
+message MarkDeliveredResponse {
+  Order order = 1;
+}
+
+message ListAllOrdersRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+message ListAllOrdersResponse {
+  repeated Order orders = 1;
 }

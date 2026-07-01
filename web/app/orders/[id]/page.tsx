@@ -23,9 +23,14 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
     throw err;
   }
 
-  const isConfirmed = order.status === "CONFIRMED";
   const isCancelled = order.status === "CANCELLED";
-  const isPending = !isConfirmed && !isCancelled; // PAYMENT_PENDING and friends
+  // CONFIRMED/SHIPPED/DELIVERED are all successful, post-payment states.
+  const isSuccess = order.status === "CONFIRMED" || order.status === "SHIPPED" || order.status === "DELIVERED";
+  const isPending = !isCancelled && !isSuccess; // PAYMENT_PENDING and pre-payment
+  const heading =
+    { CONFIRMED: "Order confirmed", SHIPPED: "Order shipped", DELIVERED: "Order delivered", CANCELLED: "Order cancelled" }[
+      order.status
+    ] ?? "Awaiting payment";
 
   return (
     <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px" }}>
@@ -43,12 +48,12 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             width: 72,
             height: 72,
             borderRadius: "50%",
-            background: isConfirmed
+            background: isSuccess
               ? "var(--plt-green-bg-light)"
               : isCancelled
                 ? "var(--plt-error-bg)"
                 : "var(--plt-surface)",
-            color: isConfirmed
+            color: isSuccess
               ? "var(--plt-green-text)"
               : isCancelled
                 ? "var(--plt-error)"
@@ -60,19 +65,13 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             margin: "0 auto 20px",
           }}
         >
-          {isConfirmed ? "✓" : isCancelled ? "✕" : "⏳"}
+          {order.status === "DELIVERED" ? "📦" : order.status === "SHIPPED" ? "🚚" : isSuccess ? "✓" : isCancelled ? "✕" : "⏳"}
         </div>
 
         {/* While the order awaits its payment outcome, poll until it settles. */}
         {isPending && <StatusPoller />}
 
-        <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8, marginTop: 0 }}>
-          {isConfirmed
-            ? "Order confirmed"
-            : isCancelled
-              ? "Order cancelled"
-              : "Awaiting payment"}
-        </h1>
+        <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8, marginTop: 0 }}>{heading}</h1>
 
         <div
           style={{
@@ -81,9 +80,20 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             marginBottom: 22,
           }}
         >
-          {isConfirmed && (
-            <>Thank you. Your harvest is on the way.</>
+          {order.status === "CONFIRMED" && <>Thank you. We&apos;re preparing your order.</>}
+          {order.status === "SHIPPED" && (
+            <>
+              Your order is on its way
+              {order.tracking_number ? (
+                <>
+                  {" "}
+                  · tracking <b>{order.tracking_number}</b>
+                </>
+              ) : null}
+              .
+            </>
           )}
+          {order.status === "DELIVERED" && <>Delivered. Enjoy your harvest!</>}
           {isCancelled && (
             <>
               Your order was cancelled (payment declined). You were not charged
@@ -185,7 +195,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
 
-        {isConfirmed && (
+        {order.status === "CONFIRMED" && (
           <div
             style={{
               fontSize: 13,

@@ -27,6 +27,9 @@ type fakeOrderClient struct {
 	createShippingFn func(*orderv1.CreateShippingMethodRequest) (*orderv1.CreateShippingMethodResponse, error)
 	updateShippingFn func(*orderv1.UpdateShippingMethodRequest) (*orderv1.UpdateShippingMethodResponse, error)
 	deleteShippingFn func(*orderv1.DeleteShippingMethodRequest) (*orderv1.DeleteShippingMethodResponse, error)
+	markShippedFn    func(*orderv1.MarkShippedRequest) (*orderv1.MarkShippedResponse, error)
+	markDeliveredFn  func(*orderv1.MarkDeliveredRequest) (*orderv1.MarkDeliveredResponse, error)
+	listAllOrdersFn  func(*orderv1.ListAllOrdersRequest) (*orderv1.ListAllOrdersResponse, error)
 }
 
 var _ orderv1.OrderServiceClient = (*fakeOrderClient)(nil)
@@ -64,6 +67,24 @@ func (f *fakeOrderClient) UpdateShippingMethod(_ context.Context, in *orderv1.Up
 func (f *fakeOrderClient) DeleteShippingMethod(_ context.Context, in *orderv1.DeleteShippingMethodRequest, _ ...grpc.CallOption) (*orderv1.DeleteShippingMethodResponse, error) {
 	if f.deleteShippingFn != nil {
 		return f.deleteShippingFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) MarkShipped(_ context.Context, in *orderv1.MarkShippedRequest, _ ...grpc.CallOption) (*orderv1.MarkShippedResponse, error) {
+	if f.markShippedFn != nil {
+		return f.markShippedFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) MarkDelivered(_ context.Context, in *orderv1.MarkDeliveredRequest, _ ...grpc.CallOption) (*orderv1.MarkDeliveredResponse, error) {
+	if f.markDeliveredFn != nil {
+		return f.markDeliveredFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
+}
+func (f *fakeOrderClient) ListAllOrders(_ context.Context, in *orderv1.ListAllOrdersRequest, _ ...grpc.CallOption) (*orderv1.ListAllOrdersResponse, error) {
+	if f.listAllOrdersFn != nil {
+		return f.listAllOrdersFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "unused")
 }

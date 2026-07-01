@@ -15,6 +15,8 @@ func TestTransitions_Allowed(t *testing.T) {
 		{order.StatusPaymentPending, order.StatusPaid},
 		{order.StatusPaymentPending, order.StatusPaymentFailed},
 		{order.StatusPaid, order.StatusConfirmed},
+		{order.StatusConfirmed, order.StatusShipped},
+		{order.StatusShipped, order.StatusDelivered},
 		{order.StatusPaymentFailed, order.StatusCancelled},
 	}
 	for _, tc := range ok {
@@ -28,8 +30,10 @@ func TestTransitions_Rejected(t *testing.T) {
 	bad := []struct{ from, to order.Status }{
 		{order.StatusPending, order.StatusPaid},        // can't skip reservation/payment
 		{order.StatusCancelled, order.StatusPaid},      // terminal can't move
-		{order.StatusConfirmed, order.StatusCancelled}, // terminal can't move
+		{order.StatusConfirmed, order.StatusCancelled}, // confirmed can only ship, not cancel
 		{order.StatusPaid, order.StatusPaymentFailed},  // already paid
+		{order.StatusDelivered, order.StatusShipped},   // terminal can't move
+		{order.StatusShipped, order.StatusConfirmed},   // no going back
 	}
 	for _, tc := range bad {
 		if tc.from.CanTransitionTo(tc.to) {
@@ -39,16 +43,34 @@ func TestTransitions_Rejected(t *testing.T) {
 }
 
 func TestIsTerminal(t *testing.T) {
-	terminal := []order.Status{order.StatusConfirmed, order.StatusCancelled}
+	terminal := []order.Status{order.StatusDelivered, order.StatusCancelled}
 	for _, s := range terminal {
 		if !s.IsTerminal() {
 			t.Errorf("%s should be terminal", s)
 		}
 	}
-	nonTerminal := []order.Status{order.StatusPending, order.StatusStockReserved, order.StatusPaymentPending, order.StatusPaid, order.StatusPaymentFailed}
+	nonTerminal := []order.Status{
+		order.StatusPending, order.StatusStockReserved, order.StatusPaymentPending,
+		order.StatusPaid, order.StatusConfirmed, order.StatusShipped, order.StatusPaymentFailed,
+	}
 	for _, s := range nonTerminal {
 		if s.IsTerminal() {
 			t.Errorf("%s should not be terminal", s)
+		}
+	}
+}
+
+func TestIsPostPayment(t *testing.T) {
+	post := []order.Status{order.StatusConfirmed, order.StatusShipped, order.StatusDelivered, order.StatusCancelled}
+	for _, s := range post {
+		if !s.IsPostPayment() {
+			t.Errorf("%s should be post-payment", s)
+		}
+	}
+	notPost := []order.Status{order.StatusPending, order.StatusStockReserved, order.StatusPaymentPending, order.StatusPaid, order.StatusPaymentFailed}
+	for _, s := range notPost {
+		if s.IsPostPayment() {
+			t.Errorf("%s should not be post-payment", s)
 		}
 	}
 }

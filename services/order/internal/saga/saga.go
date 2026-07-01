@@ -264,11 +264,13 @@ func (s *Saga) Cancel(ctx context.Context, orderID string) (order.Status, error)
 		return "", s.internal(ctx, "get order", err)
 	}
 
-	switch order.Status(o.Status) {
-	case order.StatusPaid, order.StatusConfirmed:
-		return "", status.Error(codes.FailedPrecondition, "cannot cancel a paid order")
-	case order.StatusCancelled:
+	switch st := order.Status(o.Status); {
+	case st == order.StatusCancelled:
 		return order.StatusCancelled, nil // idempotent
+	case st == order.StatusPaid || st.IsPostPayment():
+		// Paid or already confirmed/shipped/delivered: the money moved, so the only
+		// way back is a refund (Phase 11.3), never a cancel.
+		return "", status.Error(codes.FailedPrecondition, "cannot cancel a paid order")
 	}
 
 	// Release any reservation (ReleaseStock is a no-op if nothing was reserved).
@@ -280,6 +282,83 @@ func (s *Saga) Cancel(ctx context.Context, orderID string) (order.Status, error)
 		return "", s.internal(ctx, "set CANCELLED", err)
 	}
 	return order.StatusCancelled, nil
+}
+
+// maxTrackingLen bounds the admin-supplied tracking number.
+const maxTrackingLen = 128
+
+// MarkShipped moves a CONFIRMED order to SHIPPED (recording an optional tracking
+// number), emitting order.shipped in the same tx. Admin-only (gateway-enforced).
+func (s *Saga) MarkShipped(ctx context.Context, orderID, tracking string) (db.Order, error) {
+	if len(tracking) > maxTrackingLen {
+		return db.Order{}, status.Errorf(codes.InvalidArgument, "tracking number too long (max %d)", maxTrackingLen)
+	}
+	return s.advanceFulfillment(ctx, orderID, order.StatusShipped, tracking)
+}
+
+// MarkDelivered moves a SHIPPED order to DELIVERED (terminal), emitting
+// order.delivered in the same tx.
+func (s *Saga) MarkDelivered(ctx context.Context, orderID string) (db.Order, error) {
+	return s.advanceFulfillment(ctx, orderID, order.StatusDelivered, "")
+}
+
+// advanceFulfillment guards a CONFIRMED->SHIPPED->DELIVERED step and applies it +
+// its event atomically. A missing order is NotFound; an illegal step (e.g. ship a
+// PENDING order, or deliver one that isn't shipped) is FailedPrecondition.
+func (s *Saga) advanceFulfillment(ctx context.Context, orderID string, to order.Status, tracking string) (db.Order, error) {
+	oid, err := uuid.Parse(orderID)
+	if err != nil {
+		return db.Order{}, status.Error(codes.InvalidArgument, "order_id must be a UUID")
+	}
+	o, err := s.q.GetOrder(ctx, pgUUID(oid))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return db.Order{}, status.Error(codes.NotFound, "order not found")
+		}
+		return db.Order{}, s.internal(ctx, "get order", err)
+	}
+	if !order.Status(o.Status).CanTransitionTo(to) {
+		return db.Order{}, status.Errorf(codes.FailedPrecondition, "order in %s cannot move to %s", o.Status, to)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return db.Order{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := s.q.WithTx(tx)
+
+	var updated db.Order
+	var topic string
+	switch to {
+	case order.StatusShipped:
+		updated, err = q.MarkOrderShipped(ctx, db.MarkOrderShippedParams{ID: pgUUID(oid), TrackingNumber: tracking})
+		topic = "order.shipped"
+	case order.StatusDelivered:
+		updated, err = q.MarkOrderDelivered(ctx, pgUUID(oid))
+		topic = "order.delivered"
+	default:
+		return db.Order{}, s.internal(ctx, "advanceFulfillment", fmt.Errorf("unsupported target %s", to))
+	}
+	if err != nil {
+		// The UPDATE has a status precondition (compare-and-set): no rows means the
+		// order left the source state between our read and the write (a concurrent
+		// mark). Treat as a lost race, not an internal error — and no event is
+		// written, so exactly one order.shipped/delivered ever fires.
+		if errors.Is(err, pgx.ErrNoRows) {
+			return db.Order{}, status.Errorf(codes.FailedPrecondition, "order is no longer eligible to move to %s", to)
+		}
+		return db.Order{}, s.internal(ctx, "update fulfillment status", err)
+	}
+	ev := orderEvent{OrderID: orderID, UserID: uuidStr(o.UserID), TotalCents: o.TotalCents, Status: string(to)}
+	if err := writeOutbox(ctx, q, topic, ev); err != nil {
+		return db.Order{}, s.internal(ctx, "write fulfillment event", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return db.Order{}, s.internal(ctx, "commit fulfillment", err)
+	}
+	s.log.InfoContext(ctx, "order fulfillment advanced", "order_id", orderID, "status", to)
+	return updated, nil
 }
 
 // paymentEventData mirrors the payment service's payment.succeeded/payment.failed
@@ -333,8 +412,8 @@ func (s *Saga) Resume(ctx context.Context, orderID string, paid bool) error {
 	}
 
 	st := order.Status(o.Status)
-	if st == order.StatusConfirmed || st == order.StatusCancelled {
-		return nil // already settled — idempotent
+	if st.IsPostPayment() {
+		return nil // already settled (confirmed/shipped/delivered/cancelled) — idempotent
 	}
 	ev := orderEvent{OrderID: orderID, UserID: uuidStr(o.UserID), TotalCents: o.TotalCents}
 
