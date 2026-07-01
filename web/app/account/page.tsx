@@ -90,6 +90,22 @@ export default async function AccountPage() {
           </form>
         </div>
       </div>
+
+      <div className="plt-card-lg" style={{ marginTop: 20 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Data &amp; privacy</div>
+        <p style={{ fontSize: 14, color: "var(--plt-text-secondary)", margin: "0 0 16px" }}>
+          Download a machine-readable copy of your personal data — your profile, addresses, and
+          orders. See our{" "}
+          <Link href="/privacy" style={{ color: "var(--plt-green-text)" }}>
+            Privacy Policy
+          </Link>{" "}
+          for how we handle it.
+        </p>
+        {/* A plain <a> (not next/link) so the browser downloads the file. */}
+        <a href="/account/export" className="plt-btn-outline" style={{ textDecoration: "none" }}>
+          Export my data (JSON)
+        </a>
+      </div>
     </main>
   );
 }
