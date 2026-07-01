@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import { cn } from "@/lib/cn";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Rating } from "@/components/ui/rating";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export const metadata: Metadata = {
   title: "Style guide",
@@ -93,6 +99,65 @@ export default function StyleGuidePage() {
             </p>
           ))}
         </div>
+      </Section>
+
+      <Section title="Buttons">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="primary">Primary</Button>
+          <Button variant="gold">Gold</Button>
+          <Button variant="outline">Outline</Button>
+          <Button variant="ghost">Ghost</Button>
+          <Button variant="danger">Danger</Button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Button size="sm">Small</Button>
+          <Button size="md">Medium</Button>
+          <Button size="lg">Large</Button>
+          <Button loading>Loading</Button>
+          <Button disabled>Disabled</Button>
+        </div>
+      </Section>
+
+      <Section title="Badges">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="neutral">Neutral</Badge>
+          <Badge variant="brand">In stock</Badge>
+          <Badge variant="gold">Bestseller</Badge>
+          <Badge variant="danger">Low stock</Badge>
+          <Badge variant="success">Delivered</Badge>
+        </div>
+      </Section>
+
+      <Section title="Card + Rating">
+        <Card className="max-w-sm">
+          <div className="font-bold text-fg">Jos Plateau Potatoes</div>
+          <div className="mt-1">
+            <Rating value={4.5} count={128} />
+          </div>
+          <p className="mt-2 text-sm text-fg-muted">Freshly harvested, delivered this week.</p>
+          <Button className="mt-4" fullWidth>
+            Add to cart
+          </Button>
+        </Card>
+      </Section>
+
+      <Section title="Skeleton">
+        <div className="max-w-sm space-y-2">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-4 w-1/3" />
+        </div>
+      </Section>
+
+      <Section title="Empty state">
+        <Card padded={false} className="max-w-md">
+          <EmptyState
+            icon="🧺"
+            title="Your cart is empty"
+            description="Browse this week's harvest and add something fresh."
+            action={<Button variant="outline">Shop now</Button>}
+          />
+        </Card>
       </Section>
     </main>
   );
