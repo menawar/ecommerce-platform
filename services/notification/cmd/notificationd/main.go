@@ -15,11 +15,15 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/menawar/ecommerce-platform/pkg/events"
 	"github.com/menawar/ecommerce-platform/pkg/observability"
 	"github.com/menawar/ecommerce-platform/pkg/postgres"
+	userv1 "github.com/menawar/ecommerce-platform/proto/user/v1"
 	"github.com/menawar/ecommerce-platform/services/notification/internal/notify"
 )
 
@@ -27,6 +31,7 @@ type config struct {
 	httpAddr string
 	dbURL    string
 	natsURL  string
+	userAddr string
 }
 
 func main() {
@@ -35,6 +40,7 @@ func main() {
 		httpAddr: env("NOTIFICATION_HTTP_ADDR", ":2117"),
 		dbURL:    env("NOTIFICATION_DB_URL", "postgres://ecommerce:ecommerce@localhost:5433/notificationdb?sslmode=disable"),
 		natsURL:  env("NATS_URL", "nats://localhost:4222"),
+		userAddr: env("USER_GRPC_ADDR", "localhost:50051"),
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -59,9 +65,20 @@ func run(ctx context.Context, log *slog.Logger, cfg config) error {
 		return fmt.Errorf("connect nats: %w", err)
 	}
 	defer nc.Close()
-	log.Info("connected to notificationdb and nats")
 
-	handler := notify.NewHandler(pool, notify.LogSender{Log: log}, log)
+	// Resolve recipient emails from the User service (db-per-service: notificationdb
+	// has no email). Lazy client — connects on first use.
+	userConn, err := grpc.NewClient(cfg.userAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		return fmt.Errorf("user client: %w", err)
+	}
+	defer func() { _ = userConn.Close() }()
+	log.Info("connected to notificationdb, nats, and user service")
+
+	handler := notify.NewHandler(pool, userv1.NewUserServiceClient(userConn), notify.LogSender{Log: log}, log)
 	// Start the durable consumer. It runs in its own goroutines; we stop it on
 	// shutdown.
 	cc, err := events.Consume(ctx, js, events.StreamName, "notification", log, handler.Handle)

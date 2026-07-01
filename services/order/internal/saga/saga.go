@@ -76,10 +76,11 @@ type lineItem struct {
 // events.Envelope (which supplies event_id/occurred_at/version) before going to
 // the outbox, so consumers dedupe on the envelope's event_id.
 type orderEvent struct {
-	OrderID    string `json:"order_id"`
-	UserID     string `json:"user_id"`
-	TotalCents int64  `json:"total_cents"`
-	Status     string `json:"status"`
+	OrderID        string `json:"order_id"`
+	UserID         string `json:"user_id"`
+	TotalCents     int64  `json:"total_cents"`
+	Status         string `json:"status"`
+	TrackingNumber string `json:"tracking_number,omitempty"` // set on order.shipped
 }
 
 // PlaceOrder runs the saga. Happy path:
@@ -351,6 +352,9 @@ func (s *Saga) advanceFulfillment(ctx context.Context, orderID string, to order.
 		return db.Order{}, s.internal(ctx, "update fulfillment status", err)
 	}
 	ev := orderEvent{OrderID: orderID, UserID: uuidStr(o.UserID), TotalCents: o.TotalCents, Status: string(to)}
+	if to == order.StatusShipped {
+		ev.TrackingNumber = updated.TrackingNumber // so the shipped email can show it
+	}
 	if err := writeOutbox(ctx, q, topic, ev); err != nil {
 		return db.Order{}, s.internal(ctx, "write fulfillment event", err)
 	}
