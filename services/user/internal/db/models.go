@@ -50,6 +50,7 @@ type User struct {
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 	EmailVerified bool
+	DeletedAt     pgtype.Timestamptz
 }
 
 type VerificationToken struct {

@@ -19,14 +19,15 @@ import (
 // Phase 1 design: swapping this in is a one-line wiring change in userd, and the
 // gRPC handlers don't change at all.
 type Postgres struct {
-	q *db.Queries
+	pool *pgxpool.Pool
+	q    *db.Queries
 }
 
 // Compile-time check that Postgres satisfies the interface.
 var _ Repository = (*Postgres)(nil)
 
 func NewPostgres(pool *pgxpool.Pool) *Postgres {
-	return &Postgres{q: db.New(pool)}
+	return &Postgres{pool: pool, q: db.New(pool)}
 }
 
 func (p *Postgres) Create(ctx context.Context, u User) error {
@@ -115,6 +116,45 @@ func (p *Postgres) UpdatePassword(ctx context.Context, userID, passwordHash stri
 		ID:           pgtype.UUID{Bytes: uid, Valid: true},
 		PasswordHash: passwordHash,
 	})
+}
+
+func (p *Postgres) DeleteAccount(ctx context.Context, userID string) (bool, error) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return false, fmt.Errorf("store: invalid user id %q: %w", userID, err)
+	}
+	pgID := pgtype.UUID{Bytes: uid, Valid: true}
+
+	// One transaction: tombstone the users row and purge everything keyed to the
+	// user, so an account is never left half-erased.
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := p.q.WithTx(tx)
+
+	rows, err := q.AnonymizeUser(ctx, pgID)
+	if err != nil {
+		return false, fmt.Errorf("store: anonymize user: %w", err)
+	}
+	if rows == 0 {
+		return false, nil // already deleted — idempotent no-op, no event
+	}
+	for _, purge := range []func(context.Context, pgtype.UUID) error{
+		q.DeleteUserAddresses,
+		q.DeleteUserRefreshTokens,
+		q.DeleteUserVerificationTokens,
+		q.DeleteUserPasswordResetTokens,
+	} {
+		if err := purge(ctx, pgID); err != nil {
+			return false, fmt.Errorf("store: purge user data: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func isUniqueViolation(err error) bool {

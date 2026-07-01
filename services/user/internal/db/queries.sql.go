@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const anonymizeUser = `-- name: AnonymizeUser :execrows
+UPDATE users
+SET email = 'deleted+' || id::text || '@deleted.invalid',
+    password_hash = '',
+    full_name = '',
+    email_verified = false,
+    deleted_at = now(),
+    updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+// Erasure: tombstone the PII and mark the account deleted. CAS on deleted_at makes
+// it idempotent (0 rows => already deleted). The tombstone email is unique per id
+// and frees the original address for re-registration.
+func (q *Queries) AnonymizeUser(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, anonymizeUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const clearDefaultAddresses = `-- name: ClearDefaultAddresses :exec
 UPDATE addresses SET is_default = false, updated_at = now() WHERE user_id = $1 AND is_default = true
 `
@@ -141,6 +163,42 @@ func (q *Queries) DeleteAddress(ctx context.Context, arg DeleteAddressParams) (i
 	return result.RowsAffected(), nil
 }
 
+const deleteUserAddresses = `-- name: DeleteUserAddresses :exec
+DELETE FROM addresses WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserAddresses(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserAddresses, userID)
+	return err
+}
+
+const deleteUserPasswordResetTokens = `-- name: DeleteUserPasswordResetTokens :exec
+DELETE FROM password_reset_tokens WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserPasswordResetTokens(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserPasswordResetTokens, userID)
+	return err
+}
+
+const deleteUserRefreshTokens = `-- name: DeleteUserRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserRefreshTokens(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserRefreshTokens, userID)
+	return err
+}
+
+const deleteUserVerificationTokens = `-- name: DeleteUserVerificationTokens :exec
+DELETE FROM verification_tokens WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserVerificationTokens(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserVerificationTokens, userID)
+	return err
+}
+
 const getAddress = `-- name: GetAddress :one
 SELECT id, user_id, label, recipient, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at FROM addresses WHERE id = $1 AND user_id = $2
 `
@@ -207,7 +265,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, jti pgtype.UUID) (Refresh
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, full_name, role, created_at, updated_at, email_verified FROM users WHERE email = $1
+SELECT id, email, password_hash, full_name, role, created_at, updated_at, email_verified, deleted_at FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -222,12 +280,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EmailVerified,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, full_name, role, created_at, updated_at, email_verified FROM users WHERE id = $1
+SELECT id, email, password_hash, full_name, role, created_at, updated_at, email_verified, deleted_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error) {
@@ -242,6 +301,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.EmailVerified,
+		&i.DeletedAt,
 	)
 	return i, err
 }

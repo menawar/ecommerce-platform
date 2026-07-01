@@ -90,6 +90,21 @@ func (h *Handler) exportData(w http.ResponseWriter, r *http.Request) {
 // doesn't open an unbounded number of concurrent gRPC calls.
 const exportOrderConcurrency = 8
 
+// deleteAccount erases the caller's account (NDPR/GDPR erasure). user_id comes only
+// from the validated JWT, so a caller can only ever delete themselves. The BFF
+// clears the session cookie after this succeeds.
+func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
+	uid, ok := h.userID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := h.users.DeleteUser(r.Context(), &userv1.DeleteUserRequest{UserId: uid}); err != nil {
+		h.writeGRPCError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // allOrdersFor returns EVERY order for the user WITH its line items — an export must
 // be complete. ListOrders returns summaries (no items), so we page through it to
 // collect ids, then fetch each order's full detail via GetOrder (bounded concurrency).

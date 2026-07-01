@@ -92,3 +92,28 @@ UPDATE addresses SET is_default = false, updated_at = now() WHERE user_id = $1 A
 
 -- name: SetAddressDefault :execrows
 UPDATE addresses SET is_default = true, updated_at = now() WHERE id = $1 AND user_id = $2;
+
+-- name: AnonymizeUser :execrows
+-- Erasure: tombstone the PII and mark the account deleted. CAS on deleted_at makes
+-- it idempotent (0 rows => already deleted). The tombstone email is unique per id
+-- and frees the original address for re-registration.
+UPDATE users
+SET email = 'deleted+' || id::text || '@deleted.invalid',
+    password_hash = '',
+    full_name = '',
+    email_verified = false,
+    deleted_at = now(),
+    updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: DeleteUserAddresses :exec
+DELETE FROM addresses WHERE user_id = $1;
+
+-- name: DeleteUserRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE user_id = $1;
+
+-- name: DeleteUserVerificationTokens :exec
+DELETE FROM verification_tokens WHERE user_id = $1;
+
+-- name: DeleteUserPasswordResetTokens :exec
+DELETE FROM password_reset_tokens WHERE user_id = $1;

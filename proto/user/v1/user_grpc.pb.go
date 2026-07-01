@@ -29,6 +29,7 @@ const (
 	UserService_ResendVerification_FullMethodName   = "/user.v1.UserService/ResendVerification"
 	UserService_RequestPasswordReset_FullMethodName = "/user.v1.UserService/RequestPasswordReset"
 	UserService_ResetPassword_FullMethodName        = "/user.v1.UserService/ResetPassword"
+	UserService_DeleteUser_FullMethodName           = "/user.v1.UserService/DeleteUser"
 	UserService_CreateAddress_FullMethodName        = "/user.v1.UserService/CreateAddress"
 	UserService_ListAddresses_FullMethodName        = "/user.v1.UserService/ListAddresses"
 	UserService_GetAddress_FullMethodName           = "/user.v1.UserService/GetAddress"
@@ -77,6 +78,11 @@ type UserServiceClient interface {
 	// ResetPassword consumes a reset token and sets a new password, revoking the
 	// user's existing sessions. Public — the token is the credential.
 	ResetPassword(ctx context.Context, in *ResetPasswordRequest, opts ...grpc.CallOption) (*ResetPasswordResponse, error)
+	// DeleteUser erases the caller's account (NDPR/GDPR right to erasure): it
+	// anonymises the users row (PII tombstoned), purges addresses + sessions, and
+	// emits user.deleted so other services anonymise their copies. Idempotent. The
+	// Gateway supplies user_id from the validated JWT.
+	DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error)
 	// --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
 	CreateAddress(ctx context.Context, in *CreateAddressRequest, opts ...grpc.CallOption) (*CreateAddressResponse, error)
 	ListAddresses(ctx context.Context, in *ListAddressesRequest, opts ...grpc.CallOption) (*ListAddressesResponse, error)
@@ -196,6 +202,16 @@ func (c *userServiceClient) ResetPassword(ctx context.Context, in *ResetPassword
 	return out, nil
 }
 
+func (c *userServiceClient) DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteUserResponse)
+	err := c.cc.Invoke(ctx, UserService_DeleteUser_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) CreateAddress(ctx context.Context, in *CreateAddressRequest, opts ...grpc.CallOption) (*CreateAddressResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreateAddressResponse)
@@ -296,6 +312,11 @@ type UserServiceServer interface {
 	// ResetPassword consumes a reset token and sets a new password, revoking the
 	// user's existing sessions. Public — the token is the credential.
 	ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error)
+	// DeleteUser erases the caller's account (NDPR/GDPR right to erasure): it
+	// anonymises the users row (PII tombstoned), purges addresses + sessions, and
+	// emits user.deleted so other services anonymise their copies. Idempotent. The
+	// Gateway supplies user_id from the validated JWT.
+	DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error)
 	// --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
 	CreateAddress(context.Context, *CreateAddressRequest) (*CreateAddressResponse, error)
 	ListAddresses(context.Context, *ListAddressesRequest) (*ListAddressesResponse, error)
@@ -344,6 +365,9 @@ func (UnimplementedUserServiceServer) RequestPasswordReset(context.Context, *Req
 }
 func (UnimplementedUserServiceServer) ResetPassword(context.Context, *ResetPasswordRequest) (*ResetPasswordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResetPassword not implemented")
+}
+func (UnimplementedUserServiceServer) DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteUser not implemented")
 }
 func (UnimplementedUserServiceServer) CreateAddress(context.Context, *CreateAddressRequest) (*CreateAddressResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateAddress not implemented")
@@ -564,6 +588,24 @@ func _UserService_ResetPassword_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_DeleteUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteUserRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).DeleteUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_DeleteUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).DeleteUser(ctx, req.(*DeleteUserRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_CreateAddress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateAddressRequest)
 	if err := dec(in); err != nil {
@@ -718,6 +760,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetPassword",
 			Handler:    _UserService_ResetPassword_Handler,
+		},
+		{
+			MethodName: "DeleteUser",
+			Handler:    _UserService_DeleteUser_Handler,
 		},
 		{
 			MethodName: "CreateAddress",

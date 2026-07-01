@@ -41,6 +41,7 @@ type fakeUserClient struct {
 	updateAddressFn        func(*userv1.UpdateAddressRequest) (*userv1.UpdateAddressResponse, error)
 	deleteAddressFn        func(*userv1.DeleteAddressRequest) (*userv1.DeleteAddressResponse, error)
 	setDefaultAddressFn    func(*userv1.SetDefaultAddressRequest) (*userv1.SetDefaultAddressResponse, error)
+	deleteUserFn           func(*userv1.DeleteUserRequest) (*userv1.DeleteUserResponse, error)
 }
 
 var _ userv1.UserServiceClient = (*fakeUserClient)(nil)
@@ -107,6 +108,12 @@ func (f *fakeUserClient) UpdateAddress(_ context.Context, in *userv1.UpdateAddre
 		return f.updateAddressFn(in)
 	}
 	return nil, status.Error(codes.Unimplemented, "")
+}
+func (f *fakeUserClient) DeleteUser(_ context.Context, in *userv1.DeleteUserRequest, _ ...grpc.CallOption) (*userv1.DeleteUserResponse, error) {
+	if f.deleteUserFn != nil {
+		return f.deleteUserFn(in)
+	}
+	return nil, status.Error(codes.Unimplemented, "unused")
 }
 func (f *fakeUserClient) DeleteAddress(_ context.Context, in *userv1.DeleteAddressRequest, _ ...grpc.CallOption) (*userv1.DeleteAddressResponse, error) {
 	if f.deleteAddressFn != nil {

@@ -143,6 +143,43 @@ func TestExportData_PagesThroughAllOrders(t *testing.T) {
 	}
 }
 
+func TestDeleteAccount_ForwardsIdentity(t *testing.T) {
+	var got *userv1.DeleteUserRequest
+	uc := &fakeUserClient{
+		deleteUserFn: func(in *userv1.DeleteUserRequest) (*userv1.DeleteUserResponse, error) {
+			got = in
+			return &userv1.DeleteUserResponse{}, nil
+		},
+	}
+	ts, userID := newExportServer(t, uc, &fakeOrderClient{})
+
+	req := authReq(t, http.MethodPost, ts.URL+"/me/delete", "")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /me/delete: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", resp.StatusCode)
+	}
+	// The deleted user_id must come from the JWT, never the request body.
+	if got.GetUserId() != userID {
+		t.Errorf("deleted user_id = %q, want %s (from token)", got.GetUserId(), userID)
+	}
+}
+
+func TestDeleteAccount_RequiresAuth(t *testing.T) {
+	ts, _ := newExportServer(t, &fakeUserClient{}, &fakeOrderClient{})
+	resp, err := http.Post(ts.URL+"/me/delete", "application/json", nil) // no token
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", resp.StatusCode)
+	}
+}
+
 func TestExportData_RequiresAuth(t *testing.T) {
 	ts, _ := newExportServer(t, &fakeUserClient{}, &fakeOrderClient{})
 	resp, err := http.Get(ts.URL + "/me/export") // no token

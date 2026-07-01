@@ -4,6 +4,7 @@ import Link from "next/link";
 import { GatewayError } from "@/lib/gateway";
 import { getMe } from "@/lib/session";
 import { logoutAction } from "@/app/(auth)/actions";
+import { DeleteAccountButton } from "./delete-account";
 
 // Protected page. The proxy already bounced anyone without a session cookie; here
 // we do the REAL check by calling /me through the gateway (which validates the
@@ -105,6 +106,11 @@ export default async function AccountPage() {
         <a href="/account/export" className="plt-btn-outline" style={{ textDecoration: "none" }}>
           Export my data (JSON)
         </a>
+
+        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--plt-border)" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Delete account</div>
+          <DeleteAccountButton />
+        </div>
       </div>
     </main>
   );

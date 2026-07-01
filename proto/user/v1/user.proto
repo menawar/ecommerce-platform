@@ -39,6 +39,12 @@ service UserService {
   // user's existing sessions. Public — the token is the credential.
   rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
 
+  // DeleteUser erases the caller's account (NDPR/GDPR right to erasure): it
+  // anonymises the users row (PII tombstoned), purges addresses + sessions, and
+  // emits user.deleted so other services anonymise their copies. Idempotent. The
+  // Gateway supplies user_id from the validated JWT.
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+
   // --- Address book (all authed; user_id is filled by the Gateway from the JWT) ---
   rpc CreateAddress(CreateAddressRequest) returns (CreateAddressResponse);
   rpc ListAddresses(ListAddressesRequest) returns (ListAddressesResponse);
@@ -191,6 +197,11 @@ message ResetPasswordRequest {
   string new_password = 2; // plaintext on the wire (TLS); hashed immediately
 }
 message ResetPasswordResponse {}
+
+message DeleteUserRequest {
+  string user_id = 1;
+}
+message DeleteUserResponse {}
 
 message ValidateTokenRequest {
   string token = 1;
