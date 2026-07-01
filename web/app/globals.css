@@ -84,6 +84,48 @@
   --color-plt-error: var(--plt-error);
   --color-plt-error-bg: var(--plt-error-bg);
   --color-plt-badge-red: var(--plt-badge-red);
+
+  /* ── Semantic design-system roles (Phase A) ──────────────────────────────
+     Prefer these over the raw plt-* names in new components: they read as intent
+     ("bg-surface", "text-fg-muted", "border-danger") and are the swap point for
+     theming later. They alias the existing tokens, so nothing else changes. */
+  --color-brand: var(--plt-green-text);        /* interactive/brand green */
+  --color-brand-deep: var(--plt-green-deep);   /* headers, footer */
+  --color-brand-mid: var(--plt-green-mid);
+  --color-brand-subtle: var(--plt-green-bg-light);
+  --color-accent: var(--plt-terracotta);       /* terracotta accents/links */
+  --color-accent-subtle: var(--plt-terracotta-light);
+  --color-gold: var(--plt-gold);
+  --color-bg: var(--plt-bg);                    /* page background */
+  --color-surface: var(--plt-surface);         /* subtle raised surface */
+  --color-surface-alt: var(--plt-surface-alt);
+  --color-card: var(--plt-card);               /* cards / sheets */
+  --color-fg: var(--plt-text);                 /* primary text */
+  --color-fg-muted: var(--plt-text-secondary); /* secondary text */
+  --color-fg-subtle: var(--plt-text-muted);    /* tertiary/placeholder text */
+  --color-border: var(--plt-border);
+  --color-border-strong: var(--plt-border-heavy);
+  --color-danger: var(--plt-error);
+  --color-danger-bg: var(--plt-error-bg);
+  --color-success: var(--plt-green-text);
+  --color-success-bg: var(--plt-success-bg);
+  --color-star: var(--plt-star);
+
+  /* Radius scale — DELIBERATELY replaces Tailwind's default radius scale with the
+     Plateau scale, so `rounded-sm/md/lg/xl` render our values everywhere (one
+     source of truth, not two). --radius-pill is additive. */
+  --radius-sm: var(--plt-radius-sm);
+  --radius-md: var(--plt-radius-md);
+  --radius-lg: var(--plt-radius-lg);
+  --radius-xl: var(--plt-radius-xl);
+  --radius-pill: var(--plt-radius-pill);
+
+  /* Elevation scale — likewise owns `shadow-md`/`shadow-lg` as the Plateau
+     elevation (intentional override of Tailwind defaults); --shadow-card is additive. */
+  --shadow-card: 0 1px 3px rgba(16, 24, 40, 0.06), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.14);
+
   --font-sans: 'Hanken Grotesk', sans-serif;
 }
 
