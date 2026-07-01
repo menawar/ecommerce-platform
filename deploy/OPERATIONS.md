@@ -20,6 +20,13 @@ Operator + Grafana) is installed for the monitoring resources to take effect.
 - **Tracing** — OpenTelemetry → Jaeger; one trace spans gateway → services →
   payment, so a slow/failed checkout is followed end to end (start at the
   gateway span, follow `order.*`/`payment.*`).
+- **Error tracking** — set `SENTRY_DSN` (and `ENVIRONMENT`) on the services and the
+  web app to send server-fault errors (gRPC `Internal`/`Unknown`/`DataLoss`,
+  recovered panics, and Next.js server/boundary errors) to Sentry; each event
+  carries the `trace_id` so you can pivot to the Jaeger trace. **Unset by default**
+  (dev/CI) → errors are structured-logged only. The notification consumer reports
+  async handler failures the same way. Web client-side reporting is a documented
+  drop-in (`web/lib/report-error.ts`).
 
 ## Incident response
 
