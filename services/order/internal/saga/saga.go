@@ -435,18 +435,20 @@ type paymentEventData struct {
 	OrderID string `json:"order_id"`
 }
 
-// HandlePaymentEvent is the order service's consumer callback for the EVENTS
-// stream. It resumes the matching order when its payment settles; every other
-// topic (order.*, user.*) is ignored. It MUST be idempotent — see Resume.
-func (s *Saga) HandlePaymentEvent(ctx context.Context, env events.Envelope) error {
+// HandleEvent is the order service's consumer callback for the EVENTS stream. It
+// resumes an order when its payment settles, and anonymises an order's PII when the
+// customer is erased; every other topic is ignored. It MUST be idempotent.
+func (s *Saga) HandleEvent(ctx context.Context, env events.Envelope) error {
 	var paid bool
 	switch env.Topic {
 	case "payment.succeeded":
 		paid = true
 	case "payment.failed":
 		paid = false
+	case "user.deleted":
+		return s.anonymizeDeletedUser(ctx, env)
 	default:
-		return nil // not a payment outcome — nothing to do
+		return nil // nothing to do
 	}
 	data, err := events.DataAs[paymentEventData](env)
 	if err != nil {
@@ -456,6 +458,37 @@ func (s *Saga) HandlePaymentEvent(ctx context.Context, env events.Envelope) erro
 		return nil // can't correlate without an order id
 	}
 	return s.Resume(ctx, data.OrderID, paid)
+}
+
+// anonymizeDeletedUser blanks the PII snapshotted onto a deleted user's orders
+// (recipient/phone/address), keeping the order records for accounting. Idempotent;
+// a decode/DB error is returned so JetStream retries (with backoff).
+//
+// LIMITATION: this consumer uses the default MaxDeliver, so a DB outage spanning
+// all retries drops the event and leaves that user's order PII un-anonymised — the
+// per-nak error logs are the reconciliation signal. (We can't set unlimited
+// redelivery here without also never giving up on genuine payment poison messages
+// on the same durable.) Erasures that occurred before this consumer shipped aren't
+// backfilled; a one-time re-emit of user.deleted would cover them.
+func (s *Saga) anonymizeDeletedUser(ctx context.Context, env events.Envelope) error {
+	data, err := events.DataAs[userDeletedData](env)
+	if err != nil {
+		return fmt.Errorf("decode user.deleted event: %w", err)
+	}
+	uid, err := uuid.Parse(data.UserID)
+	if err != nil {
+		s.log.WarnContext(ctx, "user.deleted with bad user_id; dropping", "user_id", data.UserID)
+		return nil // unparseable id -> ack, retry won't help
+	}
+	if err := s.q.AnonymizeUserOrders(ctx, pgUUID(uid)); err != nil {
+		return fmt.Errorf("anonymize orders for %s: %w", data.UserID, err)
+	}
+	s.log.InfoContext(ctx, "anonymised orders for deleted user", "user_id", data.UserID)
+	return nil
+}
+
+type userDeletedData struct {
+	UserID string `json:"user_id"`
 }
 
 // Resume continues a PAYMENT_PENDING order once its payment settles. On success it

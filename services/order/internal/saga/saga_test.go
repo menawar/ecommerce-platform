@@ -251,8 +251,8 @@ func contains(haystack []string, needle string) bool {
 }
 
 // resume delivers a payment outcome through the saga's real consumer entrypoint
-// (HandlePaymentEvent), exercising topic dispatch + envelope decoding, just as the
-// NATS consumer does in production.
+// (HandleEvent), exercising topic dispatch + envelope decoding, just as the NATS
+// consumer does in production.
 func resume(t *testing.T, s *saga.Saga, orderID string, paid bool) {
 	t.Helper()
 	topic := "payment.succeeded"
@@ -263,8 +263,67 @@ func resume(t *testing.T, s *saga.Saga, orderID string, paid bool) {
 	if err != nil {
 		t.Fatalf("build event: %v", err)
 	}
-	if err := s.HandlePaymentEvent(context.Background(), env); err != nil {
-		t.Fatalf("HandlePaymentEvent(%s): %v", topic, err)
+	if err := s.HandleEvent(context.Background(), env); err != nil {
+		t.Fatalf("HandleEvent(%s): %v", topic, err)
+	}
+}
+
+// TestSaga_AnonymizeOnUserDeleted: a user.deleted event blanks the PII snapshotted
+// onto that user's orders while keeping the order record (total/status), and is
+// idempotent + scoped to the deleted user.
+func TestSaga_AnonymizeOnUserDeleted(t *testing.T) {
+	ctx := context.Background()
+	pool := testPool(t)
+	pid, ci, prod := cartItem(2500)
+	cart := &fakeCart{items: []*cartv1.CartItem{ci}}
+	product := &fakeProduct{products: map[string]*productv1.Product{pid: prod}, reserveSuccess: true}
+	s := saga.New(pool, cart, product, &fakePayment{}, fakeUser{}, discard())
+
+	userID := uuid.NewString()
+	res, err := s.PlaceOrder(ctx, userID, uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	oid, _ := uuid.Parse(res.OrderID)
+	before, _ := db.New(pool).GetOrder(ctx, pgtype.UUID{Bytes: oid, Valid: true})
+	if before.ShipRecipient == "" {
+		t.Fatal("precondition: order should have a shipping snapshot")
+	}
+
+	// A SECOND user's order — must be left untouched (proves the WHERE user_id scope).
+	otherRes, err := s.PlaceOrder(ctx, uuid.NewString(), uuid.NewString(), uuid.NewString(), seedShipping(t, pool, 150000))
+	if err != nil {
+		t.Fatalf("PlaceOrder (other user): %v", err)
+	}
+	otherOID, _ := uuid.Parse(otherRes.OrderID)
+
+	env, err := events.New("user.deleted", map[string]string{"user_id": userID})
+	if err != nil {
+		t.Fatalf("build event: %v", err)
+	}
+	if err := s.HandleEvent(ctx, env); err != nil {
+		t.Fatalf("HandleEvent(user.deleted): %v", err)
+	}
+
+	after, _ := db.New(pool).GetOrder(ctx, pgtype.UUID{Bytes: oid, Valid: true})
+	if after.ShipRecipient != "" || after.ShipPhone != "" || after.ShipLine1 != "" ||
+		after.ShipCity != "" || after.ShipState != "" || after.ShipPostalCode != "" {
+		t.Errorf("PII not blanked: %+v", after)
+	}
+	// The order record itself is kept for accounting.
+	if after.TotalCents != before.TotalCents || after.Status != before.Status {
+		t.Errorf("order record changed: total %d->%d status %s->%s", before.TotalCents, after.TotalCents, before.Status, after.Status)
+	}
+
+	// The other user's order is untouched (scoped by user_id).
+	other, _ := db.New(pool).GetOrder(ctx, pgtype.UUID{Bytes: otherOID, Valid: true})
+	if other.ShipRecipient == "" {
+		t.Error("another user's order PII was wrongly anonymised")
+	}
+
+	// Idempotent replay is a no-op success.
+	if err := s.HandleEvent(ctx, env); err != nil {
+		t.Fatalf("replay HandleEvent: %v", err)
 	}
 }
 
