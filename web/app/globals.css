@@ -353,3 +353,20 @@ textarea::placeholder {
   animation: plt-shimmer 1.5s ease infinite;
   border-radius: var(--plt-radius-md);
 }
+
+/* Skip-to-content link: off-screen until keyboard-focused, then pinned top-left. */
+.plt-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--plt-green-deep);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 0 0 8px 0;
+  text-decoration: none;
+  font-weight: 700;
+}
+.plt-skip-link:focus {
+  left: 0;
+}

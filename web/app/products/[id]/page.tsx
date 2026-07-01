@@ -1,8 +1,44 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getProduct, listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
+import { SITE_URL } from "@/lib/site";
 import { addToCartAction } from "@/app/cart/actions";
+
+// Request-scoped memoization: generateMetadata and the page body both need the
+// product, but gatewayFetch is cache:no-store, so without this they'd be two
+// round-trips per view. cache() collapses them to one within a single render.
+const loadProduct = cache((id: string) => getProduct(id));
+
+// Per-product SEO: a real title/description + OpenGraph image so shared links and
+// search results show the product, not the generic site card.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const p = await loadProduct(id);
+    const description = p.description || `${p.name} — fresh from the Jos Plateau.`;
+    return {
+      title: p.name,
+      description,
+      alternates: { canonical: `/products/${p.id}` },
+      openGraph: {
+        title: p.name,
+        description,
+        type: "website",
+        url: `${SITE_URL}/products/${p.id}`,
+        images: p.image_url ? [{ url: p.image_url, alt: p.name }] : undefined,
+      },
+    };
+  } catch {
+    return { title: "Product" };
+  }
+}
 
 // params is async in Next 16. We translate a gateway 404 into Next's notFound()
 // (renders the nearest not-found UI); any other failure rethrows to error.tsx.
@@ -15,7 +51,7 @@ export default async function ProductDetail({
 
   let product;
   try {
-    product = await getProduct(id);
+    product = await loadProduct(id);
   } catch (err) {
     if (err instanceof GatewayError && err.status === 404) notFound();
     throw err;
@@ -30,8 +66,32 @@ export default async function ProductDetail({
     // silently skip related products if fetch fails
   }
 
+  // Product structured data (schema.org) so search engines can show a rich result
+  // with price + availability. Rendered as a JSON-LD script.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description || undefined,
+    sku: product.sku,
+    image: product.image_url || undefined,
+    offers: {
+      "@type": "Offer",
+      price: (product.price_cents / 100).toFixed(2),
+      priceCurrency: product.currency || "NGN",
+      availability: product.available > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      url: `${SITE_URL}/products/${product.id}`,
+    },
+  };
+
   return (
     <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+      <script
+        type="application/ld+json"
+        // Escape "<" so a product field containing "</script>" can't break out of
+        // this block (XSS / invalid JSON-LD).
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
+      />
       {/* Back link */}
       <Link
         href="/products"
