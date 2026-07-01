@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../error-panel";
 import { SortSelect } from "./sort-select";
+
+export const metadata: Metadata = {
+  title: "Shop",
+  description: "Browse this week's harvest — raw food materials fresh from the Jos Plateau.",
+  alternates: { canonical: "/products" },
+};
 
 const PAGE_SIZE = 12;
 

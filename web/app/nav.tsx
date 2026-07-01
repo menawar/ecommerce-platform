@@ -268,6 +268,7 @@ export async function Nav() {
 
       {/* ── Category Nav ──────────────────────────────────────────────────── */}
       <nav
+        aria-label="Product categories"
         style={{
           background: "var(--plt-green-mid)",
           color: "#dfe7e0",
