@@ -136,7 +136,15 @@ export function Footer() {
         }}
       >
         <span>© 2026 Plateau · Home of Peace &amp; Tourism</span>
-        <span>Naira (₦) · Delivering across Jos &amp; Plateau</span>
+        <span style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <Link href="/terms" style={{ color: "inherit", textDecoration: "underline" }}>
+            Terms
+          </Link>
+          <Link href="/privacy" style={{ color: "inherit", textDecoration: "underline" }}>
+            Privacy
+          </Link>
+          <span>Naira (₦) · Delivering across Jos &amp; Plateau</span>
+        </span>
       </div>
     </footer>
   );

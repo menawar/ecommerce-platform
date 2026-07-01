@@ -3,6 +3,7 @@ import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Nav } from "./nav";
 import { Footer } from "./footer";
+import { CookieNotice } from "./cookie-notice";
 
 const hanken = Hanken_Grotesk({
   variable: "--font-hanken",
@@ -27,6 +28,7 @@ export default function RootLayout({
         <Nav />
         {children}
         <Footer />
+        <CookieNotice />
       </body>
     </html>
   );
