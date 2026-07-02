@@ -6,6 +6,10 @@ import { getProduct, listProducts, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
 import { SITE_URL } from "@/lib/site";
 import { addToCartAction } from "@/app/cart/actions";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 // Request-scoped memoization: generateMetadata and the page body both need the
 // product, but gatewayFetch is cache:no-store, so without this they'd be two
@@ -57,7 +61,7 @@ export default async function ProductDetail({
     throw err;
   }
 
-  // Fetch related products
+  // Fetch related products.
   let related: Awaited<ReturnType<typeof listProducts>>["products"] = [];
   try {
     const result = await listProducts({ page: 1, pageSize: 4 });
@@ -66,8 +70,10 @@ export default async function ProductDetail({
     // silently skip related products if fetch fails
   }
 
+  const inStock = product.available > 0;
+
   // Product structured data (schema.org) so search engines can show a rich result
-  // with price + availability. Rendered as a JSON-LD script.
+  // with price + availability.
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -79,278 +85,119 @@ export default async function ProductDetail({
       "@type": "Offer",
       price: (product.price_cents / 100).toFixed(2),
       priceCurrency: product.currency || "NGN",
-      availability: product.available > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       url: `${SITE_URL}/products/${product.id}`,
     },
   };
 
   return (
-    <main style={{ maxWidth: 1180, margin: "0 auto", padding: "16px 20px 50px" }}>
+    <Container as="main" className="pb-12 pt-4">
       <script
         type="application/ld+json"
-        // Escape "<" so a product field containing "</script>" can't break out of
-        // this block (XSS / invalid JSON-LD).
+        // Escape "<" so a product field containing "</script>" can't break out.
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
-      {/* Back link */}
-      <Link
-        href="/products"
-        style={{
-          fontSize: 13,
-          color: "var(--plt-terracotta)",
-          fontWeight: 600,
-          textDecoration: "none",
-          display: "inline-block",
-          marginBottom: 16,
-        }}
-      >
+
+      <Link href="/products" className="mb-4 inline-block text-sm font-semibold text-accent hover:underline">
         ‹ Back to results
       </Link>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 30,
-          flexWrap: "wrap",
-          alignItems: "flex-start",
-        }}
-      >
-        {/* ── Left: Images ─────────────────────────────────────────────── */}
-        <div
-          style={{
-            flex: 1,
-            minWidth: 300,
-            display: "flex",
-            gap: 14,
-          }}
-        >
-          {/* Thumbnails */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
+      {/* Stacks on mobile; image + buy-box side by side on desktop. */}
+      <div className="flex flex-col items-start gap-8 lg:flex-row">
+        {/* Images */}
+        <div className="flex w-full min-w-0 gap-3 lg:flex-1">
+          {/* Thumbnail rail (decorative placeholders until multi-image, Phase D). */}
+          <div className="hidden flex-col gap-2.5 sm:flex">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="plt-img-thumb" />
+              <div key={i} className="h-14 w-14 rounded-md border border-border bg-surface" />
             ))}
           </div>
-
-          {/* Main image — falls back to a SKU placeholder when none is set.
-              Plain <img> by choice: next/image optimization needs remotePatterns
-              config + explicit sizing in this flex layout, deferred to a later
-              polish step. Images are served from object storage (MinIO/S3/R2). */}
-          {product.image_url ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={product.image_url}
-              alt={product.name}
-              className="plt-img-placeholder-lg"
-              style={{ flex: 1, objectFit: "cover" }}
-            />
-          ) : (
-            <div className="plt-img-placeholder-lg" style={{ flex: 1 }}>
-              <span
-                style={{
-                  fontFamily: "monospace",
-                  fontSize: 12,
-                  color: "var(--plt-text-muted)",
-                }}
-              >
-                {product.sku}
-              </span>
-            </div>
-          )}
+          <div className="flex aspect-square flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface">
+            {product.image_url ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={product.image_url} alt={product.name} className="h-full w-full object-cover" />
+            ) : (
+              <span className="font-mono text-xs text-fg-subtle">{product.sku}</span>
+            )}
+          </div>
         </div>
 
-        {/* ── Right: Product info ──────────────────────────────────────── */}
-        <div style={{ width: 380, flex: "0 0 380px" }}>
-          <h1
-            style={{
-              fontSize: 24,
-              fontWeight: 800,
-              lineHeight: 1.2,
-              margin: 0,
-            }}
-          >
-            {product.name}
-          </h1>
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--plt-text-secondary)",
-              margin: "7px 0",
-            }}
-          >
-            SKU <b style={{ color: "var(--plt-text)" }}>{product.sku}</b>
+        {/* Buy box */}
+        <div className="w-full lg:w-[380px] lg:flex-none">
+          <h1 className="text-2xl font-extrabold leading-tight">{product.name}</h1>
+          <div className="my-2 text-sm text-fg-muted">
+            SKU <b className="text-fg">{product.sku}</b>
           </div>
-          <div className="plt-stars" style={{ fontSize: 14 }}>
-            ★★★★★{" "}
-            <span style={{ color: "var(--plt-terracotta)" }}>
-              {product.available} in stock
-            </span>
+          <div className="text-sm font-semibold text-accent">
+            {inStock ? `${product.available} in stock` : "Out of stock"}
           </div>
 
-          {/* Price section */}
-          <div
-            style={{
-              borderTop: "1px solid var(--plt-border-heavy)",
-              margin: "16px 0",
-              paddingTop: 16,
-              display: "flex",
-              alignItems: "baseline",
-              gap: 10,
-            }}
-          >
-            <span style={{ fontSize: 32, fontWeight: 800 }}>
-              {formatPrice(product.price_cents, product.currency)}
-            </span>
+          <div className="my-4 flex items-baseline gap-2.5 border-t border-border-strong pt-4">
+            <span className="text-[32px] font-extrabold">{formatPrice(product.price_cents, product.currency)}</span>
           </div>
 
-          <div
-            style={{
-              fontSize: 14,
-              color: "var(--plt-green-text)",
-              fontWeight: 700,
-              marginBottom: 4,
-            }}
-          >
-            {product.available > 0 ? "In stock · harvested fresh" : "Out of stock"}
+          <div className="mb-1 flex items-center gap-2">
+            {inStock ? <Badge variant="brand">In stock</Badge> : <Badge variant="danger">Out of stock</Badge>}
+            {inStock && <span className="text-sm font-semibold text-brand">harvested fresh</span>}
           </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--plt-text-secondary)",
-              marginBottom: 18,
-            }}
-          >
-            Delivered this week across Jos &amp; Plateau. Free delivery on bulk
-            orders over ₦50,000.
-          </div>
+          <p className="mb-4 text-sm text-fg-muted">
+            Delivered this week across Jos &amp; Plateau. Free delivery on bulk orders over ₦50,000.
+          </p>
 
-          {/* Add to cart / Buy now */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            {/* Add-to-cart is a plain form bound to a Server Action. A logged-out user's
-                request 401s at the gateway and the action redirects them to /login. */}
-            <form action={addToCartAction}>
-              <input type="hidden" name="product_id" value={product.id} />
-              <input type="hidden" name="quantity" value="1" />
-              <button
-                disabled={product.available <= 0}
-                className="plt-btn-primary-lg"
-                style={{ width: "100%" }}
-              >
-                {product.available > 0 ? "Add to cart" : "Out of stock"}
-              </button>
-            </form>
-          </div>
+          {/* Add-to-cart is a plain form bound to a Server Action. A logged-out user's
+              request 401s at the gateway and the action redirects them to /login. */}
+          <form action={addToCartAction}>
+            <input type="hidden" name="product_id" value={product.id} />
+            <input type="hidden" name="quantity" value="1" />
+            <Button type="submit" size="lg" fullWidth disabled={!inStock}>
+              {inStock ? "Add to cart" : "Out of stock"}
+            </Button>
+          </form>
 
-          {/* About this produce */}
-          <div
-            style={{
-              borderTop: "1px solid var(--plt-border-heavy)",
-              marginTop: 20,
-              paddingTop: 16,
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>
-              About this product
-            </div>
+          <div className="mt-5 border-t border-border-strong pt-4">
+            <h2 className="mb-2 text-sm font-extrabold">About this product</h2>
             {product.description && (
-              <div
-                style={{
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  color: "#3d444c",
-                }}
-              >
-                {product.description}
-              </div>
+              <p className="text-sm leading-relaxed text-fg-muted">{product.description}</p>
             )}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                marginTop: 12,
-                fontSize: 13,
-                color: "#3d444c",
-              }}
-            >
-              <div>✓ Freshly harvested &amp; graded for quality</div>
-              <div>✓ SKU {product.sku}</div>
-              <div>✓ Cold-chain handled to keep it farm-fresh</div>
-            </div>
+            <ul className="mt-3 flex flex-col gap-1.5 text-sm text-fg-muted">
+              <li>✓ Freshly harvested &amp; graded for quality</li>
+              <li>✓ SKU {product.sku}</li>
+              <li>✓ Cold-chain handled to keep it farm-fresh</li>
+            </ul>
           </div>
         </div>
       </div>
 
-      {/* ── You might also like ─────────────────────────────────────────── */}
+      {/* You might also like */}
       {related.length > 0 && (
-        <div className="plt-card" style={{ marginTop: 26 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 16 }}>
-            You might also like
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(186px, 1fr))",
-              gap: 16,
-            }}
-          >
+        <Card className="mt-6">
+          <h2 className="mb-4 text-lg font-extrabold">You might also like</h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {related.map((p) => (
               <Link
                 key={p.id}
                 href={`/products/${p.id}`}
-                style={{
-                  background: "var(--plt-card)",
-                  border: "1px solid var(--plt-border)",
-                  borderRadius: "var(--plt-radius-md)",
-                  padding: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  textDecoration: "none",
-                  color: "var(--plt-text)",
-                }}
+                className="flex flex-col overflow-hidden rounded-xl border border-border bg-card text-fg no-underline transition-shadow hover:shadow-card"
               >
-                <div className="plt-img-placeholder">
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: 10,
-                      color: "var(--plt-text-muted)",
-                    }}
-                  >
-                    {p.sku}
-                  </span>
+                <div className="flex aspect-square items-center justify-center overflow-hidden bg-surface">
+                  {p.image_url ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="font-mono text-[10px] text-fg-subtle">{p.sku}</span>
+                  )}
                 </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    lineHeight: 1.3,
-                    margin: "11px 0 6px",
-                    height: 34,
-                    overflow: "hidden",
-                  }}
-                >
-                  {p.name}
-                </div>
-                <div className="plt-stars">★★★★★</div>
-                <div style={{ fontSize: 16, fontWeight: 800, marginTop: 6 }}>
-                  {formatPrice(p.price_cents, p.currency)}
+                <div className="flex flex-col p-3.5">
+                  <div className="line-clamp-2 min-h-[34px] text-sm leading-snug">{p.name}</div>
+                  <div className="mt-1.5 text-base font-extrabold">
+                    {formatPrice(p.price_cents, p.currency)}
+                  </div>
                 </div>
               </Link>
             ))}
           </div>
-        </div>
+        </Card>
       )}
-    </main>
+    </Container>
   );
 }
