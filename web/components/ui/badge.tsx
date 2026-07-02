@@ -4,7 +4,7 @@ import { cn } from "@/lib/cn";
 export type BadgeVariant = "neutral" | "brand" | "gold" | "danger" | "success";
 
 const variantStyles: Record<BadgeVariant, string> = {
-  neutral: "bg-surface text-fg-muted",
+  neutral: "border border-border bg-surface text-fg-muted",
   brand: "bg-brand-subtle text-brand",
   gold: "bg-gold/20 text-accent",
   danger: "bg-danger-bg text-danger",
