@@ -7,6 +7,10 @@ import { listAddresses } from "@/lib/addresses";
 import { listShippingMethods } from "@/lib/shipping";
 import { formatPrice } from "@/lib/format";
 import type { Product } from "@/lib/types";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { buttonVariants } from "@/components/ui/button";
 import { CheckoutForm } from "./checkout-form";
 
 export default async function CheckoutPage() {
@@ -38,61 +42,49 @@ export default async function CheckoutPage() {
   );
 
   return (
-    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 60px" }}>
-      <Link
-        href="/cart"
-        style={{
-          fontSize: 13,
-          color: "var(--plt-terracotta)",
-          fontWeight: 600,
-          textDecoration: "none",
-          display: "inline-block",
-          marginBottom: 12,
-        }}
-      >
+    <Container as="main" size="lg" className="pb-14 pt-6">
+      <Link href="/cart" className="mb-3 inline-block text-sm font-semibold text-accent hover:underline">
         ‹ Back to cart
       </Link>
-      <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 18, marginTop: 0 }}>Checkout</h1>
+      <h1 className="mb-5 text-2xl font-extrabold">Checkout</h1>
 
       {lines.length === 0 ? (
-        <div className="plt-card-lg" style={{ padding: "60px 20px", textAlign: "center" }}>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Your cart is empty</div>
-          <p style={{ fontSize: 14, color: "var(--plt-text-secondary)" }}>
-            <Link href="/products" style={{ color: "var(--plt-terracotta)" }}>
-              Browse products
-            </Link>{" "}
-            to add items to your cart.
-          </p>
-        </div>
+        <Card padded={false}>
+          <EmptyState
+            as="h2"
+            icon="🧺"
+            title="Your cart is empty"
+            description="Add some produce before checking out."
+            action={
+              <Link href="/products" className={buttonVariants({ size: "lg" })}>
+                Browse products
+              </Link>
+            }
+          />
+        </Card>
       ) : (
         <>
           {/* Items preview */}
-          <div className="plt-card-lg" style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Items in your order</div>
+          <Card className="mb-5">
+            <h2 className="mb-3.5 text-base font-extrabold">Items in your order</h2>
             {lines.map(({ item, product }) => (
               <div
                 key={item.product_id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "8px 0",
-                  fontSize: 14,
-                  borderBottom: "1px solid var(--plt-border)",
-                }}
+                className="flex justify-between border-b border-border py-2 text-sm last:border-b-0"
               >
                 <span>
                   {product ? product.name : "Unavailable product"} × {item.quantity}
                 </span>
-                <span style={{ fontWeight: 600 }}>
+                <span className="font-semibold">
                   {product ? formatPrice(product.price_cents * item.quantity, product.currency) : "—"}
                 </span>
               </div>
             ))}
-            <p style={{ marginTop: 12, fontSize: 12, color: "var(--plt-text-muted)" }}>
+            <p className="mt-3 text-xs text-fg-subtle">
               Mock payment: a total whose kobo ends in 13 (e.g. ₦13.13) is declined — use it to see the
               saga&apos;s failure path (order cancelled, stock released).
             </p>
-          </div>
+          </Card>
 
           <CheckoutForm
             subtotalCents={subtotal}
@@ -102,6 +94,6 @@ export default async function CheckoutPage() {
           />
         </>
       )}
-    </main>
+    </Container>
   );
 }
