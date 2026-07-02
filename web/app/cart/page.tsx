@@ -5,6 +5,10 @@ import { getCart } from "@/lib/cart";
 import { getProduct, GatewayError } from "@/lib/gateway";
 import { formatPrice } from "@/lib/format";
 import type { Product } from "@/lib/types";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { buttonVariants } from "@/components/ui/button";
 import { updateCartItemAction, removeCartItemAction } from "./actions";
 
 export default async function CartPage() {
@@ -32,290 +36,134 @@ export default async function CartPage() {
     }),
   );
 
-  const total = lines.reduce(
+  const subtotal = lines.reduce(
     (sum, l) => sum + (l.product ? l.product.price_cents * l.item.quantity : 0),
     0,
   );
   const cartCount = lines.reduce((sum, l) => sum + l.item.quantity, 0);
 
-  // Delivery logic matching the mockup
-  const FREE_DELIVERY_OVER = 5000000; // 50,000 NGN in kobo
-  const STANDARD_FEE = 350000; // 3,500 NGN
-  const subtotal = total;
+  // Delivery logic matching the mockup.
+  const FREE_DELIVERY_OVER = 5000000; // ₦50,000 in kobo
+  const STANDARD_FEE = 350000; // ₦3,500
   const freeDelivery = subtotal >= FREE_DELIVERY_OVER || subtotal === 0;
   const fee = freeDelivery ? 0 : STANDARD_FEE;
   const grandTotal = subtotal + fee;
   const needMore = FREE_DELIVERY_OVER - subtotal;
 
   return (
-    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 60px" }}>
-      <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 18, margin: 0, paddingBottom: 18 }}>
-        Your cart
-      </h1>
+    <Container as="main" size="lg" className="pb-14 pt-6">
+      <h1 className="mb-5 text-2xl font-extrabold">Your cart</h1>
 
-      {/* ── Empty State ───────────────────────────────────────────────────── */}
-      {lines.length === 0 && (
-        <div
-          className="plt-card-lg"
-          style={{ padding: "60px 20px", textAlign: "center" }}
-        >
-          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
-            Your cart is empty
-          </div>
-          <div
-            style={{
-              fontSize: 14,
-              color: "var(--plt-text-secondary)",
-              marginBottom: 20,
-            }}
-          >
-            Browse this week&apos;s harvest from the Plateau.
-          </div>
-          <Link href="/products" className="plt-btn-primary-lg">
-            Browse produce
-          </Link>
-        </div>
-      )}
-
-      {/* ── Cart with items ───────────────────────────────────────────────── */}
-      {lines.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            gap: 20,
-            alignItems: "flex-start",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* Items list */}
-          <div
-            className="plt-card-lg"
-            style={{ flex: 1, minWidth: 300, padding: "8px 22px" }}
-          >
+      {lines.length === 0 ? (
+        <Card padded={false}>
+          <EmptyState
+            as="h2"
+            icon="🧺"
+            title="Your cart is empty"
+            description="Browse this week's harvest from the Plateau."
+            action={
+              <Link href="/products" className={buttonVariants({ size: "lg" })}>
+                Browse produce
+              </Link>
+            }
+          />
+        </Card>
+      ) : (
+        <div className="flex flex-col items-start gap-5 lg:flex-row">
+          {/* Items */}
+          <Card className="min-w-0 flex-1 py-1">
             {lines.map(({ item, product }) => (
               <div
                 key={item.product_id}
-                style={{
-                  display: "flex",
-                  gap: 16,
-                  padding: "18px 0",
-                  borderBottom: "1px solid var(--plt-border)",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
+                className="flex flex-wrap items-center gap-4 border-b border-border py-4 last:border-b-0"
               >
-                {/* Product image placeholder */}
-                <div
-                  style={{
-                    width: 84,
-                    height: 84,
-                    flex: "0 0 84px",
-                    background:
-                      "repeating-linear-gradient(45deg, #eceff3 0 7px, #f5f7f9 7px 14px)",
-                    borderRadius: "var(--plt-radius-md)",
-                    display: "flex",
-                    alignItems: "flex-end",
-                    padding: 7,
-                  }}
-                >
-                  <span
-                    style={{
-                      fontFamily: "monospace",
-                      fontSize: 9,
-                      color: "var(--plt-text-muted)",
-                    }}
-                  >
-                    {product?.sku ?? "N/A"}
-                  </span>
+                <div className="flex h-20 w-20 flex-none items-end rounded-md bg-surface p-1.5">
+                  <span className="font-mono text-[9px] text-fg-subtle">{product?.sku ?? "N/A"}</span>
                 </div>
 
-                {/* Product info */}
-                <div style={{ flex: 1, minWidth: 160 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>
-                    {product ? product.name : "Unavailable product"}
+                <div className="min-w-[160px] flex-1">
+                  <div className="text-[15px] font-bold">{product ? product.name : "Unavailable product"}</div>
+                  <div className="my-0.5 text-xs text-fg-muted">
+                    {product ? formatPrice(product.price_cents, product.currency) : "—"} × {item.quantity}
                   </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--plt-text-secondary)",
-                      margin: "3px 0",
-                    }}
-                  >
-                    {product
-                      ? formatPrice(product.price_cents, product.currency)
-                      : "—"}{" "}
-                    × {item.quantity}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: "var(--plt-green-text)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {product && product.available > 0 ? "In stock" : ""}
-                  </div>
+                  {product && product.available > 0 && (
+                    <div className="text-xs font-bold text-brand">In stock</div>
+                  )}
                 </div>
 
-                {/* Quantity stepper */}
-                <div className="plt-qty-stepper">
+                {/* Quantity stepper (each button is a server-action form submit). */}
+                <div className="flex items-center overflow-hidden rounded-md border border-border-strong">
                   <form action={updateCartItemAction}>
                     <input type="hidden" name="product_id" value={item.product_id} />
-                    <input
-                      type="hidden"
-                      name="quantity"
-                      value={Math.max(0, item.quantity - 1)}
-                    />
-                    <button type="submit" className="plt-qty-btn" style={{ width: 34, height: 34, fontSize: 17 }}>
+                    <input type="hidden" name="quantity" value={Math.max(0, item.quantity - 1)} />
+                    <button
+                      type="submit"
+                      aria-label="Decrease quantity"
+                      className="flex h-9 w-9 items-center justify-center text-lg hover:bg-surface"
+                    >
                       −
                     </button>
                   </form>
-                  <span className="plt-qty-val" style={{ width: 38, fontSize: 14 }}>
+                  <span className="w-9 text-center text-sm font-semibold" aria-live="polite">
                     {item.quantity}
                   </span>
                   <form action={updateCartItemAction}>
                     <input type="hidden" name="product_id" value={item.product_id} />
-                    <input
-                      type="hidden"
-                      name="quantity"
-                      value={item.quantity + 1}
-                    />
-                    <button type="submit" className="plt-qty-btn" style={{ width: 34, height: 34, fontSize: 17 }}>
+                    <input type="hidden" name="quantity" value={item.quantity + 1} />
+                    <button
+                      type="submit"
+                      aria-label="Increase quantity"
+                      className="flex h-9 w-9 items-center justify-center text-lg hover:bg-surface"
+                    >
                       +
                     </button>
                   </form>
                 </div>
 
-                {/* Line total */}
-                <div
-                  style={{
-                    width: 110,
-                    textAlign: "right",
-                    fontSize: 16,
-                    fontWeight: 800,
-                  }}
-                >
-                  {product
-                    ? formatPrice(
-                        product.price_cents * item.quantity,
-                        product.currency,
-                      )
-                    : "—"}
+                <div className="w-[110px] text-right text-base font-extrabold">
+                  {product ? formatPrice(product.price_cents * item.quantity, product.currency) : "—"}
                 </div>
 
-                {/* Remove */}
                 <form action={removeCartItemAction}>
                   <input type="hidden" name="product_id" value={item.product_id} />
-                  <button
-                    style={{
-                      border: 0,
-                      background: "none",
-                      color: "var(--plt-terracotta)",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Remove
-                  </button>
+                  <button className="text-sm font-semibold text-accent hover:underline">Remove</button>
                 </form>
               </div>
             ))}
-          </div>
+          </Card>
 
           {/* Order summary */}
-          <div
-            className="plt-card-lg"
-            style={{ width: 320, flex: "0 0 320px" }}
-          >
-            <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 16 }}>
-              Order summary
-            </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 14,
-                marginBottom: 10,
-              }}
-            >
-              <span style={{ color: "var(--plt-text-secondary)" }}>
-                Subtotal ({cartCount} items)
-              </span>
+          <Card as="aside" className="w-full lg:w-[320px] lg:flex-none">
+            <div className="mb-4 text-[17px] font-extrabold">Order summary</div>
+            <div className="mb-2.5 flex justify-between text-sm">
+              <span className="text-fg-muted">Subtotal ({cartCount} items)</span>
               <b>{formatPrice(subtotal, "NGN")}</b>
             </div>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 14,
-                marginBottom: 10,
-              }}
-            >
-              <span style={{ color: "var(--plt-text-secondary)" }}>
-                Delivery
-              </span>
+            <div className="mb-2.5 flex justify-between text-sm">
+              <span className="text-fg-muted">Delivery</span>
               <b>{freeDelivery ? "Free" : formatPrice(fee, "NGN")}</b>
             </div>
 
-            {/* Free delivery hint */}
             {subtotal > 0 && needMore > 0 && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--plt-green-text)",
-                  background: "var(--plt-green-bg-light)",
-                  padding: "8px 10px",
-                  borderRadius: "var(--plt-radius-sm)",
-                  marginBottom: 10,
-                }}
-              >
+              <div className="mb-2.5 rounded-sm bg-brand-subtle px-2.5 py-2 text-xs font-semibold text-brand">
                 Add {formatPrice(needMore, "NGN")} more for free delivery
               </div>
             )}
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                fontSize: 18,
-                fontWeight: 800,
-                borderTop: "1px solid var(--plt-border-heavy)",
-                paddingTop: 14,
-                marginTop: 4,
-              }}
-            >
+            <div className="mt-1 flex justify-between border-t border-border-strong pt-3.5 text-lg font-extrabold">
               <span>Total</span>
               <span>{formatPrice(grandTotal, "NGN")}</span>
             </div>
 
-            <Link
-              href="/checkout"
-              className="plt-btn-gold"
-              style={{
-                display: "block",
-                textAlign: "center",
-                textDecoration: "none",
-                marginTop: 18,
-              }}
-            >
+            <Link href="/checkout" className={buttonVariants({ variant: "gold", size: "lg" }) + " mt-4 w-full"}>
               Proceed to checkout
             </Link>
-            <Link
-              href="/products"
-              className="plt-btn-outline"
-              style={{
-                display: "block",
-                textAlign: "center",
-                textDecoration: "none",
-                marginTop: 10,
-              }}
-            >
+            <Link href="/products" className={buttonVariants({ variant: "outline", size: "lg" }) + " mt-2.5 w-full"}>
               Continue shopping
             </Link>
-          </div>
+          </Card>
         </div>
       )}
-    </main>
+    </Container>
   );
 }
