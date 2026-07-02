@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { GatewayError } from "@/lib/gateway";
 import { listAddresses } from "@/lib/addresses";
+import { Container } from "@/components/ui/container";
 import { AddressManager } from "./address-manager";
 
 // Protected: listAddresses goes through the gateway, which validates the JWT. A 401
@@ -17,12 +18,12 @@ export default async function AddressesPage() {
   }
 
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: "40px 20px 60px" }}>
-      <Link href="/account" style={{ fontSize: 13, color: "var(--plt-terracotta)", fontWeight: 600 }}>
+    <Container as="main" size="md" className="max-w-[720px] pb-14 pt-10">
+      <Link href="/account" className="text-sm font-semibold text-accent hover:underline">
         ← Account
       </Link>
-      <h1 style={{ fontSize: 26, fontWeight: 800, margin: "12px 0 18px" }}>Your addresses</h1>
+      <h1 className="mb-5 mt-3 text-2xl font-extrabold">Your addresses</h1>
       <AddressManager addresses={addresses} />
-    </main>
+    </Container>
   );
 }
