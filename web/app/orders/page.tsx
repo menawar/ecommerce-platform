@@ -4,11 +4,20 @@ import { redirect } from "next/navigation";
 import { GatewayError } from "@/lib/gateway";
 import { listOrders } from "@/lib/orders";
 import { formatPrice, formatDate } from "@/lib/format";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { Badge, type BadgeVariant } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { buttonVariants } from "@/components/ui/button";
+
+function statusVariant(status: string): BadgeVariant {
+  if (status === "CANCELLED") return "danger";
+  if (status === "CONFIRMED" || status === "SHIPPED" || status === "DELIVERED") return "success";
+  return "neutral"; // REFUNDED, PAYMENT_PENDING, etc.
+}
 
 // Order history. A Server Component: it calls the gateway with the user's cookie
-// on the server, so the order list (and the JWT) never touch the browser. Status
-// here is already terminal — our saga resolves CONFIRMED/CANCELLED synchronously
-// before the order is fetchable, so there's nothing to poll for.
+// on the server, so the order list (and the JWT) never touch the browser.
 export default async function OrdersPage() {
   let orders;
   try {
@@ -21,93 +30,40 @@ export default async function OrdersPage() {
   }
 
   return (
-    <main style={{ maxWidth: 1080, margin: "0 auto", padding: "24px 20px 60px" }}>
-      <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 18, marginTop: 0 }}>
-        Your orders
-      </h1>
+    <Container as="main" size="lg" className="pb-14 pt-6">
+      <h1 className="mb-5 text-2xl font-extrabold">Your orders</h1>
 
       {orders.length === 0 ? (
-        <div
-          className="plt-card-lg"
-          style={{ padding: "60px 20px", textAlign: "center" }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-            No orders yet
-          </div>
-          <div
-            style={{
-              fontSize: 14,
-              color: "var(--plt-text-secondary)",
-              marginBottom: 20,
-            }}
-          >
-            You haven&apos;t placed any orders yet.
-          </div>
-          <Link href="/products" className="plt-btn-primary-lg">
-            Browse products
-          </Link>
-        </div>
+        <Card padded={false}>
+          <EmptyState
+            as="h2"
+            icon="📦"
+            title="No orders yet"
+            description="You haven't placed any orders yet."
+            action={
+              <Link href="/products" className={buttonVariants({ size: "lg" })}>
+                Browse products
+              </Link>
+            }
+          />
+        </Card>
       ) : (
-        <div className="plt-card-lg" style={{ padding: 0, overflow: "hidden" }}>
-          {orders.map((o, i) => (
+        <Card padded={false} className="overflow-hidden">
+          {orders.map((o) => (
             <Link
               key={o.id}
               href={`/orders/${o.id}`}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "18px 22px",
-                borderBottom:
-                  i < orders.length - 1
-                    ? "1px solid var(--plt-border)"
-                    : "none",
-                textDecoration: "none",
-                color: "var(--plt-text)",
-                transition: "background 0.15s",
-              }}
+              className="flex items-center justify-between border-b border-border px-5 py-4 text-fg no-underline transition-colors last:border-b-0 hover:bg-surface"
             >
               <div>
-                <span
-                  style={{
-                    display: "inline-block",
-                    borderRadius: 4,
-                    padding: "3px 8px",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    background:
-                      o.status === "CONFIRMED"
-                        ? "var(--plt-green-bg-light)"
-                        : o.status === "CANCELLED"
-                          ? "var(--plt-error-bg)"
-                          : "var(--plt-surface)",
-                    color:
-                      o.status === "CONFIRMED"
-                        ? "var(--plt-green-text)"
-                        : o.status === "CANCELLED"
-                          ? "var(--plt-error)"
-                          : "var(--plt-text-secondary)",
-                  }}
-                >
-                  {o.status}
-                </span>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "var(--plt-text-secondary)",
-                    marginTop: 4,
-                  }}
-                >
-                  {formatDate(o.created_at)}
-                </div>
+                <Badge variant={statusVariant(o.status)}>{o.status}</Badge>
+                <div className="mt-1 text-sm text-fg-muted">{formatDate(o.created_at)}</div>
               </div>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>
-                {formatPrice(o.total_cents, o.currency)}
-              </span>
+              <span className="text-[15px] font-bold">{formatPrice(o.total_cents, o.currency)}</span>
             </Link>
           ))}
-        </div>
+        </Card>
       )}
-    </main>
+    </Container>
   );
 }

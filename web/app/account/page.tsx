@@ -4,6 +4,9 @@ import Link from "next/link";
 import { GatewayError } from "@/lib/gateway";
 import { getMe } from "@/lib/session";
 import { logoutAction } from "@/app/(auth)/actions";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DeleteAccountButton } from "./delete-account";
 
 // Protected page. The proxy already bounced anyone without a session cookie; here
@@ -20,98 +23,57 @@ export default async function AccountPage() {
   }
 
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "40px 20px 60px" }}>
-      <h1 style={{ fontSize: 26, fontWeight: 800, marginBottom: 18, marginTop: 0 }}>
-        Your account
-      </h1>
+    <Container as="main" size="md" className="pb-14 pt-10">
+      <h1 className="mb-5 text-2xl font-extrabold">Your account</h1>
 
-      <div className="plt-card-lg">
-        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16 }}>
-          Account details
-        </div>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            fontSize: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "10px 0",
-              borderBottom: "1px solid var(--plt-border)",
-            }}
-          >
-            <span style={{ color: "var(--plt-text-secondary)" }}>User ID</span>
-            <span style={{ fontFamily: "monospace", fontSize: 12 }}>
-              {me.user_id}
-            </span>
+      <Card>
+        <h2 className="mb-4 text-base font-extrabold">Account details</h2>
+        <dl className="flex flex-col text-sm">
+          <div className="flex justify-between border-b border-border py-2.5">
+            <dt className="text-fg-muted">User ID</dt>
+            <dd className="font-mono text-xs">{me.user_id}</dd>
           </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "10px 0",
-              borderBottom: "1px solid var(--plt-border)",
-            }}
-          >
-            <span style={{ color: "var(--plt-text-secondary)" }}>Role</span>
-            <span style={{ fontWeight: 600 }}>{me.role}</span>
+          <div className="flex justify-between border-b border-border py-2.5">
+            <dt className="text-fg-muted">Role</dt>
+            <dd className="font-semibold">{me.role}</dd>
           </div>
-        </div>
+        </dl>
 
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            marginTop: 24,
-          }}
-        >
-          <Link
-            href="/orders"
-            className="plt-btn-primary-lg"
-            style={{ textDecoration: "none", textAlign: "center", flex: 1 }}
-          >
+        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <Link href="/orders" className={buttonVariants({ size: "lg" }) + " flex-1"}>
             View orders
           </Link>
-          <Link
-            href="/account/addresses"
-            className="plt-btn-outline"
-            style={{ textDecoration: "none", textAlign: "center", flex: 1 }}
-          >
+          <Link href="/account/addresses" className={buttonVariants({ variant: "outline", size: "lg" }) + " flex-1"}>
             Manage addresses
           </Link>
-          <form action={logoutAction} style={{ flex: 1 }}>
-            <button className="plt-btn-outline" style={{ width: "100%" }}>
+          <form action={logoutAction} className="flex-1">
+            <Button type="submit" variant="outline" size="lg" fullWidth>
               Log out
-            </button>
+            </Button>
           </form>
         </div>
-      </div>
+      </Card>
 
-      <div className="plt-card-lg" style={{ marginTop: 20 }}>
-        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Data &amp; privacy</div>
-        <p style={{ fontSize: 14, color: "var(--plt-text-secondary)", margin: "0 0 16px" }}>
+      <Card className="mt-5">
+        <h2 className="mb-1.5 text-base font-extrabold">Data &amp; privacy</h2>
+        <p className="mb-4 text-sm text-fg-muted">
           Download a machine-readable copy of your personal data — your profile, addresses, and
           orders. See our{" "}
-          <Link href="/privacy" style={{ color: "var(--plt-green-text)" }}>
+          <Link href="/privacy" className="text-brand hover:underline">
             Privacy Policy
           </Link>{" "}
           for how we handle it.
         </p>
         {/* A plain <a> (not next/link) so the browser downloads the file. */}
-        <a href="/account/export" className="plt-btn-outline" style={{ textDecoration: "none" }}>
+        <a href="/account/export" className={buttonVariants({ variant: "outline" })}>
           Export my data (JSON)
         </a>
 
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--plt-border)" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Delete account</div>
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="mb-2 text-sm font-bold">Delete account</div>
           <DeleteAccountButton />
         </div>
-      </div>
-    </main>
+      </Card>
+    </Container>
   );
 }

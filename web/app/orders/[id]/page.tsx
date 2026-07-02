@@ -4,6 +4,10 @@ import { notFound, redirect } from "next/navigation";
 import { GatewayError } from "@/lib/gateway";
 import { getOrder } from "@/lib/orders";
 import { formatPrice } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
 import { StatusPoller } from "./status-poller";
 
 // The checkout result view. After place-order redirects here (or the PSP returns
@@ -37,54 +41,38 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       REFUNDED: "Order refunded",
     }[order.status] ?? "Awaiting payment";
 
+  const icon =
+    order.status === "DELIVERED"
+      ? "📦"
+      : order.status === "SHIPPED"
+        ? "🚚"
+        : isSuccess
+          ? "✓"
+          : isRefunded
+            ? "↩"
+            : isCancelled
+              ? "✕"
+              : "⏳";
+
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "60px 20px" }}>
-      <div
-        className="plt-card-lg"
-        style={{
-          borderRadius: "var(--plt-radius-xl)",
-          padding: "44px 36px",
-          textAlign: "center",
-        }}
-      >
-        {/* Status icon */}
+    <Container as="main" size="md" className="pb-14 pt-12">
+      <Card padded={false} className="px-6 py-10 text-center sm:px-9">
         <div
-          style={{
-            width: 72,
-            height: 72,
-            borderRadius: "50%",
-            background: isSuccess
-              ? "var(--plt-green-bg-light)"
-              : isCancelled
-                ? "var(--plt-error-bg)"
-                : "var(--plt-surface)",
-            color: isSuccess
-              ? "var(--plt-green-text)"
-              : isCancelled
-                ? "var(--plt-error)"
-                : "var(--plt-text-secondary)",
-            fontSize: 38,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 20px",
-          }}
+          aria-hidden
+          className={cn(
+            "mx-auto mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-full text-4xl",
+            isSuccess ? "bg-brand-subtle text-brand" : isCancelled ? "bg-danger-bg text-danger" : "bg-surface text-fg-muted",
+          )}
         >
-          {order.status === "DELIVERED" ? "📦" : order.status === "SHIPPED" ? "🚚" : isSuccess ? "✓" : isRefunded ? "↩" : isCancelled ? "✕" : "⏳"}
+          {icon}
         </div>
 
         {/* While the order awaits its payment outcome, poll until it settles. */}
         {isPending && <StatusPoller />}
 
-        <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 8, marginTop: 0 }}>{heading}</h1>
+        <h1 className="mb-2 text-2xl font-extrabold">{heading}</h1>
 
-        <div
-          style={{
-            fontSize: 15,
-            color: "var(--plt-text-secondary)",
-            marginBottom: 22,
-          }}
-        >
+        <div className="mb-6 text-[15px] text-fg-muted">
           {order.status === "CONFIRMED" && <>Thank you. We&apos;re preparing your order.</>}
           {order.status === "SHIPPED" && (
             <>
@@ -102,51 +90,25 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           {isRefunded && <>This order was refunded — the funds have been returned to your payment method.</>}
           {isCancelled && (
             <>
-              Your order was cancelled (payment declined). You were not charged
-              and the reserved stock was released.
+              Your order was cancelled (payment declined). You were not charged and the reserved stock
+              was released.
             </>
           )}
           {isPending && (
-            <>
-              We&apos;re confirming your payment. This page will update
-              automatically — no need to refresh.
-            </>
+            <>We&apos;re confirming your payment. This page will update automatically — no need to refresh.</>
           )}
         </div>
 
         {/* Order summary */}
-        <div
-          style={{
-            background: "var(--plt-surface-alt)",
-            borderRadius: "var(--plt-radius-lg)",
-            padding: 20,
-            textAlign: "left",
-            fontSize: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: 10,
-            }}
-          >
-            <span style={{ color: "var(--plt-text-secondary)" }}>
-              Order ID
-            </span>
-            <b style={{ fontFamily: "monospace", fontSize: 12 }}>{order.id}</b>
+        <div className="rounded-lg bg-surface-alt p-5 text-left text-sm">
+          <div className="mb-2.5 flex justify-between">
+            <span className="text-fg-muted">Order ID</span>
+            <b className="font-mono text-xs">{order.id}</b>
           </div>
 
           {order.items.map((it) => (
-            <div
-              key={it.product_id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: 10,
-              }}
-            >
-              <span style={{ color: "var(--plt-text-secondary)" }}>
+            <div key={it.product_id} className="mb-2.5 flex justify-between">
+              <span className="text-fg-muted">
                 {it.name} × {it.quantity}
               </span>
               <b>{formatPrice(it.price_cents * it.quantity, order.currency)}</b>
@@ -154,41 +116,23 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           ))}
 
           {order.shipping_method_name && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: 10,
-              }}
-            >
-              <span style={{ color: "var(--plt-text-secondary)" }}>
-                Delivery — {order.shipping_method_name}
-              </span>
+            <div className="mb-2.5 flex justify-between">
+              <span className="text-fg-muted">Delivery — {order.shipping_method_name}</span>
               <b>{order.shipping_cents === 0 ? "Free" : formatPrice(order.shipping_cents, order.currency)}</b>
             </div>
           )}
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 16,
-              fontWeight: 800,
-              borderTop: "1px solid var(--plt-border-heavy)",
-              paddingTop: 12,
-              marginTop: 4,
-            }}
-          >
+          <div className="mt-1 flex justify-between border-t border-border-strong pt-3 text-base font-extrabold">
             <span>Total</span>
             <span>{formatPrice(order.total_cents, order.currency)}</span>
           </div>
         </div>
 
         {order.shipping_address && (
-          <div className="plt-card-lg" style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>Delivery address</div>
-            <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--plt-text-secondary)" }}>
-              <div style={{ fontWeight: 700, color: "var(--plt-text)" }}>{order.shipping_address.recipient}</div>
+          <div className="mt-4 rounded-lg border border-border p-4 text-left">
+            <div className="mb-2 text-sm font-extrabold">Delivery address</div>
+            <div className="text-sm leading-relaxed text-fg-muted">
+              <div className="font-bold text-fg">{order.shipping_address.recipient}</div>
               <div>
                 {order.shipping_address.line1}
                 {order.shipping_address.line2 ? `, ${order.shipping_address.line2}` : ""}, {order.shipping_address.city},{" "}
@@ -202,30 +146,15 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         )}
 
         {order.status === "CONFIRMED" && (
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--plt-green-text)",
-              fontWeight: 700,
-              marginTop: 18,
-            }}
-          >
+          <div className="mt-4 text-sm font-bold text-brand">
             Estimated delivery: this week, across Jos &amp; Plateau
           </div>
         )}
 
-        <Link
-          href="/products"
-          className="plt-btn-primary-lg"
-          style={{
-            display: "inline-block",
-            textDecoration: "none",
-            marginTop: 24,
-          }}
-        >
+        <Link href="/products" className={buttonVariants({ size: "lg" }) + " mt-6"}>
           Continue shopping
         </Link>
-      </div>
-    </main>
+      </Card>
+    </Container>
   );
 }
