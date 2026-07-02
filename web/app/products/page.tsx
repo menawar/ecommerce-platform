@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { listProducts, GatewayError } from "@/lib/gateway";
-import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../error-panel";
 import { SortSelect } from "./sort-select";
 import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { ProductCard } from "@/components/product-card";
 
 export const metadata: Metadata = {
   title: "Shop",
@@ -145,36 +144,7 @@ export default async function ProductsPage({
               {/* Product grid — 2 cols on phones up to 4 on wide screens */}
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
                 {products.map((p) => (
-                  <Link
-                    key={p.id}
-                    href={`/products/${p.id}`}
-                    className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card text-fg no-underline shadow-card transition-shadow hover:shadow-md"
-                  >
-                    <div
-                      className="relative flex aspect-square items-center justify-center bg-surface bg-cover bg-center"
-                      style={p.image_url ? { backgroundImage: `url("${p.image_url}")` } : undefined}
-                    >
-                      <span className="absolute left-2 top-2">
-                        {p.available > 0 ? (
-                          <Badge variant="brand">In stock</Badge>
-                        ) : (
-                          <Badge variant="danger">Sold out</Badge>
-                        )}
-                      </span>
-                      {!p.image_url && <span className="font-mono text-[10px] text-fg-subtle">{p.sku}</span>}
-                    </div>
-                    <div className="flex flex-1 flex-col p-3.5">
-                      <div className="line-clamp-2 min-h-[34px] text-sm leading-snug">{p.name}</div>
-                      {/* Ratings intentionally omitted until Phase E wires real review data —
-                          we don't show fabricated stars. */}
-                      <div className="mt-1.5 text-[17px] font-extrabold">
-                        {formatPrice(p.price_cents, p.currency)}
-                      </div>
-                      <div className="mt-0.5 text-[11px] font-bold text-brand">
-                        {p.available > 0 ? "Delivered this week" : "Out of stock"}
-                      </div>
-                    </div>
-                  </Link>
+                  <ProductCard key={p.id} product={p} />
                 ))}
               </div>
 

@@ -10,6 +10,7 @@ import { Container } from "@/components/ui/container";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ProductCard } from "@/components/product-card";
 
 // Request-scoped memoization: generateMetadata and the page body both need the
 // product, but gatewayFetch is cache:no-store, so without this they'd be two
@@ -174,26 +175,7 @@ export default async function ProductDetail({
           <h2 className="mb-4 text-lg font-extrabold">You might also like</h2>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {related.map((p) => (
-              <Link
-                key={p.id}
-                href={`/products/${p.id}`}
-                className="flex flex-col overflow-hidden rounded-xl border border-border bg-card text-fg no-underline transition-shadow hover:shadow-card"
-              >
-                <div className="flex aspect-square items-center justify-center overflow-hidden bg-surface">
-                  {p.image_url ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="font-mono text-[10px] text-fg-subtle">{p.sku}</span>
-                  )}
-                </div>
-                <div className="flex flex-col p-3.5">
-                  <div className="line-clamp-2 min-h-[34px] text-sm leading-snug">{p.name}</div>
-                  <div className="mt-1.5 text-base font-extrabold">
-                    {formatPrice(p.price_cents, p.currency)}
-                  </div>
-                </div>
-              </Link>
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
         </Card>
