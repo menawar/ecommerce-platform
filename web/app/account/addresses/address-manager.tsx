@@ -3,7 +3,10 @@
 import { useActionState, useEffect, useState } from "react";
 
 import { InlineFormError } from "@/app/form-error";
-
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { Address } from "@/lib/addresses";
 import {
   saveAddressAction,
@@ -17,11 +20,9 @@ export function AddressManager({ addresses }: { addresses: Address[] }) {
   const [editing, setEditing] = useState<string | null>(null);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="flex flex-col gap-4">
       {addresses.length === 0 && editing === null && (
-        <p style={{ fontSize: 14, color: "var(--plt-text-secondary)", margin: 0 }}>
-          You have no saved addresses yet.
-        </p>
+        <p className="m-0 text-sm text-fg-muted">You have no saved addresses yet.</p>
       )}
 
       {addresses.map((a) =>
@@ -36,9 +37,9 @@ export function AddressManager({ addresses }: { addresses: Address[] }) {
         <AddressForm onClose={() => setEditing(null)} />
       ) : (
         editing === null && (
-          <button className="plt-btn-outline" style={{ alignSelf: "flex-start" }} onClick={() => setEditing("")}>
+          <Button variant="outline" className="self-start" onClick={() => setEditing("")}>
             + Add address
-          </button>
+          </Button>
         )
       )}
     </div>
@@ -47,58 +48,58 @@ export function AddressManager({ addresses }: { addresses: Address[] }) {
 
 function AddressCard({ address: a, onEdit }: { address: Address; onEdit: () => void }) {
   return (
-    <div className="plt-card-lg" style={{ display: "flex", justifyContent: "space-between", gap: 16 }}>
-      <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-        <div style={{ fontWeight: 700 }}>
+    <Card className="flex justify-between gap-4">
+      <div className="min-w-0 text-sm leading-relaxed">
+        <div className="font-bold">
           {a.recipient}
-          {a.label && <span style={{ color: "var(--plt-text-secondary)", fontWeight: 400 }}> · {a.label}</span>}
+          {a.label && <span className="font-normal text-fg-muted"> · {a.label}</span>}
           {a.is_default && (
-            <span
-              style={{
-                marginLeft: 8,
-                fontSize: 11,
-                fontWeight: 700,
-                background: "var(--plt-green-mid)",
-                color: "#fff",
-                borderRadius: 4,
-                padding: "1px 6px",
-              }}
-            >
+            <Badge variant="success" className="ml-2">
               Default
-            </span>
+            </Badge>
           )}
         </div>
-        <div style={{ color: "var(--plt-text-secondary)" }}>
+        <div className="text-fg-muted">
           {a.line1}
           {a.line2 ? `, ${a.line2}` : ""}, {a.city}, {a.state}
           {a.postal_code ? ` ${a.postal_code}` : ""}, {a.country}
         </div>
-        <div style={{ color: "var(--plt-text-secondary)" }}>{a.phone}</div>
+        <div className="text-fg-muted">{a.phone}</div>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-        <button className="plt-btn-outline" onClick={onEdit}>
+      <div className="flex flex-col items-end gap-1.5">
+        <Button variant="outline" size="sm" onClick={onEdit}>
           Edit
-        </button>
+        </Button>
         {!a.is_default && (
           <form action={setDefaultAddressAction}>
             <input type="hidden" name="id" value={a.id} />
-            <button className="plt-btn-outline" style={{ whiteSpace: "nowrap" }}>
+            <Button type="submit" variant="outline" size="sm" className="whitespace-nowrap">
               Make default
-            </button>
+            </Button>
           </form>
         )}
         <form action={deleteAddressAction}>
           <input type="hidden" name="id" value={a.id} />
-          <button className="plt-btn-outline" style={{ color: "var(--plt-error)" }}>
+          <Button type="submit" variant="outline" size="sm" className="text-danger">
             Delete
-          </button>
+          </Button>
         </form>
       </div>
-    </div>
+    </Card>
   );
 }
 
-const fieldStyle = { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 13 };
+function LabeledInput({
+  label,
+  ...props
+}: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="font-semibold">{label}</span>
+      <Input {...props} />
+    </label>
+  );
+}
 
 function AddressForm({ address, onClose }: { address?: Address; onClose: () => void }) {
   const [state, formAction, pending] = useActionState<AddressFormState, FormData>(saveAddressAction, {});
@@ -109,47 +110,23 @@ function AddressForm({ address, onClose }: { address?: Address; onClose: () => v
   }, [state.ok, onClose]);
 
   return (
-    <form action={formAction} className="plt-card-lg" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <form action={formAction} className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 shadow-card">
       {address && <input type="hidden" name="id" value={address.id} />}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <label style={fieldStyle}>
-          Recipient
-          <input name="recipient" required defaultValue={address?.recipient} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          Phone
-          <input name="phone" required defaultValue={address?.phone} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          Address line 1
-          <input name="line1" required defaultValue={address?.line1} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          Address line 2
-          <input name="line2" defaultValue={address?.line2} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          City
-          <input name="city" required defaultValue={address?.city} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          State
-          <input name="state" required defaultValue={address?.state} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          Postal code
-          <input name="postal_code" defaultValue={address?.postal_code} className="plt-input" />
-        </label>
-        <label style={fieldStyle}>
-          Label (optional)
-          <input name="label" defaultValue={address?.label} placeholder="Home, Work…" className="plt-input" />
-        </label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <LabeledInput label="Recipient" name="recipient" required defaultValue={address?.recipient} />
+        <LabeledInput label="Phone" name="phone" required defaultValue={address?.phone} />
+        <LabeledInput label="Address line 1" name="line1" required defaultValue={address?.line1} />
+        <LabeledInput label="Address line 2" name="line2" defaultValue={address?.line2} />
+        <LabeledInput label="City" name="city" required defaultValue={address?.city} />
+        <LabeledInput label="State" name="state" required defaultValue={address?.state} />
+        <LabeledInput label="Postal code" name="postal_code" defaultValue={address?.postal_code} />
+        <LabeledInput label="Label (optional)" name="label" defaultValue={address?.label} placeholder="Home, Work…" />
       </div>
-      {/* Only on create: the update path doesn't change the default flag (that's
-          the "Make default" button on each card), so showing it on edit would be a
+      {/* Only on create: the update path doesn't change the default flag (that's the
+          "Make default" button on each card), so showing it on edit would be a
           live-but-dead control. */}
       {!address && (
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+        <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" name="is_default" />
           Make this my default address
         </label>
@@ -157,13 +134,13 @@ function AddressForm({ address, onClose }: { address?: Address; onClose: () => v
 
       <InlineFormError message={state.error} />
 
-      <div style={{ display: "flex", gap: 12 }}>
-        <button disabled={pending} className="plt-btn-primary-lg" style={{ flex: 1 }}>
-          {pending ? "Saving…" : address ? "Save changes" : "Add address"}
-        </button>
-        <button type="button" className="plt-btn-outline" onClick={onClose}>
+      <div className="flex gap-3">
+        <Button type="submit" size="lg" loading={pending} className="flex-1">
+          {address ? "Save changes" : "Add address"}
+        </Button>
+        <Button type="button" variant="outline" size="lg" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );
