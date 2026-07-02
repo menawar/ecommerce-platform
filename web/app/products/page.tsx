@@ -73,7 +73,7 @@ export default async function ProductsPage({
         <b className="text-fg">{total}</b> results
       </nav>
 
-      <div className="flex flex-col items-start gap-5 lg:flex-row">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
         {/* Sidebar — desktop only; on mobile the header search + (Phase C) filter drawer cover this. */}
         <Card as="aside" className="hidden w-full lg:block lg:w-[230px] lg:flex-none">
           <div className="mb-2.5 text-sm font-extrabold">Search</div>

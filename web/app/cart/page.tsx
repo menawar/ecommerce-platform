@@ -69,7 +69,7 @@ export default async function CartPage() {
           />
         </Card>
       ) : (
-        <div className="flex flex-col items-start gap-5 lg:flex-row">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
           {/* Items */}
           <Card className="min-w-0 flex-1 py-1">
             {lines.map(({ item, product }) => (

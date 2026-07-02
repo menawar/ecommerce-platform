@@ -1,13 +1,23 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { InlineFormError } from "@/app/form-error";
 import Link from "next/link";
 
+import { InlineFormError } from "@/app/form-error";
+import { cn } from "@/lib/cn";
 import { formatPrice } from "@/lib/format";
+import { Card } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { Address } from "@/lib/addresses";
 import type { ShippingMethod } from "@/lib/shipping";
 import { placeOrderAction, type CheckoutState } from "./actions";
+
+// A selectable radio "card" — highlighted when active.
+const radioCard = (active: boolean) =>
+  cn(
+    "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+    active ? "border-accent bg-accent-subtle" : "border-border-strong hover:bg-surface",
+  );
 
 export function CheckoutForm({
   subtotalCents,
@@ -34,48 +44,46 @@ export function CheckoutForm({
 
   if (addresses.length === 0) {
     return (
-      <div className="plt-card-lg" style={{ textAlign: "center", padding: "32px 20px" }}>
-        <p style={{ fontSize: 14, color: "var(--plt-text-secondary)", margin: "0 0 16px" }}>
-          Add a delivery address to place your order.
-        </p>
-        <Link href="/account/addresses" className="plt-btn-primary-lg" style={{ textDecoration: "none" }}>
+      <Card className="text-center">
+        <p className="m-0 mb-4 text-sm text-fg-muted">Add a delivery address to place your order.</p>
+        <Link href="/account/addresses" className={buttonVariants({ size: "lg" })}>
           Add an address
         </Link>
-      </div>
+      </Card>
     );
   }
   if (shippingMethods.length === 0) {
     return (
-      <div className="plt-card-lg" style={{ textAlign: "center", padding: "32px 20px" }}>
-        <p style={{ fontSize: 14, color: "var(--plt-text-secondary)", margin: 0 }}>
+      <Card className="text-center">
+        <p className="m-0 text-sm text-fg-muted">
           No shipping methods are available right now. Please check back shortly.
         </p>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
-      {/* Left: pickers */}
-      <div style={{ flex: 1, minWidth: 300, display: "flex", flexDirection: "column", gap: 18 }}>
-        <div className="plt-card-lg">
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Delivery address</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+      {/* Pickers */}
+      <div className="flex min-w-0 flex-1 flex-col gap-5">
+        <Card>
+          <h2 className="mb-3.5 text-base font-extrabold">Delivery address</h2>
+          <div className="flex flex-col gap-2.5">
             {addresses.map((a) => (
-              <label key={a.id} className={`plt-radio-card${a.id === addressID ? " active" : ""}`} style={{ cursor: "pointer" }}>
+              <label key={a.id} className={radioCard(a.id === addressID)}>
                 <input
                   type="radio"
                   name="address_choice"
                   checked={a.id === addressID}
                   onChange={() => setAddressID(a.id)}
-                  style={{ marginRight: 4 }}
+                  className="mt-1"
                 />
-                <div style={{ flex: 1, fontSize: 13 }}>
-                  <div style={{ fontWeight: 700 }}>
+                <div className="flex-1 text-sm">
+                  <div className="font-bold">
                     {a.recipient}
-                    {a.is_default && <span style={{ color: "var(--plt-text-secondary)", fontWeight: 400 }}> · default</span>}
+                    {a.is_default && <span className="font-normal text-fg-muted"> · default</span>}
                   </div>
-                  <div style={{ color: "var(--plt-text-secondary)" }}>
+                  <div className="text-fg-muted">
                     {a.line1}
                     {a.line2 ? `, ${a.line2}` : ""}, {a.city}, {a.state}, {a.country}
                   </div>
@@ -83,76 +91,67 @@ export function CheckoutForm({
               </label>
             ))}
           </div>
-          <Link href="/account/addresses" style={{ fontSize: 13, color: "var(--plt-terracotta)", fontWeight: 600, display: "inline-block", marginTop: 12 }}>
+          <Link
+            href="/account/addresses"
+            className="mt-3 inline-block text-sm font-semibold text-accent hover:underline"
+          >
             Manage addresses
           </Link>
-        </div>
+        </Card>
 
-        <div className="plt-card-lg">
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Delivery method</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Card>
+          <h2 className="mb-3.5 text-base font-extrabold">Delivery method</h2>
+          <div className="flex flex-col gap-2.5">
             {shippingMethods.map((m) => (
-              <label key={m.id} className={`plt-radio-card${m.id === shipID ? " active" : ""}`} style={{ cursor: "pointer" }}>
+              <label key={m.id} className={radioCard(m.id === shipID)}>
                 <input
                   type="radio"
                   name="shipping_choice"
                   checked={m.id === shipID}
                   onChange={() => setShipID(m.id)}
-                  style={{ marginRight: 4 }}
+                  className="mt-1"
                 />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>{m.name}</div>
-                  {m.description && (
-                    <div style={{ fontSize: 12, color: "var(--plt-text-secondary)" }}>{m.description}</div>
-                  )}
+                <div className="flex-1">
+                  <div className="text-sm font-bold">{m.name}</div>
+                  {m.description && <div className="text-xs text-fg-muted">{m.description}</div>}
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 800 }}>
+                <div className="text-sm font-extrabold">
                   {m.price_cents === 0 ? "Free" : formatPrice(m.price_cents, currency)}
                 </div>
               </label>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
-      {/* Right: summary + submit */}
-      <div className="plt-card-lg" style={{ width: 320, flex: "0 0 320px" }}>
-        <div style={{ fontSize: 17, fontWeight: 800, marginBottom: 16 }}>Your order</div>
+      {/* Summary + submit */}
+      <Card as="aside" className="w-full lg:w-[320px] lg:flex-none">
+        <h2 className="mb-4 text-[17px] font-extrabold">Your order</h2>
         <Row label="Subtotal" value={formatPrice(subtotalCents, currency)} />
         <Row label="Delivery" value={shippingCents === 0 ? "Free" : formatPrice(shippingCents, currency)} />
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            fontSize: 18,
-            fontWeight: 800,
-            borderTop: "1px solid var(--plt-border-heavy)",
-            paddingTop: 14,
-            marginTop: 4,
-          }}
-        >
+        <div className="mt-1 flex justify-between border-t border-border-strong pt-3.5 text-lg font-extrabold">
           <span>Total</span>
           <span>{formatPrice(total, currency)}</span>
         </div>
 
-        <form action={formAction} style={{ marginTop: 16 }}>
+        <form action={formAction} className="mt-4">
           <input type="hidden" name="idempotency_key" value={idempotencyKey} />
           <input type="hidden" name="address_id" value={addressID} />
           <input type="hidden" name="shipping_method_id" value={shipID} />
           <InlineFormError message={state?.error} style={{ marginBottom: 12 }} />
-          <button disabled={pending} className="plt-btn-gold" style={{ width: "100%" }}>
-            {pending ? "Placing order…" : "Place order"}
-          </button>
+          <Button type="submit" variant="gold" size="lg" fullWidth loading={pending}>
+            Place order
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 10 }}>
-      <span style={{ color: "var(--plt-text-secondary)" }}>{label}</span>
+    <div className="mb-2.5 flex justify-between text-sm">
+      <span className="text-fg-muted">{label}</span>
       <b>{value}</b>
     </div>
   );
