@@ -5,6 +5,11 @@ import { formatPrice } from "@/lib/format";
 import { ErrorPanel } from "../error-panel";
 import { SortSelect } from "./sort-select";
 import { Container } from "@/components/ui/container";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Shop",
@@ -46,13 +51,10 @@ export default async function ProductsPage({
   } catch (err) {
     if (err instanceof GatewayError) {
       return (
-        <Container as="main" className="pt-4 pb-12">
-          <h1 style={{ fontSize: 20, fontWeight: 800 }}>Products</h1>
-          <div style={{ marginTop: 24 }}>
-            <ErrorPanel
-              message={`Couldn't load products: ${err.message}`}
-              requestId={err.requestId}
-            />
+        <Container as="main" className="pb-12 pt-4">
+          <h1 className="text-xl font-extrabold">Products</h1>
+          <div className="mt-6">
+            <ErrorPanel message={`Couldn't load products: ${err.message}`} requestId={err.requestId} />
           </div>
         </Container>
       );
@@ -62,356 +64,137 @@ export default async function ProductsPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <Container as="main" className="pt-4 pb-12">
+    <Container as="main" className="pb-12 pt-4">
       {/* Breadcrumb */}
-      <div
-        style={{
-          fontSize: 13,
-          color: "var(--plt-text-secondary)",
-          marginBottom: 16,
-        }}
-      >
-        <Link href="/" style={{ color: "inherit", textDecoration: "none" }}>
+      <nav aria-label="Breadcrumb" className="mb-4 text-sm text-fg-muted">
+        <Link href="/" className="hover:underline">
           Home
         </Link>{" "}
-        ›{" "}
-        <b style={{ color: "var(--plt-text)" }}>
-          {q ? `Search: "${q}"` : "All produce"}
-        </b>{" "}
-        &nbsp;·&nbsp;{" "}
-        <b style={{ color: "var(--plt-text)" }}>{total}</b> results
-      </div>
+        › <b className="text-fg">{q ? `Search: "${q}"` : "All produce"}</b> &nbsp;·&nbsp;{" "}
+        <b className="text-fg">{total}</b> results
+      </nav>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 20,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        {/* ── Sidebar ──────────────────────────────────────────────────── */}
-        <div
-          style={{
-            width: 230,
-            flex: "0 0 230px",
-            background: "var(--plt-card)",
-            borderRadius: "var(--plt-radius-md)",
-            padding: 20,
-          }}
-        >
-          {/* Search form */}
-          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>
-            Search
-          </div>
-          <form
-            action="/products"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 9,
-              paddingBottom: 18,
-              borderBottom: "1px solid var(--plt-border-heavy)",
-            }}
-          >
-            {/* Carry the active sort through a search so the two filters compose. */}
-            {sort && sort !== "featured" && (
-              <input type="hidden" name="sort" value={sort} />
-            )}
-            <input
-              type="search"
-              name="q"
-              defaultValue={q}
-              placeholder="Search products…"
-              className="plt-input"
-              style={{ fontSize: 13 }}
-            />
-            <button className="plt-btn-primary" type="submit">
+      <div className="flex flex-col items-start gap-5 lg:flex-row">
+        {/* Sidebar — desktop only; on mobile the header search + (Phase C) filter drawer cover this. */}
+        <Card as="aside" className="hidden w-full lg:block lg:w-[230px] lg:flex-none">
+          <div className="mb-2.5 text-sm font-extrabold">Search</div>
+          <form action="/products" className="flex flex-col gap-2.5 border-b border-border-strong pb-4">
+            {sort && sort !== "featured" && <input type="hidden" name="sort" value={sort} />}
+            <Input type="search" name="q" defaultValue={q} placeholder="Search products…" aria-label="Search products" />
+            <Button type="submit" fullWidth>
               Search
-            </button>
+            </Button>
           </form>
 
-          {/* Customer rating */}
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 800,
-              padding: "18px 0 10px",
-            }}
-          >
-            Customer rating
+          {/* Placeholder facets — become real in Phase C (rating + farm filters). */}
+          <div className="pb-4 pt-4 text-sm font-extrabold">Customer rating</div>
+          <div className="flex flex-col gap-2 border-b border-border-strong pb-4 text-sm text-fg-subtle">
+            <span>★★★★☆ &amp; up</span>
+            <span>★★★☆☆ &amp; up</span>
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 9,
-              fontSize: 13,
-              paddingBottom: 18,
-              borderBottom: "1px solid var(--plt-border-heavy)",
-            }}
-          >
-            <div style={{ color: "var(--plt-star)", letterSpacing: ".5px" }}>
-              ★★★★☆{" "}
-              <span style={{ color: "var(--plt-terracotta)" }}>&amp; up</span>
-            </div>
-            <div style={{ color: "var(--plt-star)", letterSpacing: ".5px" }}>
-              ★★★☆☆{" "}
-              <span style={{ color: "var(--plt-terracotta)" }}>&amp; up</span>
-            </div>
+          <div className="pb-2.5 pt-4 text-sm font-extrabold">Farm / Co-op</div>
+          <div className="flex flex-col gap-2 text-sm text-fg-muted">
+            {["Vom Farms", "Bukuru Co-op", "Riyom Growers", "Barkin Ladi Farms"].map((farm) => (
+              <span key={farm}>{farm}</span>
+            ))}
           </div>
+        </Card>
 
-          {/* Farm filter */}
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 800,
-              padding: "18px 0 10px",
-            }}
-          >
-            Farm / Co-op
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              fontSize: 13,
-            }}
-          >
-            {["Vom Farms", "Bukuru Co-op", "Riyom Growers", "Barkin Ladi Farms", "Gyero Gardens", "Heipang Produce"].map(
-              (farm) => (
-                <label
-                  key={farm}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 9,
-                    cursor: "pointer",
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 15,
-                      height: 15,
-                      border: "1.5px solid var(--plt-text-muted)",
-                      borderRadius: 3,
-                      display: "inline-block",
-                    }}
-                  />
-                  {farm}
-                </label>
-              )
-            )}
-          </div>
-        </div>
-
-        {/* ── Main grid ────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 280 }}>
+        {/* Main column */}
+        <div className="min-w-0 flex-1">
           {/* Toolbar */}
-          <div
-            style={{
-              background: "var(--plt-card)",
-              borderRadius: "var(--plt-radius-sm)",
-              padding: "11px 16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 16,
-              flexWrap: "wrap",
-              gap: 10,
-            }}
-          >
-            <div style={{ fontSize: 13, color: "var(--plt-text-secondary)" }}>
-              Showing{" "}
-              <b style={{ color: "var(--plt-text)" }}>{products.length}</b>{" "}
-              products
+          <Card padded={false} className="mb-4 flex flex-wrap items-center justify-between gap-2.5 px-4 py-3">
+            <div className="text-sm text-fg-muted">
+              Showing <b className="text-fg">{products.length}</b> products
               {q && (
                 <>
                   {" "}
-                  for <b style={{ color: "var(--plt-text)" }}>&quot;{q}&quot;</b>
+                  for <b className="text-fg">&quot;{q}&quot;</b>
                 </>
               )}
             </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                fontSize: 13,
-              }}
-            >
-              Sort by
-              <form action="/products" style={{ display: "inline" }}>
+            <div className="flex items-center gap-2.5 text-sm">
+              <span>Sort by</span>
+              <form action="/products" className="inline">
                 {q && <input type="hidden" name="q" value={q} />}
                 <SortSelect
                   options={SORT_OPTIONS}
                   value={sort}
-                  style={{
-                    border: "1px solid var(--plt-border-mid)",
-                    borderRadius: "var(--plt-radius-sm)",
-                    padding: "7px 10px",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    background: "var(--plt-card)",
-                    cursor: "pointer",
-                  }}
+                  className="h-9 rounded-md border border-border-strong bg-card px-2 text-sm font-semibold"
                 />
               </form>
             </div>
-          </div>
+          </Card>
 
           {/* Empty state */}
-          {products.length === 0 && (
-            <div
-              style={{
-                background: "var(--plt-card)",
-                borderRadius: "var(--plt-radius-md)",
-                padding: "60px 20px",
-                textAlign: "center",
-                color: "var(--plt-text-secondary)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: "var(--plt-text)",
-                  marginBottom: 6,
-                }}
-              >
-                No produce found
-              </div>
-              Try another search or{" "}
-              <Link
-                href="/products"
-                style={{ color: "var(--plt-terracotta)", fontWeight: 600 }}
-              >
-                clear your search
-              </Link>
-              .
-            </div>
-          )}
-
-          {/* Product grid */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
-              gap: 16,
-            }}
-          >
-            {products.map((p) => (
-              <Link
-                key={p.id}
-                href={`/products/${p.id}`}
-                style={{
-                  background: "var(--plt-card)",
-                  borderRadius: "var(--plt-radius-md)",
-                  padding: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  textDecoration: "none",
-                  color: "var(--plt-text)",
-                  transition: "box-shadow 0.2s",
-                }}
-              >
-                <div
-                  className="plt-img-placeholder"
-                  style={
-                    p.image_url
-                      ? {
-                          backgroundImage: `url("${p.image_url}")`,
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                        }
-                      : undefined
-                  }
-                >
-                  {p.available > 0 && (
-                    <span className="plt-badge plt-badge-dark">In stock</span>
-                  )}
-                  {p.available <= 0 && (
-                    <span className="plt-badge plt-badge-red">Sold out</span>
-                  )}
-                  {!p.image_url && (
-                    <span
-                      style={{
-                        fontFamily: "monospace",
-                        fontSize: 10,
-                        color: "var(--plt-text-muted)",
-                      }}
+          {products.length === 0 ? (
+            <Card padded={false}>
+              <EmptyState
+                icon="🔍"
+                title="No produce found"
+                description="Try another search or clear it to see everything."
+                action={
+                  <Link href="/products" className={buttonVariants({ variant: "outline" })}>
+                    Clear search
+                  </Link>
+                }
+              />
+            </Card>
+          ) : (
+            <>
+              {/* Product grid — 2 cols on phones up to 4 on wide screens */}
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+                {products.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/products/${p.id}`}
+                    className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card text-fg no-underline shadow-card transition-shadow hover:shadow-md"
+                  >
+                    <div
+                      className="relative flex aspect-square items-center justify-center bg-surface bg-cover bg-center"
+                      style={p.image_url ? { backgroundImage: `url("${p.image_url}")` } : undefined}
                     >
-                      {p.sku}
-                    </span>
-                  )}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    lineHeight: 1.3,
-                    margin: "11px 0 6px",
-                    height: 34,
-                    overflow: "hidden",
-                  }}
-                >
-                  {p.name}
-                </div>
-                <div className="plt-stars">
-                  ★★★★★{" "}
-                  <span style={{ color: "var(--plt-terracotta)" }}>
-                    ({p.available})
-                  </span>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "baseline",
-                    gap: 7,
-                    margin: "7px 0 3px",
-                  }}
-                >
-                  <span style={{ fontSize: 17, fontWeight: 800 }}>
-                    {formatPrice(p.price_cents, p.currency)}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: "var(--plt-green-text)",
-                    fontWeight: 700,
-                    marginBottom: 11,
-                  }}
-                >
-                  {p.available > 0 ? "Delivered this week" : "Out of stock"}
-                </div>
-              </Link>
-            ))}
-          </div>
+                      <span className="absolute left-2 top-2">
+                        {p.available > 0 ? (
+                          <Badge variant="brand">In stock</Badge>
+                        ) : (
+                          <Badge variant="danger">Sold out</Badge>
+                        )}
+                      </span>
+                      {!p.image_url && <span className="font-mono text-[10px] text-fg-subtle">{p.sku}</span>}
+                    </div>
+                    <div className="flex flex-1 flex-col p-3.5">
+                      <div className="line-clamp-2 min-h-[34px] text-sm leading-snug">{p.name}</div>
+                      {/* Ratings intentionally omitted until Phase E wires real review data —
+                          we don't show fabricated stars. */}
+                      <div className="mt-1.5 text-[17px] font-extrabold">
+                        {formatPrice(p.price_cents, p.currency)}
+                      </div>
+                      <div className="mt-0.5 text-[11px] font-bold text-brand">
+                        {p.available > 0 ? "Delivered this week" : "Out of stock"}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
 
-          {/* Pagination */}
-          <nav
-            style={{
-              marginTop: 24,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              background: "var(--plt-card)",
-              borderRadius: "var(--plt-radius-md)",
-              padding: "12px 16px",
-              fontSize: 13,
-            }}
-          >
-            <PageLink q={q} sort={sort} page={page - 1} disabled={page <= 1}>
-              ← Prev
-            </PageLink>
-            <span style={{ color: "var(--plt-text-secondary)" }}>
-              Page {page} of {totalPages} · {total} items
-            </span>
-            <PageLink q={q} sort={sort} page={page + 1} disabled={page >= totalPages}>
-              Next →
-            </PageLink>
-          </nav>
+              {/* Pagination */}
+              <nav
+                aria-label="Pagination"
+                className="mt-6 flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-sm"
+              >
+                <PageLink q={q} sort={sort} page={page - 1} disabled={page <= 1}>
+                  ← Prev
+                </PageLink>
+                <span className="text-fg-muted">
+                  Page {page} of {totalPages} · {total} items
+                </span>
+                <PageLink q={q} sort={sort} page={page + 1} disabled={page >= totalPages}>
+                  Next →
+                </PageLink>
+              </nav>
+            </>
+          )}
         </div>
       </div>
     </Container>
@@ -431,24 +214,14 @@ function PageLink({
   disabled: boolean;
   children: React.ReactNode;
 }) {
-  if (disabled)
-    return (
-      <span style={{ color: "var(--plt-text-muted)" }}>{children}</span>
-    );
+  if (disabled) return <span className="text-fg-subtle">{children}</span>;
   const qs = new URLSearchParams();
   if (q) qs.set("q", q);
   // Keep the active sort across pages; "featured" is the default, so omit it.
   if (sort && sort !== "featured") qs.set("sort", sort);
   qs.set("page", String(page));
   return (
-    <Link
-      href={`/products?${qs}`}
-      style={{
-        fontWeight: 600,
-        color: "var(--plt-terracotta)",
-        textDecoration: "none",
-      }}
-    >
+    <Link href={`/products?${qs}`} className="font-semibold text-accent hover:underline">
       {children}
     </Link>
   );

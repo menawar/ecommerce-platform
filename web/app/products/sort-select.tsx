@@ -1,7 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
-
 type Option = { value: string; label: string };
 
 // SortSelect is the one sliver of client JS on the products page: a plain <select>
@@ -12,18 +10,18 @@ type Option = { value: string; label: string };
 export function SortSelect({
   options,
   value,
-  style,
+  className,
 }: {
   options: Option[];
   value: string;
-  style?: CSSProperties;
+  className?: string;
 }) {
   return (
     <select
       name="sort"
       defaultValue={value}
       onChange={(e) => e.currentTarget.form?.requestSubmit()}
-      style={style}
+      className={className}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
